@@ -250,6 +250,23 @@ def unified_detail(source_type, feature_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/test/classify")
+def test_classify():
+    from ai.classifier import classify_feature
+    sample = {
+        "id": "test-classify-001",
+        "title": "New Artist Audience Overlap Tool",
+        "description": "We've built a new tool that lets artists and managers compare their audience demographics with other artists. This helps identify collaboration opportunities, understand fan crossover, and plan tour routing based on shared audience geography. Available in the Artist Profile section under the new Audience Insights tab.",
+        "release_status": True,
+        "release_date": "2026-03-28",
+        "reactions_breakdown": {"rocket": 5, "fire": 3, "heart": 2},
+        "total_reactions": 10,
+        "urgency_score": None,
+    }
+    classification = classify_feature(sample)
+    return jsonify({"sample_feature": sample, "classification": classification})
+
+
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, lambda *args: os._exit(0))
     port = config.PORT
