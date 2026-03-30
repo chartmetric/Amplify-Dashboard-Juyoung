@@ -1,0 +1,7 @@
+flask
+anthropic
+asana
+slack-sdk
+requests
+python-dotenv
+waitress

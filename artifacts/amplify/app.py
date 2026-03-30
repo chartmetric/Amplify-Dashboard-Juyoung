@@ -30,7 +30,7 @@ SOURCE_REGISTRY = {
 
 @app.route("/")
 def dashboard():
-    return render_template("index.html")
+    return render_template("dashboard.html")
 
 
 @app.route("/api/health")
