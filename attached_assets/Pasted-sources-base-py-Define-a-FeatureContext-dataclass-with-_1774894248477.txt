@@ -1,0 +1,21 @@
+sources/base.py — Define a FeatureContext dataclass with fields: title (str), description (str), raw_details (str, default ""), source_type (str, default ""), metadata (dict, default empty). Add a to_prompt_block() method that formats all fields into a string for an LLM prompt. Also define an abstract SourceAdapter base class with two abstract methods: list_recent_features() returning list[dict] and get_feature_context(feature_id: str) returning FeatureContext.
+sources/asana_source.py — Implement AsanaSource(SourceAdapter). Constructor takes project_gid string. Use the asana library with the ASANA_ACCESS_TOKEN from config. list_recent_features() should call get_tasks_for_project with opt_fields name, completed, created_at, modified_at and return the 20 most recent as {id, title, date} dicts. get_feature_context() should get the task details (name, notes, custom_fields, permalink_url) AND get the stories/comments for that task, then return a FeatureContext with comments as raw_details.
+sources/slack_source.py — Implement SlackSource(SourceAdapter). Constructor takes channel_id string. Use slack_sdk WebClient with SLACK_BOT_TOKEN from config. list_recent_features() pulls last 30 messages from the channel, filters to messages longer than 50 chars, returns top 15 as {id: message ts, title: first 80 chars, date: ts}. get_feature_context() gets the specific message by ts AND pulls thread replies if they exist, returns FeatureContext with replies as raw_details.
+sources/manual_source.py — Implement ManualSource(SourceAdapter). list_recent_features() returns empty list. get_feature_context() accepts title and description keyword args and returns a FeatureContext with source_type="manual".
+config.py — Load ANTHROPIC_API_KEY, ASANA_ACCESS_TOKEN, and SLACK_BOT_TOKEN from environment variables using os.environ.get().
+app.py — Flask app with these routes:
+
+GET / — renders templates/index.html
+GET /api/health — returns JSON with status "ok" and which API keys are loaded (true/false)
+GET /api/sources — returns list of available source types ["asana", "slack", "manual"]
+GET /api/sources/asana/features — lists features from Asana
+GET /api/sources/asana/features/<feature_id> — gets full context for one Asana feature
+GET /api/sources/slack/features — lists features from Slack
+GET /api/sources/slack/features/<feature_id> — gets full context for one Slack message
+POST /api/sources/manual/feature — accepts JSON {title, description}, returns FeatureContext
+GET /api/features/<source_type> — unified endpoint that routes to any registered source's list_recent_features()
+GET /api/features/<source_type>/<feature_id> — unified endpoint that routes to any source's get_feature_context()
+
+Use a SOURCE_REGISTRY dict mapping source type strings to source instances. For now use placeholder GIDs/channel IDs that I'll replace — use "YOUR_PROJECT_GID_HERE" for Asana and "YOUR_CHANNEL_ID_HERE" for Slack.
+templates/index.html — Simple page with heading "Amplify — Product Marketing Autopilot" and text "Dashboard coming Day 3."
+Make sure all the routes work and the app runs on port 5000.

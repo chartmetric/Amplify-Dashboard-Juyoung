@@ -1,53 +1,79 @@
 from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
+import config
 from sources.base import SourceAdapter, FeatureContext
-from config import Config
 
 
 class SlackSource(SourceAdapter):
-    def __init__(self, channel_id: str = ""):
+    def __init__(self, channel_id: str):
         self.channel_id = channel_id
-        self.client = None
+        self._client = None
 
-    def connect(self) -> bool:
-        token = Config.SLACK_BOT_TOKEN
-        if not token:
-            return False
-        self.client = WebClient(token=token)
-        return True
+    def _get_client(self):
+        if self._client is None:
+            token = config.SLACK_BOT_TOKEN
+            if not token:
+                raise RuntimeError("SLACK_BOT_TOKEN not set")
+            self._client = WebClient(token=token)
+        return self._client
 
-    def fetch_features(self) -> list[FeatureContext]:
-        if not self.client or not self.channel_id:
-            return []
+    def list_recent_features(self) -> list[dict]:
+        client = self._get_client()
+        result = client.conversations_history(
+            channel=self.channel_id,
+            limit=30,
+        )
 
         features = []
-        try:
-            result = self.client.conversations_history(
-                channel=self.channel_id,
-                limit=50,
-            )
-
-            for message in result.get("messages", []):
-                text = message.get("text", "")
-                if not text:
-                    continue
-
-                lines = text.strip().split("\n")
-                title = lines[0][:120]
-                description = "\n".join(lines[1:]) if len(lines) > 1 else ""
-
-                feature = FeatureContext(
-                    title=title,
-                    description=description,
-                    source="slack",
-                    raw_data=message,
-                )
-                features.append(feature)
-
-        except SlackApiError:
-            return []
+        for msg in result.get("messages", []):
+            text = msg.get("text", "")
+            if len(text) < 50:
+                continue
+            features.append({
+                "id": msg.get("ts", ""),
+                "title": text[:80],
+                "date": msg.get("ts", ""),
+            })
+            if len(features) >= 15:
+                break
 
         return features
 
-    def get_source_name(self) -> str:
-        return "slack"
+    def get_feature_context(self, feature_id: str, **kwargs) -> FeatureContext:
+        client = self._get_client()
+
+        result = client.conversations_history(
+            channel=self.channel_id,
+            oldest=feature_id,
+            latest=feature_id,
+            inclusive=True,
+            limit=1,
+        )
+        messages = result.get("messages", [])
+        if not messages:
+            raise ValueError(f"Message {feature_id} not found")
+
+        msg = messages[0]
+        text = msg.get("text", "")
+
+        replies_text = ""
+        if msg.get("reply_count", 0) > 0:
+            thread = client.conversations_replies(
+                channel=self.channel_id,
+                ts=feature_id,
+            )
+            reply_texts = []
+            for reply in thread.get("messages", [])[1:]:
+                reply_texts.append(reply.get("text", ""))
+            replies_text = "\n---\n".join(reply_texts)
+
+        return FeatureContext(
+            title=text[:80],
+            description=text,
+            raw_details=replies_text,
+            source_type="slack",
+            metadata={
+                "ts": msg.get("ts", ""),
+                "user": msg.get("user", ""),
+                "reply_count": msg.get("reply_count", 0),
+            },
+        )

@@ -23,19 +23,21 @@ pnpm workspace monorepo using TypeScript and Python. Each package manages its ow
 ```text
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
-│   ├── api-server/         # Express API server (TypeScript)
-│   └── amplify/            # Amplify - Python Flask web app
-│       ├── app.py          # Flask application entry point
-│       ├── config.py       # Loads secrets from environment
+│   ├── api-server/         # Express API server (TypeScript) — routed to /api-server
+│   └── amplify/            # Amplify - Product Marketing Autopilot (Python Flask)
+│       ├── app.py          # Flask application entry point (waitress WSGI)
+│       ├── config.py       # Module-level env var config
 │       ├── templates/      # Jinja2 HTML templates
-│       │   └── index.html  # Dashboard UI
+│       │   └── index.html  # Dashboard placeholder
 │       ├── sources/        # Data source adapters
-│       │   ├── base.py     # FeatureContext + SourceAdapter interface
-│       │   ├── asana_source.py
-│       │   ├── slack_source.py
-│       │   └── manual_source.py
+│       │   ├── __init__.py
+│       │   ├── base.py     # FeatureContext dataclass + SourceAdapter ABC
+│       │   ├── asana_source.py  # Asana project task ingestion
+│       │   ├── slack_source.py  # Slack channel message ingestion
+│       │   └── manual_source.py # Manual feature entry
 │       └── ai/             # AI integration module
-│           └── generator.py  # Claude API content generator
+│           ├── __init__.py
+│           └── generator.py  # Empty placeholder for now
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
@@ -51,19 +53,32 @@ artifacts-monorepo/
 
 ## Amplify (Python Flask App)
 
-Flask web application serving at `/` on port 5000.
+Product marketing autopilot that ingests feature data from multiple sources and generates marketing content.
 
-- **Entry**: `artifacts/amplify/app.py`
-- **Templates**: `artifacts/amplify/templates/`
-- **Python packages**: flask, anthropic, asana, slack-sdk, requests, python-dotenv, gunicorn
+- **Entry**: `artifacts/amplify/app.py` (waitress WSGI server)
+- **Config**: `artifacts/amplify/config.py` (module-level env vars: ANTHROPIC_API_KEY, ASANA_ACCESS_TOKEN, SLACK_BOT_TOKEN)
+- **Port**: 5000
+- **Paths**: `/` and `/api` (owns both route prefixes)
+- **Python packages**: flask, anthropic, asana, slack-sdk, requests, python-dotenv, waitress
+- **Source registry**: SOURCE_REGISTRY dict mapping "asana", "slack", "manual" to adapter instances
 - **Routes**:
   - `GET /` — HTML dashboard
-  - `GET /health` — JSON health check
-  - `GET /status` — JSON status with version and service info
-- **Folders**:
-  - `sources/` — data sources module
-  - `ai/` — AI integration module
-  - `templates/` — Jinja2 HTML templates
+  - `GET /api/health` — JSON health check with API key status
+  - `GET /api/sources` — list of registered source types
+  - `GET /api/sources/asana/features` — list Asana features
+  - `GET /api/sources/asana/features/<feature_id>` — get full Asana feature context
+  - `GET /api/sources/slack/features` — list Slack features
+  - `GET /api/sources/slack/features/<feature_id>` — get full Slack message context
+  - `POST /api/sources/manual/feature` — create manual FeatureContext from JSON
+  - `GET /api/features/<source_type>` — unified list endpoint
+  - `GET /api/features/<source_type>/<feature_id>` — unified detail endpoint
+- **Architecture**:
+  - `sources/base.py` — FeatureContext(title, description, raw_details, source_type, metadata) with to_prompt_block() and to_dict(); SourceAdapter ABC with list_recent_features() and get_feature_context()
+  - `sources/asana_source.py` — AsanaSource using asana v5 SDK (Configuration + ApiClient pattern)
+  - `sources/slack_source.py` — SlackSource using slack_sdk WebClient
+  - `sources/manual_source.py` — ManualSource (stateless, returns FeatureContext from kwargs)
+  - `ai/generator.py` — empty placeholder for future content generation
+- **Placeholders**: "YOUR_PROJECT_GID_HERE" (Asana), "YOUR_CHANNEL_ID_HERE" (Slack)
 - **Run**: `python app.py` (from artifacts/amplify directory)
 
 ## TypeScript & Composite Projects
@@ -83,7 +98,7 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 
 ### `artifacts/api-server` (`@workspace/api-server`)
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence. Routed to `/api-server` path.
 
 - Entry: `src/index.ts` — reads `PORT`, starts Express
 - App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
