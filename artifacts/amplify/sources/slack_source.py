@@ -27,7 +27,15 @@ def _extract_links(text: str) -> list[str]:
 
 
 def _extract_asana_task_ids(text: str) -> list[str]:
-    return re.findall(r"app\.asana\.com/\d+/\d+/(\d+)", text)
+    task_pattern = re.findall(r"app\.asana\.com/[^>\s]*/task/(\d+)", text)
+    standard_pattern = re.findall(r"app\.asana\.com/\d+/\d+/(\d+)(?!\w)", text)
+    seen = set()
+    result = []
+    for tid in task_pattern + standard_pattern:
+        if tid not in seen:
+            seen.add(tid)
+            result.append(tid)
+    return result
 
 
 class SlackSource(SourceAdapter):
