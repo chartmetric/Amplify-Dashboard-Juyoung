@@ -1,3 +1,4 @@
+import re
 from slack_sdk import WebClient
 import config
 from sources.base import SourceAdapter, FeatureContext
@@ -12,6 +13,17 @@ def _clean_slack_text(text: str) -> str:
         .replace("&gt;", ">")
         .replace("&amp;", "&")
     )
+
+
+def _extract_reactions(msg: dict) -> tuple[int, list[dict]]:
+    reactions = msg.get("reactions") or []
+    breakdown = [{"name": r.get("name", ""), "count": r.get("count", 0)} for r in reactions]
+    total = sum(r["count"] for r in breakdown)
+    return total, breakdown
+
+
+def _extract_links(text: str) -> list[str]:
+    return re.findall(r"<(https?://[^|>]+)", text)
 
 
 class SlackSource(SourceAdapter):
@@ -39,10 +51,13 @@ class SlackSource(SourceAdapter):
             text = _clean_slack_text(msg.get("text", ""))
             if len(text) < 50:
                 continue
+            total_reactions, reactions = _extract_reactions(msg)
             features.append({
                 "id": msg.get("ts", ""),
                 "title": text[:300],
                 "date": msg.get("ts", ""),
+                "total_reactions": total_reactions,
+                "reactions": reactions,
             })
             if len(features) >= 15:
                 break
@@ -64,7 +79,10 @@ class SlackSource(SourceAdapter):
             raise ValueError(f"Message {feature_id} not found")
 
         msg = messages[0]
-        text = _clean_slack_text(msg.get("text", ""))
+        raw_text = msg.get("text", "")
+        text = _clean_slack_text(raw_text)
+        links = _extract_links(raw_text)
+        total_reactions, reactions = _extract_reactions(msg)
 
         replies_text = ""
         if msg.get("reply_count", 0) > 0:
@@ -86,5 +104,8 @@ class SlackSource(SourceAdapter):
                 "ts": msg.get("ts", ""),
                 "user": msg.get("user", ""),
                 "reply_count": msg.get("reply_count", 0),
+                "total_reactions": total_reactions,
+                "reactions": reactions,
+                "links": links,
             },
         )
