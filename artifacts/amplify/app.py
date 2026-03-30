@@ -1,6 +1,7 @@
 import os
 import sys
 import signal
+import logging
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -12,6 +13,13 @@ from config import Config
 
 app = Flask(__name__, template_folder="templates")
 app.secret_key = Config.SESSION_SECRET
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger("amplify")
 
 
 @app.route("/")
@@ -37,6 +45,9 @@ def status():
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGTERM, lambda *args: sys.exit(0))
+    signal.signal(signal.SIGTERM, lambda *args: os._exit(0))
+    port = Config.PORT
+    logger.info(f"Amplify starting on port {port}")
+    sys.stdout.flush()
     from waitress import serve
-    serve(app, host="0.0.0.0", port=Config.PORT)
+    serve(app, host="0.0.0.0", port=port, _quiet=False)
