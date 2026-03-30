@@ -121,6 +121,37 @@ def unified_list(source_type):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/features/enriched")
+def enriched_features():
+    asana_source = SOURCE_REGISTRY["asana"]
+    slack_source = SOURCE_REGISTRY["slack"]
+    try:
+        features = asana_source.list_recent_features()
+    except Exception as e:
+        logger.error(f"Enriched endpoint - Asana error: {e}")
+        return jsonify({"error": f"Asana fetch failed: {e}"}), 500
+
+    released_map = {}
+    try:
+        released_map = slack_source.get_released_task_ids()
+    except Exception as e:
+        logger.warning(f"Enriched endpoint - Slack enrichment failed, continuing without: {e}")
+
+    enriched = []
+    for feature in features:
+        task_id = feature.get("id", "")
+        release_info = released_map.get(task_id, {})
+        enriched.append({
+            **feature,
+            "release_status": release_info.get("released", False),
+            "release_date": release_info.get("release_date"),
+            "total_reactions": release_info.get("total_reactions"),
+            "reactions_breakdown": release_info.get("reactions_breakdown"),
+        })
+
+    return jsonify(enriched)
+
+
 @app.route("/api/features/<source_type>/<feature_id>")
 def unified_detail(source_type, feature_id):
     if source_type not in SOURCE_REGISTRY:

@@ -26,6 +26,10 @@ def _extract_links(text: str) -> list[str]:
     return re.findall(r"<(https?://[^|>]+)", text)
 
 
+def _extract_asana_task_ids(text: str) -> list[str]:
+    return re.findall(r"app\.asana\.com/\d+/\d+/(\d+)", text)
+
+
 class SlackSource(SourceAdapter):
     def __init__(self, channel_id: str):
         self.channel_id = channel_id
@@ -38,6 +42,34 @@ class SlackSource(SourceAdapter):
                 raise RuntimeError("SLACK_BOT_TOKEN not set")
             self._client = WebClient(token=token)
         return self._client
+
+    def get_released_task_ids(self) -> dict:
+        client = self._get_client()
+        result = client.conversations_history(
+            channel=self.channel_id,
+            limit=100,
+        )
+
+        released = {}
+        for msg in result.get("messages", []):
+            raw_text = msg.get("text", "")
+            task_ids = _extract_asana_task_ids(raw_text)
+            if not task_ids:
+                continue
+
+            total_reactions, reactions = _extract_reactions(msg)
+            ts = msg.get("ts", "")
+
+            for task_id in task_ids:
+                if task_id not in released:
+                    released[task_id] = {
+                        "released": True,
+                        "release_date": ts,
+                        "total_reactions": total_reactions,
+                        "reactions_breakdown": reactions,
+                    }
+
+        return released
 
     def list_recent_features(self) -> list[dict]:
         client = self._get_client()
