@@ -26,10 +26,16 @@ artifacts-monorepo/
 │   ├── api-server/         # Express API server (TypeScript)
 │   └── amplify/            # Amplify - Python Flask web app
 │       ├── app.py          # Flask application entry point
+│       ├── config.py       # Loads secrets from environment
 │       ├── templates/      # Jinja2 HTML templates
-│       │   └── dashboard.html  # Main dashboard page
-│       ├── sources/        # Data sources module
+│       │   └── index.html  # Dashboard UI
+│       ├── sources/        # Data source adapters
+│       │   ├── base.py     # FeatureContext + SourceAdapter interface
+│       │   ├── asana_source.py
+│       │   ├── slack_source.py
+│       │   └── manual_source.py
 │       └── ai/             # AI integration module
+│           └── generator.py  # Claude API content generator
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks

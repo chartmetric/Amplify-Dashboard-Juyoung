@@ -1,17 +1,21 @@
 import os
-from dotenv import load_dotenv
+import sys
 
+sys.path.insert(0, os.path.dirname(__file__))
+
+from dotenv import load_dotenv
 load_dotenv()
 
 from flask import Flask, jsonify, render_template
+from config import Config
 
 app = Flask(__name__, template_folder="templates")
-app.secret_key = os.environ.get("SESSION_SECRET", "amplify-dev-key")
+app.secret_key = Config.SESSION_SECRET
 
 
 @app.route("/")
 def dashboard():
-    return render_template("dashboard.html")
+    return render_template("index.html")
 
 
 @app.route("/health")
@@ -32,5 +36,4 @@ def status():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=Config.PORT, debug=True)
