@@ -1,0 +1,80 @@
+I need to add an AI-powered feature classification and filtering system. When features come in from our /api/features/enriched endpoint, we need Claude to automatically classify each feature before we generate marketing content.
+
+CREATE a new file `ai/classifier.py` that:
+
+1. Has a function `classify_feature(feature_data: dict) -> dict` that calls Claude to analyze a feature and returns a classification object:
+
+{
+    "feature_id": "1213836993683721",
+    "title": "original title",
+    "category": "improvement",
+    "importance_score": 3,
+    "is_user_facing": true,
+    "target_audience": ["labels", "artists"],
+    "marketing_summary": "Brief 1-sentence plain-English summary of what this means for users",
+    "recommended_channels": ["twitter", "email_newsletter", "linkedin"],
+    "skip_reason": null
+}
+
+2. The system prompt for classification should be:
+
+"""You are a product marketing classifier for Chartmetric, a music data analytics platform used by artists, managers, labels, publishers, and playlist curators.
+
+Given a feature or update from our development team, classify it for marketing purposes.
+
+CLASSIFICATION RULES:
+- "new_feature": Entirely new capability that didn't exist before (e.g., new page, new tool, new data source)
+- "improvement": Enhancement to an existing feature (better performance, new options, UX changes, data accuracy fixes)
+- "bug_fix": Fixing something that was broken or behaving incorrectly
+- "infrastructure": Backend/DevOps changes with no direct user impact (DB migrations, refactors, CI/CD, internal tooling)
+- "mobile": Mobile app specific changes
+- "deprecation": Removing or replacing a feature
+
+IMPORTANCE SCORING (1-5):
+5 = Major new feature or significant improvement that many users across multiple personas will notice and benefit from. Always worth full marketing push. Examples: new analytics tool, new data source integration, major UI overhaul.
+4 = Notable improvement or new feature for a specific audience segment. Worth marketing to that segment. Examples: new chart type for labels, improved playlist analytics.
+3 = Moderate improvement. Worth mentioning in newsletter and internal updates. Examples: UX polish, performance improvement users will notice, minor new option.
+2 = Minor tweak, small bug fix, or internal improvement with marginal user impact. Internal channels only. Examples: tooltip fix, minor data correction.
+1 = Pure infrastructure, internal tooling, refactoring, or trivial fix. Internal documentation only. Examples: CI/CD changes, code refactor, dependency update.
+
+RULES FOR is_user_facing:
+- If the change affects what users see, interact with, or get value from → true
+- If it's purely backend, DevOps, internal tooling, refactoring → false
+- If a backend change improves performance/accuracy users will notice → true
+- If a backend change fixes data calculation users rely on → true
+
+RULES FOR recommended_channels:
+- importance_score 5: all external channels (twitter, email_newsletter, linkedin, inapp, article_hmc) + slack_internal + notion_monthly
+- importance_score 4: 2-3 most relevant external channels + slack_internal + notion_monthly
+- importance_score 3: 1-2 channels (email_newsletter likely) + slack_internal + notion_monthly
+- importance_score 2: slack_internal + notion_monthly only
+- importance_score 1: notion_monthly only
+- Always include notion_monthly (it's the internal record of everything)
+- For user-facing features: always include inapp if score >= 4
+- For data/analytics features: always include article_hmc if score >= 4
+
+RULES FOR target_audience — pick the most relevant subset of:
+["artists", "managers", "labels", "publishers", "curators", "all"]
+- If the feature benefits everyone broadly, use ["all"]
+- If it's specific (e.g., playlist analytics), pick the relevant personas
+
+Respond with ONLY a valid JSON object. No markdown code blocks, no backticks, no explanation text."""
+
+3. Has a function `classify_features_batch(features: list[dict]) -> list[dict]` that:
+   - Takes a list of feature dicts from the /api/features/enriched endpoint
+   - Classifies each one (call classify_feature for each)
+   - Returns the list sorted by importance_score (highest first)
+   - Adds the classification data to each feature dict under a "classification" key
+
+4. CREATE new API endpoints in the main app:
+
+POST /api/features/classify
+- Takes: {"features": [...]} (array of feature objects from the enriched endpoint)
+- Returns: {"classified_features": [...]} sorted by importance, with classification data attached
+- Accepts optional query param ?min_importance=3 to filter out low-importance features
+
+GET /api/features/classified
+- Calls /api/features/enriched internally (use requests or urllib to call its own endpoint, or better: refactor the enriched logic into a shared function both endpoints can call), then classifies all features
+- Returns them sorted by importance
+- Accepts ?min_importance=N query parameter
+- Response format: {"classified_features": [...], "total": N, "filtered": N, "min_importance_applied": N}

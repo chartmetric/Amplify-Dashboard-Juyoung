@@ -10,6 +10,7 @@ import config
 from sources.asana_source import AsanaSource
 from sources.slack_source import SlackSource
 from sources.manual_source import ManualSource
+from ai.classifier import classify_features_batch
 
 app = Flask(__name__, template_folder="templates")
 app.secret_key = config.SESSION_SECRET
@@ -121,21 +122,16 @@ def unified_list(source_type):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/features/enriched")
-def enriched_features():
+def _get_enriched_features():
     asana_source = SOURCE_REGISTRY["asana"]
     slack_source = SOURCE_REGISTRY["slack"]
-    try:
-        features = asana_source.list_recent_features()
-    except Exception as e:
-        logger.error(f"Enriched endpoint - Asana error: {e}")
-        return jsonify({"error": f"Asana fetch failed: {e}"}), 500
+    features = asana_source.list_recent_features()
 
     released_map = {}
     try:
         released_map = slack_source.get_released_task_ids()
     except Exception as e:
-        logger.warning(f"Enriched endpoint - Slack enrichment failed, continuing without: {e}")
+        logger.warning(f"Slack enrichment failed, continuing without: {e}")
 
     enriched = []
     for feature in features:
@@ -148,8 +144,72 @@ def enriched_features():
             "total_reactions": release_info.get("total_reactions"),
             "reactions_breakdown": release_info.get("reactions_breakdown"),
         })
+    return enriched
 
-    return jsonify(enriched)
+
+@app.route("/api/features/enriched")
+def enriched_features():
+    try:
+        enriched = _get_enriched_features()
+        return jsonify(enriched)
+    except Exception as e:
+        logger.error(f"Enriched endpoint error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/features/classify", methods=["POST"])
+def classify_features_endpoint():
+    data = request.get_json() or {}
+    features = data.get("features", [])
+    if not isinstance(features, list) or not features:
+        return jsonify({"error": "No features provided. Send {\"features\": [...]} with a list of feature objects"}), 400
+    if not all(isinstance(f, dict) for f in features):
+        return jsonify({"error": "Each feature must be a JSON object with at least id, title, and description"}), 400
+
+    try:
+        classified = classify_features_batch(features)
+    except Exception as e:
+        logger.error(f"Classification error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    min_importance = request.args.get("min_importance", type=int)
+    if min_importance is not None:
+        classified = [
+            f for f in classified
+            if f.get("classification", {}).get("importance_score", 0) >= min_importance
+        ]
+
+    return jsonify({"classified_features": classified})
+
+
+@app.route("/api/features/classified")
+def classified_features():
+    try:
+        enriched = _get_enriched_features()
+    except Exception as e:
+        logger.error(f"Classified endpoint - enrichment error: {e}")
+        return jsonify({"error": f"Feature enrichment failed: {e}"}), 500
+
+    try:
+        classified = classify_features_batch(enriched)
+    except Exception as e:
+        logger.error(f"Classified endpoint - classification error: {e}")
+        return jsonify({"error": f"Classification failed: {e}"}), 500
+
+    total = len(classified)
+    min_importance = request.args.get("min_importance", type=int)
+    if min_importance is not None:
+        classified = [
+            f for f in classified
+            if f.get("classification", {}).get("importance_score", 0) >= min_importance
+        ]
+
+    return jsonify({
+        "classified_features": classified,
+        "total": total,
+        "filtered": len(classified),
+        "min_importance_applied": min_importance,
+    })
 
 
 @app.route("/api/debug/slack-links")
