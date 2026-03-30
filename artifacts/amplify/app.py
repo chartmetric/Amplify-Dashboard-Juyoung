@@ -22,8 +22,8 @@ logging.basicConfig(
 logger = logging.getLogger("amplify")
 
 SOURCE_REGISTRY = {
-    "asana": AsanaSource(project_gid="YOUR_PROJECT_GID_HERE"),
-    "slack": SlackSource(channel_id="YOUR_CHANNEL_ID_HERE"),
+    "asana": AsanaSource(project_gid="1213445772342530"),
+    "slack": SlackSource(channel_id="C014BMSCGS2"),
     "manual": ManualSource(),
 }
 
