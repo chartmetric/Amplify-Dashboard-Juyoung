@@ -2,15 +2,17 @@
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+pnpm workspace monorepo using TypeScript and Python. Each package manages its own dependencies.
 
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces
 - **Node.js version**: 24
-- **Package manager**: pnpm
+- **Python version**: 3.12
+- **Package manager**: pnpm (JS/TS), uv/pip (Python)
 - **TypeScript version**: 5.9
-- **API framework**: Express 5
+- **API framework (TS)**: Express 5
+- **API framework (Python)**: Flask
 - **Database**: PostgreSQL + Drizzle ORM
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
@@ -21,19 +23,42 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ```text
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
+│   ├── api-server/         # Express API server (TypeScript)
+│   └── amplify/            # Amplify - Python Flask web app
+│       ├── app.py          # Flask application entry point
+│       ├── templates/      # Jinja2 HTML templates
+│       │   └── dashboard.html  # Main dashboard page
+│       ├── sources/        # Data sources module
+│       └── ai/             # AI integration module
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
 │   ├── api-zod/            # Generated Zod schemas from OpenAPI
 │   └── db/                 # Drizzle ORM schema + DB connection
 ├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
+│   └── src/                # Individual .ts scripts
+├── pnpm-workspace.yaml     # pnpm workspace
+├── tsconfig.base.json      # Shared TS options
 ├── tsconfig.json           # Root TS project references
 └── package.json            # Root package with hoisted devDeps
 ```
+
+## Amplify (Python Flask App)
+
+Flask web application serving at `/` on port 5000.
+
+- **Entry**: `artifacts/amplify/app.py`
+- **Templates**: `artifacts/amplify/templates/`
+- **Python packages**: flask, anthropic, asana, slack-sdk, requests, python-dotenv, gunicorn
+- **Routes**:
+  - `GET /` — HTML dashboard
+  - `GET /health` — JSON health check
+  - `GET /status` — JSON status with version and service info
+- **Folders**:
+  - `sources/` — data sources module
+  - `ai/` — AI integration module
+  - `templates/` — Jinja2 HTML templates
+- **Run**: `python app.py` (from artifacts/amplify directory)
 
 ## TypeScript & Composite Projects
 
