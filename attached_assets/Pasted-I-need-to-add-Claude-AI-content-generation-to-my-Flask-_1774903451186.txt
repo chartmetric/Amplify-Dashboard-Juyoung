@@ -1,0 +1,169 @@
+I need to add Claude AI content generation to my Flask app. Here's what to build:
+
+1. INSTALL the `anthropic` Python package and add it to requirements.txt.
+
+2. CREATE a new file `ai/claude_client.py` that:
+   - Imports anthropic and initializes the client using os.environ["ANTHROPIC_API_KEY"]
+   - Has a function `generate_content(system_prompt: str, user_prompt: str, max_tokens: int = 1024) -> str` that calls the Claude API (model: "claude-sonnet-4-20250514") and returns the text response
+   - Handles errors gracefully (API errors, rate limits) and returns a dict with {"success": bool, "content": str, "error": str|None}
+
+3. CREATE a config-driven channel system. Make a new file `ai/channel_configs.py` that defines a CHANNEL_CONFIGS dictionary. Each channel is a key with this structure:
+
+CHANNEL_CONFIGS = {
+    "twitter": {
+        "display_name": "X / Twitter",
+        "description": "Short-form social media post paired with a Chartmetric data visual",
+        "max_chars": 280,
+        "tone": "Conversational, data-backed, music-industry savvy. Hook in the first line. Speak like a knowledgeable industry insider sharing an interesting data point, not a corporate brand.",
+        "format_rules": "Single post. Lead with a compelling data insight or trend, not a feature announcement. Use @mentions for relevant artists/labels when applicable. Include 2-4 relevant hashtags from the music/data space. Assume a Chartmetric chart/visual will be attached — reference data but don't describe the image. No links in the tweet body (added separately). Max 1-2 emoji if natural.",
+        "audience": "Music industry professionals, artists, managers, data analysts, A&R, and music fans who follow data trends on X/Twitter",
+        "example_output_format": "[Conversational hook with data insight]. [Key detail or context]. \n\n#Hashtag1 #Hashtag2 #Hashtag3",
+        "enabled": True
+    },
+    "email_newsletter": {
+        "display_name": "Email Newsletter Block",
+        "description": "Product update block for the Chartmetric newsletter",
+        "max_chars": 600,
+        "tone": "Benefit-first, empowering, direct. Lead with what the user can NOW do, not what was built. Second person ('you'). Warm but concise.",
+        "format_rules": "Structure: Bold feature name as header line, then 2-3 sentences leading with user benefit (start with a verb or 'you' — e.g., 'Stop doing X. Now you can Y.'). Describe value before mechanics. End with CTA phrase like 'Try it here' or 'Check it out'. No HTML tags. Assume a screenshot will follow the text block. Do NOT include subject lines — this is a section within a larger newsletter, not a standalone email.",
+        "audience": "Existing Chartmetric users — artists, managers, labels, publishers who use the platform daily and scan newsletters quickly",
+        "example_output_format": "**[Feature Name]**\n[2-3 benefit-led sentences]. [CTA phrase].",
+        "enabled": True
+    },
+    "email_standalone": {
+        "display_name": "Standalone Email",
+        "description": "Dedicated product update or feature launch email",
+        "max_chars": 1200,
+        "tone": "Professional but warm. Benefit-led, second person. Slightly more expansive than the newsletter block — room to paint the picture of the problem solved.",
+        "format_rules": "Structure: 'Subject: [compelling subject line]' on first line, blank line, then 2-3 short paragraphs. First paragraph: hook with the user's pain point or aspiration. Second paragraph: what's new and how it helps. Third paragraph: CTA with specific next step. Keep paragraphs to 2-3 sentences each. No HTML.",
+        "audience": "Chartmetric users and trial users — may not be daily active, so context-set briefly",
+        "example_output_format": "Subject: [subject]\n\n[Pain point hook paragraph]\n\n[Feature + benefit paragraph]\n\n[CTA paragraph]",
+        "enabled": True
+    },
+    "slack_internal": {
+        "display_name": "Slack (Internal Update)",
+        "description": "Internal team announcement in Slack",
+        "max_chars": 2000,
+        "tone": "Casual, informative, celebratory. Like a teammate sharing exciting news. Credit contributors.",
+        "format_rules": "Start with an emoji header (e.g., 🚀 or ✨). Bold the feature name. Use bullet points for what changed/why/impact. Include 'Key contributor:' line crediting the person(s). Add relevant link if applicable. Keep it scannable. Use Slack markdown (*bold*, _italic_).",
+        "audience": "Chartmetric internal team — engineers, product, marketing, sales, CS",
+        "example_output_format": "🚀 *[Feature Name]*\n\n• What: ...\n• Why: ...\n• Impact: ...\n\n*Key contributor:* [name]\n[link]",
+        "enabled": True
+    },
+    "inapp": {
+        "display_name": "In-App Announcement",
+        "description": "Product announcement displayed inside the Chartmetric app",
+        "max_chars": 800,
+        "tone": "Clear, benefit-focused, user-empowering. Like a helpful product guide — informative but not pushy. Address the user directly.",
+        "format_rules": "Structure: Title line (short, benefit-driven, with ! for energy), then 1-2 sentences introducing the feature through the lens of what the user can now do. Then 2-3 bullet points with specific capabilities or highlights (each bullet is 1-2 sentences). End with a clear navigational CTA telling the user exactly where to find it (e.g., 'Head to any Track Page, click the Playlist tab, and start discovering...'). Assume a screenshot will be shown below the text. No emoji in body text.",
+        "audience": "Active Chartmetric users seeing this inside the product — they're already logged in and working",
+        "example_output_format": "**[Benefit-Driven Title]!**\n\n[1-2 intro sentences]\n\n• [Capability 1]\n• [Capability 2]\n\n[Navigational CTA]",
+        "enabled": True
+    },
+    "linkedin": {
+        "display_name": "LinkedIn Post",
+        "description": "Professional thought-leadership post connecting industry trends to Chartmetric data or features",
+        "max_chars": 2000,
+        "tone": "Insight-led, data-backed, industry-expert voice. Open with a trend or observation that hooks music industry professionals, then weave in Chartmetric data as the proof point. Authoritative but not salesy — you're sharing knowledge, not selling a product.",
+        "format_rules": "Structure: Hook opening line (industry trend, surprising data point, or provocative observation — use a single emoji like 🎵 if natural), blank line, 2-3 short paragraphs that build the narrative from trend → data → insight. Reference specific artists, numbers, or playlists when relevant. End with a CTA linking to a full article or inviting discussion. Include 3-5 hashtags on the final line. Use line breaks between paragraphs for readability. 150-300 words.",
+        "audience": "Music industry executives, label heads, A&R professionals, playlist curators, and tech leaders on LinkedIn",
+        "example_output_format": "[Trend hook line with optional emoji]\n\n[Paragraph expanding on the trend with specifics]\n\n[Paragraph connecting to data/Chartmetric insight]\n\n[CTA to article or discussion prompt]\n\n#hashtag1 #hashtag2 #hashtag3",
+        "enabled": True
+    },
+    "notion_monthly": {
+        "display_name": "Notion Monthly Meeting Doc",
+        "description": "Feature summary block for monthly product meeting notes",
+        "max_chars": 1500,
+        "tone": "Structured, factual, internal-audience. Like meeting prep notes for leadership.",
+        "format_rules": "Structure: Feature name as heading, then sections: Overview (2-3 sentences), User Impact (who benefits and how), Technical Notes (brief, non-jargon), Key Contributor (name), Status (based on release_status field). Use markdown formatting.",
+        "audience": "Chartmetric leadership and cross-functional team in a monthly product review meeting",
+        "example_output_format": "## [Feature Name]\n\n**Overview:** [2-3 sentences]\n\n**User Impact:** [who and how]\n\n**Technical Notes:** [brief]\n\n**Key Contributor:** [name if available]\n\n**Status:** [Released/In Progress/Planned]",
+        "enabled": True
+    },
+    "article_hmc": {
+        "display_name": "HMC Blog Article",
+        "description": "SEO-optimized long-form article for How Music Charts (hmc.chartmetric.com)",
+        "max_chars": 10000,
+        "tone": "Strategic, empowering, direct-address ('you'). Write like a savvy music industry mentor coaching an ambitious indie artist or professional. Conversational authority — confident and opinionated but backed by data and real examples. Not dry or academic. Not promotional — Chartmetric features are framed as tools the reader can use, not products being sold.",
+        "format_rules": "Structure: SEO-friendly H1 title with primary keyword (e.g., 'Promoting Your Music as an Indie Artist on Chartmetric'). Intro paragraph: Hook with the reader's challenge or aspiration, cite a compelling stat to establish stakes, preview what the article covers. Target long-tail SEO phrases naturally in the intro (e.g., 'how do I get my song on Spotify playlists'). Then 3-5 H2 sections, each covering one Chartmetric feature or strategy. Each H2 section should include: feature name + where to find it, what it does framed as user benefit, step-by-step guidance, a 'Why this matters' block with data/context, and a 'Pro tip' with insider advice. Use specific numbers and real-world examples (artist names, percentage growth, stream counts). End with a short empowering closing section. Include a 'meta_description' field (155 chars max) for SEO. Write in second person ('you'). 1000-2000 words.",
+        "audience": "Independent artists, emerging managers, music students, and early-career professionals searching Google for music promotion strategies and data tools",
+        "example_output_format": "meta_description: [155-char SEO description]\n\n# [SEO Title with Primary Keyword]\n\n[Hook intro paragraph with stats + SEO phrases]\n\n## [Feature/Strategy 1 Name]\n[Feature description + user benefit]\n[How to access/use it]\n**Why this matters:** [data-backed context]\n**Pro tip:** [insider advice]\n\n## [Feature/Strategy 2 Name]\n...\n\n## [Empowering Closing Header]\n[1-2 sentence empowering close]",
+        "enabled": True
+    }
+}
+
+4. CREATE a file `ai/generator.py` that:
+   - Imports CHANNEL_CONFIGS from channel_configs.py and generate_content from claude_client.py
+   - Has a function `generate_for_channel(feature_data: dict, channel_key: str, custom_instructions: str = None, feedback: str = None) -> dict` that:
+     - Looks up the channel config
+     - Builds a system prompt using the brand voice and channel config
+     - Builds a user prompt with the feature data
+     - Calls Claude and returns {"channel": channel_key, "content": str, "char_count": int, "success": bool, "error": str|None}
+   - Has a function `generate_all_channels(feature_data: dict, channels: list[str] = None, custom_instructions: str = None) -> dict` that:
+     - If channels is None, generates for all enabled channels
+     - Calls generate_for_channel for each channel
+     - Returns a dict keyed by channel name with results
+   - Use max_tokens=4096 for article_hmc, 1024 for all other channels
+   - The system prompt should be:
+
+SYSTEM_PROMPT = """You are Amplify, a product marketing AI for Chartmetric — the leading music data analytics platform used by artists, managers, labels, publishers, and playlist curators worldwide.
+
+Your job: Transform raw feature/update context into publish-ready marketing content for a specific channel.
+
+BRAND VOICE:
+- Data-informed, never hype-driven — let the numbers and user value speak
+- Empowering — frame everything through what the USER can now do, not what was built
+- Industry-savvy — you understand the music business deeply (streaming, charts, playlists, royalties, sync, touring)
+- Professional but approachable — knowledgeable insider, not corporate press release
+- Never salesy, never clickbait, never "we're excited to announce"
+
+CORE PRINCIPLE: Every piece of content must answer "why should the reader care?" before explaining "what changed." Lead with value, impact, or insight — not feature mechanics.
+
+TARGET PERSONAS:
+- Artists & Managers: Want actionable insights to grow their career and understand their audience
+- Labels & A&R: Want data to discover talent, evaluate signings, and track roster performance
+- Music Publishers: Want royalty, sync licensing, and catalog intelligence
+- Playlist Curators: Want to discover trending music with data backing and audience fit
+
+IMPORTANT RULES:
+- Write ONLY the content for the specified channel — no meta-commentary, no "here's your draft", no explanations
+- Stay strictly within the character limit
+- Adapt tone and format precisely to match the channel's conventions
+- If the feature is backend-only or not user-facing, focus on the indirect user benefit (e.g., faster load times, more accurate data)
+- If the feature context is vague, infer the most likely user benefit from context clues
+- Reference specific Chartmetric features/pages by name when relevant (e.g., 'Artist Page', 'Track Page', 'Playlist tab')
+- Never fabricate data points or statistics — only reference data if it's in the feature context"""
+
+   - The user prompt should combine the feature data and channel-specific instructions:
+
+USER_PROMPT_TEMPLATE = """FEATURE CONTEXT:
+Title: {title}
+Description: {description}
+Release Status: {release_status}
+Release Date: {release_date}
+Team Reactions: {reactions_info}
+
+CHANNEL: {channel_display_name}
+CHARACTER LIMIT: {max_chars}
+TONE: {tone}
+FORMAT: {format_rules}
+TARGET AUDIENCE: {audience}
+EXPECTED OUTPUT FORMAT: {example_output_format}
+
+{few_shot_section}
+
+{custom_instructions_section}
+
+{feedback_section}
+
+Generate the content now. Output ONLY the final content, nothing else."""
+
+   - For custom_instructions_section, if custom_instructions is provided:
+     "ADDITIONAL MARKETER INSTRUCTIONS: {custom_instructions}"
+   - For feedback_section, if feedback is provided:
+     "FEEDBACK ON PREVIOUS DRAFT — please improve based on this: {feedback}"
+   - Otherwise these sections are empty strings.
+
+5. Add ANTHROPIC_API_KEY to the Secrets/Environment variables (I'll fill this in manually).
+
+Make sure all imports are correct and the module structure works. The ai/ directory should have an __init__.py file.

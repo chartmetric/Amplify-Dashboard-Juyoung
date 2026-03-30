@@ -1,0 +1,135 @@
+import logging
+
+from ai.channel_configs import CHANNEL_CONFIGS
+from ai.claude_client import generate_content
+
+logger = logging.getLogger("amplify.generator")
+
+SYSTEM_PROMPT = """You are Amplify, a product marketing AI for Chartmetric \u2014 the leading music data analytics platform used by artists, managers, labels, publishers, and playlist curators worldwide.
+
+Your job: Transform raw feature/update context into publish-ready marketing content for a specific channel.
+
+BRAND VOICE:
+- Data-informed, never hype-driven \u2014 let the numbers and user value speak
+- Empowering \u2014 frame everything through what the USER can now do, not what was built
+- Industry-savvy \u2014 you understand the music business deeply (streaming, charts, playlists, royalties, sync, touring)
+- Professional but approachable \u2014 knowledgeable insider, not corporate press release
+- Never salesy, never clickbait, never "we're excited to announce"
+
+CORE PRINCIPLE: Every piece of content must answer "why should the reader care?" before explaining "what changed." Lead with value, impact, or insight \u2014 not feature mechanics.
+
+TARGET PERSONAS:
+- Artists & Managers: Want actionable insights to grow their career and understand their audience
+- Labels & A&R: Want data to discover talent, evaluate signings, and track roster performance
+- Music Publishers: Want royalty, sync licensing, and catalog intelligence
+- Playlist Curators: Want to discover trending music with data backing and audience fit
+
+IMPORTANT RULES:
+- Write ONLY the content for the specified channel \u2014 no meta-commentary, no "here's your draft", no explanations
+- Stay strictly within the character limit
+- Adapt tone and format precisely to match the channel's conventions
+- If the feature is backend-only or not user-facing, focus on the indirect user benefit (e.g., faster load times, more accurate data)
+- If the feature context is vague, infer the most likely user benefit from context clues
+- Reference specific Chartmetric features/pages by name when relevant (e.g., 'Artist Page', 'Track Page', 'Playlist tab')
+- Never fabricate data points or statistics \u2014 only reference data if it's in the feature context"""
+
+USER_PROMPT_TEMPLATE = """FEATURE CONTEXT:
+Title: {title}
+Description: {description}
+Release Status: {release_status}
+Release Date: {release_date}
+Team Reactions: {reactions_info}
+
+CHANNEL: {channel_display_name}
+CHARACTER LIMIT: {max_chars}
+TONE: {tone}
+FORMAT: {format_rules}
+TARGET AUDIENCE: {audience}
+EXPECTED OUTPUT FORMAT: {example_output_format}
+
+{few_shot_section}
+
+{custom_instructions_section}
+
+{feedback_section}
+
+Generate the content now. Output ONLY the final content, nothing else."""
+
+
+def generate_for_channel(feature_data: dict, channel_key: str, custom_instructions: str = None, feedback: str = None) -> dict:
+    if channel_key not in CHANNEL_CONFIGS:
+        return {
+            "channel": channel_key,
+            "content": "",
+            "char_count": 0,
+            "success": False,
+            "error": f"Unknown channel: {channel_key}",
+        }
+
+    config = CHANNEL_CONFIGS[channel_key]
+    if not config.get("enabled", False):
+        return {
+            "channel": channel_key,
+            "content": "",
+            "char_count": 0,
+            "success": False,
+            "error": f"Channel '{channel_key}' is disabled",
+        }
+
+    release_status = feature_data.get("release_status", False)
+    reactions_breakdown = feature_data.get("reactions_breakdown") or []
+    if reactions_breakdown:
+        reactions_info = ", ".join(f":{r['name']}: x{r['count']}" for r in reactions_breakdown)
+    else:
+        reactions_info = "No reactions data"
+
+    custom_instructions_section = ""
+    if custom_instructions:
+        custom_instructions_section = f"ADDITIONAL MARKETER INSTRUCTIONS: {custom_instructions}"
+
+    feedback_section = ""
+    if feedback:
+        feedback_section = f"FEEDBACK ON PREVIOUS DRAFT \u2014 please improve based on this: {feedback}"
+
+    user_prompt = USER_PROMPT_TEMPLATE.format(
+        title=feature_data.get("title", ""),
+        description=feature_data.get("description", ""),
+        release_status="Released" if release_status else "In Progress",
+        release_date=feature_data.get("release_date", "N/A"),
+        reactions_info=reactions_info,
+        channel_display_name=config["display_name"],
+        max_chars=config["max_chars"],
+        tone=config["tone"],
+        format_rules=config["format_rules"],
+        audience=config["audience"],
+        example_output_format=config["example_output_format"],
+        few_shot_section="",
+        custom_instructions_section=custom_instructions_section,
+        feedback_section=feedback_section,
+    )
+
+    max_tokens = 4096 if channel_key == "article_hmc" else 1024
+
+    result = generate_content(SYSTEM_PROMPT, user_prompt, max_tokens=max_tokens)
+
+    content = result.get("content", "")
+    return {
+        "channel": channel_key,
+        "content": content,
+        "char_count": len(content),
+        "success": result["success"],
+        "error": result.get("error"),
+    }
+
+
+def generate_all_channels(feature_data: dict, channels: list[str] = None, custom_instructions: str = None) -> dict:
+    if channels is None:
+        channels = [k for k, v in CHANNEL_CONFIGS.items() if v.get("enabled", False)]
+
+    results = {}
+    for channel_key in channels:
+        results[channel_key] = generate_for_channel(
+            feature_data, channel_key, custom_instructions=custom_instructions
+        )
+
+    return results
