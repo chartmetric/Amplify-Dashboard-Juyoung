@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 import asana
 import config
 from sources.base import SourceAdapter, FeatureContext
@@ -21,9 +23,10 @@ class AsanaSource(SourceAdapter):
     def list_recent_features(self) -> list[dict]:
         client = self._get_client()
         tasks_api = asana.TasksApi(client)
+        since = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
         opts = {
             "opt_fields": "name,completed,created_at,modified_at,notes,custom_fields",
-            "limit": 20,
+            "modified_since": since,
         }
         results = []
         for task in tasks_api.get_tasks_for_project(self.project_gid, opts):
@@ -42,7 +45,7 @@ class AsanaSource(SourceAdapter):
                 "date": t.get("modified_at") or t.get("created_at", ""),
                 "urgency_score": urgency_score,
             })
-        return results[:20]
+        return results
 
     def get_feature_context(self, feature_id: str, **kwargs) -> FeatureContext:
         client = self._get_client()
