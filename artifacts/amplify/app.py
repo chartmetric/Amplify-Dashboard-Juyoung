@@ -152,6 +152,31 @@ def enriched_features():
     return jsonify(enriched)
 
 
+@app.route("/api/debug/slack-links")
+def debug_slack_links():
+    slack_source = SOURCE_REGISTRY["slack"]
+    try:
+        from sources.slack_source import _extract_links, _clean_slack_text
+        client = slack_source._get_client()
+        result = client.conversations_history(
+            channel=slack_source.channel_id,
+            limit=50,
+        )
+        messages = []
+        for msg in result.get("messages", []):
+            raw_text = msg.get("text", "")
+            urls = _extract_links(raw_text)
+            messages.append({
+                "message_ts": msg.get("ts", ""),
+                "message_preview": _clean_slack_text(raw_text)[:100],
+                "all_urls": urls,
+            })
+        return jsonify(messages)
+    except Exception as e:
+        logger.error(f"Debug slack-links error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/features/<source_type>/<feature_id>")
 def unified_detail(source_type, feature_id):
     if source_type not in SOURCE_REGISTRY:
