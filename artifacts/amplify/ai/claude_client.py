@@ -1,14 +1,14 @@
-import os
 import logging
 
 import anthropic
+import config
 
 logger = logging.getLogger("amplify.claude")
 
 
 def generate_content(system_prompt: str, user_prompt: str, max_tokens: int = 1024) -> dict:
     try:
-        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=max_tokens,
