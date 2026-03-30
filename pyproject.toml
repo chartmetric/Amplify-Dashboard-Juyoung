@@ -11,4 +11,5 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "requests>=2.33.0",
     "slack-sdk>=3.41.0",
+    "waitress>=3.0.2",
 ]

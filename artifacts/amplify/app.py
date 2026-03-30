@@ -1,5 +1,6 @@
 import os
 import sys
+import signal
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -36,4 +37,6 @@ def status():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=Config.PORT, debug=False, use_reloader=False)
+    signal.signal(signal.SIGTERM, lambda *args: sys.exit(0))
+    from waitress import serve
+    serve(app, host="0.0.0.0", port=Config.PORT)

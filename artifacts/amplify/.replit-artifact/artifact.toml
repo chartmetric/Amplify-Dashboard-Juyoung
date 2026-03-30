@@ -15,7 +15,7 @@ paths = [ "/" ]
 localPort = 5000
 
 [services.development]
-run = "gunicorn --bind 0.0.0.0:5000 --timeout 120 --workers 1 app:app"
+run = "python app.py"
 
 [services.production]
 
@@ -23,7 +23,7 @@ run = "gunicorn --bind 0.0.0.0:5000 --timeout 120 --workers 1 app:app"
 args = ["echo", "no-build"]
 
 [services.production.run]
-args = ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "120", "--workers", "1", "app:app"]
+args = ["python", "app.py"]
 
 [services.production.run.env]
 PORT = "5000"
