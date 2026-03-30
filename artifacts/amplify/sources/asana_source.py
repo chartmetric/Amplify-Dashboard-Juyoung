@@ -22,16 +22,25 @@ class AsanaSource(SourceAdapter):
         client = self._get_client()
         tasks_api = asana.TasksApi(client)
         opts = {
-            "opt_fields": "name,completed,created_at,modified_at",
+            "opt_fields": "name,completed,created_at,modified_at,notes,custom_fields",
             "limit": 20,
         }
         results = []
         for task in tasks_api.get_tasks_for_project(self.project_gid, opts):
             t = task.to_dict() if hasattr(task, "to_dict") else task
+
+            urgency_score = None
+            for cf in (t.get("custom_fields") or []):
+                if cf.get("name") == "Urgency Score":
+                    urgency_score = cf.get("display_value") or cf.get("number_value")
+                    break
+
             results.append({
                 "id": t.get("gid", ""),
                 "title": t.get("name", ""),
+                "description": t.get("notes", ""),
                 "date": t.get("modified_at") or t.get("created_at", ""),
+                "urgency_score": urgency_score,
             })
         return results[:20]
 
