@@ -3,6 +3,17 @@ import config
 from sources.base import SourceAdapter, FeatureContext
 
 
+def _clean_slack_text(text: str) -> str:
+    return (
+        text
+        .replace("\u003C", "<")
+        .replace("\u003E", ">")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+    )
+
+
 class SlackSource(SourceAdapter):
     def __init__(self, channel_id: str):
         self.channel_id = channel_id
@@ -25,12 +36,12 @@ class SlackSource(SourceAdapter):
 
         features = []
         for msg in result.get("messages", []):
-            text = msg.get("text", "")
+            text = _clean_slack_text(msg.get("text", ""))
             if len(text) < 50:
                 continue
             features.append({
                 "id": msg.get("ts", ""),
-                "title": text[:80],
+                "title": text[:300],
                 "date": msg.get("ts", ""),
             })
             if len(features) >= 15:
@@ -53,7 +64,7 @@ class SlackSource(SourceAdapter):
             raise ValueError(f"Message {feature_id} not found")
 
         msg = messages[0]
-        text = msg.get("text", "")
+        text = _clean_slack_text(msg.get("text", ""))
 
         replies_text = ""
         if msg.get("reply_count", 0) > 0:
@@ -63,11 +74,11 @@ class SlackSource(SourceAdapter):
             )
             reply_texts = []
             for reply in thread.get("messages", [])[1:]:
-                reply_texts.append(reply.get("text", ""))
+                reply_texts.append(_clean_slack_text(reply.get("text", "")))
             replies_text = "\n---\n".join(reply_texts)
 
         return FeatureContext(
-            title=text[:80],
+            title=text[:300],
             description=text,
             raw_details=replies_text,
             source_type="slack",
