@@ -464,6 +464,30 @@ def test_channels():
     return jsonify({"channels": channels, "total": len(channels)})
 
 
+@app.route("/api/test/generate-twitter")
+def test_generate_twitter():
+    sample = {
+        "id": "test-gen-001",
+        "title": "New Artist Audience Overlap Tool",
+        "description": "We've built a new tool that lets artists and managers compare their audience demographics with other artists. This helps identify collaboration opportunities, understand fan crossover, and plan tour routing based on shared audience geography. Available in the Artist Profile section under the new Audience Insights tab.",
+        "release_status": True,
+        "release_date": "2026-03-28",
+        "reactions_breakdown": [
+            {"name": "rocket", "count": 5},
+            {"name": "fire", "count": 3},
+            {"name": "heart", "count": 2},
+        ],
+        "total_reactions": 10,
+        "urgency_score": None,
+    }
+    try:
+        result = generate_for_channel(sample, "twitter")
+        return jsonify({"feature": sample, "twitter_content": result})
+    except Exception as e:
+        logger.error(f"Test generate-twitter error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/test/claude")
 def test_claude():
     from ai.claude_client import generate_content
