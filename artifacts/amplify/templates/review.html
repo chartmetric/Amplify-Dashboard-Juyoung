@@ -31,6 +31,8 @@ h2{font-size:1.2rem;color:#444;margin:2rem 0 1rem}
 .btn:hover{background:#00b396}
 .btn:disabled{background:#ccc;cursor:not-allowed}
 .btn-sm{padding:.35rem .75rem;font-size:.8rem}
+.btn-outline{background:transparent;color:#00C9A7;border:1.5px solid #00C9A7}
+.btn-outline:hover{background:#e0f7f3}
 
 .loading{text-align:center;padding:3rem;color:#999}
 .spinner{display:inline-block;width:28px;height:28px;border:3px solid #e0e0e0;border-top-color:#00C9A7;border-radius:50%;animation:spin .7s linear infinite;margin-bottom:.75rem}
@@ -40,6 +42,18 @@ h2{font-size:1.2rem;color:#444;margin:2rem 0 1rem}
 .classification h3{font-size:1rem;margin-bottom:.75rem}
 .class-row{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin-bottom:.5rem}
 .class-detail{font-size:.85rem;color:#555}
+
+.channel-selector{background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:1.25rem;margin-bottom:1.5rem}
+.channel-selector-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;flex-wrap:wrap;gap:.5rem}
+.channel-selector-header h3{font-size:1rem;color:#333;margin:0}
+.channel-chips{display:flex;flex-wrap:wrap;gap:.5rem}
+.channel-chip{display:inline-flex;align-items:center;gap:.35rem;padding:.4rem .85rem;border-radius:20px;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s;border:1.5px solid #ccc;background:#fff;color:#888;user-select:none}
+.channel-chip:hover{border-color:#00C9A7;color:#555}
+.channel-chip.active{background:#00C9A7;border-color:#00C9A7;color:#fff}
+.channel-chip .chip-star{font-size:.7rem;opacity:.7}
+.channel-chip.active .chip-star{opacity:1}
+.generate-bar{display:flex;justify-content:flex-end;margin-top:1rem;gap:.5rem;align-items:center}
+.generate-bar .selected-count{font-size:.85rem;color:#777}
 
 .content-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:1rem;margin-bottom:2rem}
 .content-card{background:#fff;border:1px solid #e0e0e0;border-left:4px solid #ccc;border-radius:10px;display:flex;flex-direction:column;overflow:hidden}
@@ -84,12 +98,30 @@ h2{font-size:1.2rem;color:#444;margin:2rem 0 1rem}
   </div>
 </details>
 
-<div id="gen-loading" class="loading" style="display:none"><div class="spinner"></div><br>Classifying feature and generating content for all channels...</div>
+<div id="gen-loading" class="loading" style="display:none"><div class="spinner"></div><br>Classifying feature and generating content...</div>
 <div id="gen-error" style="display:none"></div>
 
 <div id="classification-section" style="display:none">
   <h2>Classification</h2>
   <div id="classification-card" class="classification"></div>
+</div>
+
+<div id="channel-selector-section" style="display:none">
+  <h2>Channels</h2>
+  <div class="channel-selector">
+    <div class="channel-selector-header">
+      <h3>Select channels to generate</h3>
+      <div style="display:flex;gap:.5rem">
+        <button class="btn btn-sm btn-outline" onclick="selectAllChannels()">Select All</button>
+        <button class="btn btn-sm btn-outline" onclick="deselectAllChannels()">Deselect All</button>
+      </div>
+    </div>
+    <div id="channel-chips" class="channel-chips"></div>
+    <div class="generate-bar">
+      <span class="selected-count" id="selected-count"></span>
+      <button class="btn" id="generate-btn" onclick="generateForSelectedChannels()">Generate Content</button>
+    </div>
+  </div>
 </div>
 
 <div id="content-section" style="display:none">
@@ -98,26 +130,88 @@ h2{font-size:1.2rem;color:#444;margin:2rem 0 1rem}
 </div>
 
 <script>
-const CHANNEL_TYPES = {
+var CHANNEL_TYPES = {
   twitter: 'social', linkedin: 'social',
   email_newsletter: 'email', email_standalone: 'email',
   inapp: 'internal', notion_monthly: 'internal',
   article_hmc: 'article'
 };
 
-let allFeatures = [];
-let selectedFeature = null;
+var allFeatures = [];
+var selectedFeature = null;
+var allChannels = [];
+var selectedChannels = {};
+var recommendedChannels = [];
+
+async function fetchChannels() {
+  try {
+    var res = await fetch('/api/channels');
+    var data = await res.json();
+    allChannels = (data.channels || []).filter(function(c) { return c.enabled; });
+  } catch (e) {
+    console.error('Failed to fetch channels:', e);
+  }
+}
+
+function renderChannelChips() {
+  var container = document.getElementById('channel-chips');
+  container.innerHTML = '';
+  allChannels.forEach(function(ch) {
+    var chip = document.createElement('span');
+    chip.className = 'channel-chip' + (selectedChannels[ch.key] ? ' active' : '');
+    chip.setAttribute('data-key', ch.key);
+
+    var label = document.createTextNode(ch.display_name);
+    chip.appendChild(label);
+
+    if (recommendedChannels.indexOf(ch.key) !== -1) {
+      var star = document.createElement('span');
+      star.className = 'chip-star';
+      star.textContent = ' \u2605 rec';
+      chip.appendChild(star);
+    }
+
+    chip.addEventListener('click', function() {
+      selectedChannels[ch.key] = !selectedChannels[ch.key];
+      chip.classList.toggle('active', selectedChannels[ch.key]);
+      updateSelectedCount();
+    });
+
+    container.appendChild(chip);
+  });
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  var count = Object.keys(selectedChannels).filter(function(k) { return selectedChannels[k]; }).length;
+  document.getElementById('selected-count').textContent = count + ' of ' + allChannels.length + ' selected';
+  document.getElementById('generate-btn').disabled = count === 0;
+}
+
+function selectAllChannels() {
+  allChannels.forEach(function(ch) { selectedChannels[ch.key] = true; });
+  renderChannelChips();
+}
+
+function deselectAllChannels() {
+  allChannels.forEach(function(ch) { selectedChannels[ch.key] = false; });
+  renderChannelChips();
+}
+
+function getSelectedChannelKeys() {
+  return Object.keys(selectedChannels).filter(function(k) { return selectedChannels[k]; });
+}
 
 async function fetchFeatures() {
-  const grid = document.getElementById('features-grid');
-  const loading = document.getElementById('features-loading');
-  const errEl = document.getElementById('features-error');
+  var grid = document.getElementById('features-grid');
+  var loading = document.getElementById('features-loading');
+  var errEl = document.getElementById('features-error');
   grid.innerHTML = '';
   errEl.style.display = 'none';
   loading.style.display = 'block';
   try {
-    const res = await fetch('/api/features/classified?limit=20');
-    const data = await res.json();
+    var res = await fetch('/api/features/classified?limit=20');
+    var data = await res.json();
     if (data.error) throw new Error(data.error);
     allFeatures = data.classified_features || [];
     renderFeatures();
@@ -130,68 +224,86 @@ async function fetchFeatures() {
 }
 
 function renderFeatures() {
-  const grid = document.getElementById('features-grid');
+  var grid = document.getElementById('features-grid');
   if (!allFeatures.length) {
-    grid.innerHTML = '<div class="empty-state">No features found with importance &ge; 3</div>';
+    grid.innerHTML = '<div class="empty-state">No features found</div>';
     return;
   }
-  grid.innerHTML = allFeatures.map((f, i) => {
-    const c = f.classification || {};
-    return `<div class="feature-card" data-idx="${i}" onclick="selectFeature(${i})">
-      <h3>${esc(f.title || 'Untitled')}</h3>
-      <div>
-        <span class="badge badge-category">${esc(c.category || 'unknown')}</span>
-        <span class="badge badge-score">Score: ${c.importance_score || '?'}</span>
-      </div>
-      <div class="feature-meta">
-        ${c.importance_score_reason ? '<p><strong>Why:</strong> ' + esc(c.importance_score_reason) + '</p>' : ''}
-        ${c.marketing_summary ? '<p><strong>Summary:</strong> ' + esc(c.marketing_summary) + '</p>' : ''}
-      </div>
-    </div>`;
+  grid.innerHTML = allFeatures.map(function(f, i) {
+    var c = f.classification || {};
+    return '<div class="feature-card" data-idx="' + i + '" onclick="selectFeature(' + i + ')">' +
+      '<h3>' + esc(f.title || 'Untitled') + '</h3>' +
+      '<div>' +
+        '<span class="badge badge-category">' + esc(c.category || 'unknown') + '</span> ' +
+        '<span class="badge badge-score">Score: ' + (c.importance_score || '?') + '</span>' +
+      '</div>' +
+      '<div class="feature-meta">' +
+        (c.importance_score_reason ? '<p><strong>Why:</strong> ' + esc(c.importance_score_reason) + '</p>' : '') +
+        (c.marketing_summary ? '<p><strong>Summary:</strong> ' + esc(c.marketing_summary) + '</p>' : '') +
+      '</div>' +
+    '</div>';
   }).join('');
 }
 
 function selectFeature(idx) {
-  const f = allFeatures[idx];
+  var f = allFeatures[idx];
   if (!f) return;
-  document.querySelectorAll('.feature-card').forEach(c => c.classList.remove('selected'));
-  const card = document.querySelector(`.feature-card[data-idx="${idx}"]`);
+  document.querySelectorAll('.feature-card').forEach(function(c) { c.classList.remove('selected'); });
+  var card = document.querySelector('.feature-card[data-idx="' + idx + '"]');
   if (card) card.classList.add('selected');
   selectedFeature = f;
-  runGeneration(f);
+
+  var cls = f.classification || {};
+  renderClassification(cls);
+  showChannelSelector(cls.recommended_channels || []);
 }
 
 function generateManual() {
-  const title = document.getElementById('manual-title').value.trim();
-  const desc = document.getElementById('manual-desc').value.trim();
+  var title = document.getElementById('manual-title').value.trim();
+  var desc = document.getElementById('manual-desc').value.trim();
   if (!title) return alert('Please enter a title');
-  const feature = {id: 'manual-' + Date.now(), title, description: desc};
+  var feature = {id: 'manual-' + Date.now(), title: title, description: desc};
   selectedFeature = feature;
-  runGeneration(feature);
+  renderClassification({});
+  showChannelSelector([]);
 }
 
-async function runGeneration(feature) {
-  const loading = document.getElementById('gen-loading');
-  const errEl = document.getElementById('gen-error');
-  const classSection = document.getElementById('classification-section');
-  const contentSection = document.getElementById('content-section');
+function showChannelSelector(recommended) {
+  recommendedChannels = recommended || [];
+  selectedChannels = {};
+  allChannels.forEach(function(ch) {
+    selectedChannels[ch.key] = recommendedChannels.indexOf(ch.key) !== -1;
+  });
+  renderChannelChips();
+  document.getElementById('channel-selector-section').style.display = 'block';
+  document.getElementById('content-section').style.display = 'none';
+}
 
-  classSection.style.display = 'none';
+async function generateForSelectedChannels() {
+  if (!selectedFeature) return;
+  var channels = getSelectedChannelKeys();
+  if (!channels.length) return alert('Select at least one channel');
+
+  var loading = document.getElementById('gen-loading');
+  var errEl = document.getElementById('gen-error');
+  var contentSection = document.getElementById('content-section');
+
   contentSection.style.display = 'none';
   errEl.style.display = 'none';
   loading.style.display = 'block';
 
   try {
-    const res = await fetch('/api/generate', {
+    var res = await fetch('/api/generate', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({feature})
+      body: JSON.stringify({feature: selectedFeature, channels: channels})
     });
-    const data = await res.json();
+    var data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    const cls = feature.classification || data.classification || {};
-    renderClassification(cls);
+    if (data.classification && !selectedFeature.classification) {
+      selectedFeature.classification = data.classification;
+    }
     renderContent(data.generated_content || {});
   } catch (e) {
     errEl.innerHTML = '<div class="error-msg">Generation failed: ' + esc(e.message) + '</div>';
@@ -202,30 +314,29 @@ async function runGeneration(feature) {
 }
 
 function renderClassification(cls) {
-  const section = document.getElementById('classification-section');
-  const card = document.getElementById('classification-card');
+  var section = document.getElementById('classification-section');
+  var card = document.getElementById('classification-card');
   if (!cls || !cls.category) {
     section.style.display = 'none';
     return;
   }
-  const channels = (cls.recommended_channels || []).map(c => `<span class="badge badge-channel">${esc(c)}</span>`).join(' ');
-  card.innerHTML = `
-    <div class="class-row">
-      <span class="badge badge-category">${esc(cls.category)}</span>
-      <span class="badge badge-score">Importance: ${cls.importance_score || '?'}/5</span>
-    </div>
-    ${cls.importance_score_reason ? '<p class="class-detail"><strong>Reason:</strong> ' + esc(cls.importance_score_reason) + '</p>' : ''}
-    ${cls.marketing_summary ? '<p class="class-detail"><strong>Marketing Summary:</strong> ' + esc(cls.marketing_summary) + '</p>' : ''}
-    ${cls.target_audience ? '<p class="class-detail"><strong>Target Audience:</strong> ' + esc(cls.target_audience) + '</p>' : ''}
-    ${channels ? '<p class="class-detail" style="margin-top:.5rem"><strong>Recommended Channels:</strong> ' + channels + '</p>' : ''}
-  `;
+  var channels = (cls.recommended_channels || []).map(function(c) { return '<span class="badge badge-channel">' + esc(c) + '</span>'; }).join(' ');
+  card.innerHTML =
+    '<div class="class-row">' +
+      '<span class="badge badge-category">' + esc(cls.category) + '</span>' +
+      '<span class="badge badge-score">Importance: ' + (cls.importance_score || '?') + '/5</span>' +
+    '</div>' +
+    (cls.importance_score_reason ? '<p class="class-detail"><strong>Reason:</strong> ' + esc(cls.importance_score_reason) + '</p>' : '') +
+    (cls.marketing_summary ? '<p class="class-detail"><strong>Marketing Summary:</strong> ' + esc(cls.marketing_summary) + '</p>' : '') +
+    (cls.target_audience ? '<p class="class-detail"><strong>Target Audience:</strong> ' + esc(cls.target_audience) + '</p>' : '') +
+    (channels ? '<p class="class-detail" style="margin-top:.5rem"><strong>Recommended Channels:</strong> ' + channels + '</p>' : '');
   section.style.display = 'block';
 }
 
 function renderContent(content) {
-  const section = document.getElementById('content-section');
-  const grid = document.getElementById('content-grid');
-  const keys = Object.keys(content);
+  var section = document.getElementById('content-section');
+  var grid = document.getElementById('content-grid');
+  var keys = Object.keys(content);
   if (!keys.length) {
     grid.innerHTML = '<div class="empty-state">No content generated</div>';
     section.style.display = 'block';
@@ -233,48 +344,48 @@ function renderContent(content) {
   }
   grid.innerHTML = '';
   keys.forEach(function(ch) {
-    const item = content[ch];
-    const type = CHANNEL_TYPES[ch] || 'article';
-    const displayName = item.channel_display_name || ch;
-    const charCount = item.char_count || (item.content || '').length;
-    const maxChars = item.max_chars || '?';
+    var item = content[ch];
+    var type = CHANNEL_TYPES[ch] || 'article';
+    var displayName = item.channel_display_name || ch;
+    var charCount = item.char_count || (item.content || '').length;
+    var maxChars = item.max_chars || '?';
 
-    const card = document.createElement('div');
+    var card = document.createElement('div');
     card.className = 'content-card';
     card.setAttribute('data-type', type);
     card.setAttribute('data-channel', ch);
 
-    const header = document.createElement('div');
+    var header = document.createElement('div');
     header.className = 'card-header';
     header.innerHTML = '<h4>' + esc(displayName) + '</h4><span class="badge badge-chars">' + charCount + ' / ' + maxChars + ' chars</span>';
     card.appendChild(header);
 
-    const body = document.createElement('div');
+    var body = document.createElement('div');
     body.className = 'card-body';
     body.textContent = item.content || item.error || 'No content';
     card.appendChild(body);
 
     if (item.was_trimmed) {
-      const note = document.createElement('div');
+      var note = document.createElement('div');
       note.className = 'trimmed-note';
       note.style.padding = '0 1rem';
       note.textContent = 'Content was trimmed to fit character limit';
       card.appendChild(note);
     }
 
-    const footer = document.createElement('div');
+    var footer = document.createElement('div');
     footer.className = 'card-footer';
 
-    const input = document.createElement('input');
+    var input = document.createElement('input');
     input.type = 'text';
     input.placeholder = 'Feedback for regeneration...';
     footer.appendChild(input);
 
-    const spinner = document.createElement('div');
+    var spinner = document.createElement('div');
     spinner.className = 'card-regen-spinner';
     footer.appendChild(spinner);
 
-    const btn = document.createElement('button');
+    var btn = document.createElement('button');
     btn.className = 'btn btn-sm';
     btn.textContent = 'Regenerate';
     btn.addEventListener('click', function() {
@@ -332,11 +443,12 @@ async function regenerate(channel, card, body, input, spinner) {
 
 function esc(s) {
   if (s == null) return '';
-  const d = document.createElement('div');
+  var d = document.createElement('div');
   d.textContent = String(s);
   return d.innerHTML;
 }
 
+fetchChannels();
 fetchFeatures();
 </script>
 </body>
