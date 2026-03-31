@@ -39,8 +39,8 @@ FEW_SHOT_EXAMPLES = {
     ],
     "notion_monthly": [
         {
-            "feature_context": "Signup workflow redesign with streamlined pricing, verification, and onboarding. Assignee: Juyoung Lee, Engineer: Corey",
-            "content": "## Signup Workflow Overhauled with Streamlined Pricing, Verification, and Onboarding\n\n**Overview:** The end-to-end signup experience has been redesigned to reduce friction and improve conversion. Faster verification, a simplified pricing page, and a consolidated onboarding flow get users from discovery to checkout with fewer steps.\n\n**User Impact:** All new signups benefit from a smoother path to becoming paying customers. Reduces drop-off at pricing and verification steps.\n\n**Technical Notes:** Updated pricing page at chartmetric.com/pricing. Changes span frontend signup flow, verification emails, and onboarding screens.\n\n**Key Contributors:** Juyoung Lee (Planner), Corey (Engineer)\n\n**Status:** Released"
+            "feature_context": "Playlist Page polish pass with new Top Moods component, CSV downloads, and layout refinements. Engineer: Hanby Choi, Assignee: Juyoung Lee",
+            "content": "### **Playlist Page Enhanced with Richer Insights and Smoother Experience**\n\nPlaylist Page received a major polish pass introducing a new Top Moods component, enabling CSV downloads and refining the overall layout, giving users richer playlist insights and a smoother browsing experience.\n\nhttps://app.chartmetric.com/playlist/spotify/988484/about\n\nKey Contributors: Juyoung, Hanby"
         }
     ],
     "article_hmc": [
