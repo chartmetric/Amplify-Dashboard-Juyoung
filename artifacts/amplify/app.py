@@ -620,6 +620,54 @@ def test_raw_fields():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/test/feedback-loop")
+def test_feedback_loop():
+    feature_1 = {
+        "id": "test-gen-001",
+        "title": "New Artist Audience Overlap Tool",
+        "description": "We've built a new tool that lets artists and managers compare their audience demographics with other artists. This helps identify collaboration opportunities, understand fan crossover, and plan tour routing based on shared audience geography. Available in the Artist Profile section under the new Audience Insights tab.",
+        "release_status": True,
+        "release_date": "2026-03-28",
+        "reactions_breakdown": [
+            {"name": "rocket", "count": 5},
+            {"name": "fire", "count": 3},
+            {"name": "heart", "count": 2},
+        ],
+        "total_reactions": 10,
+        "urgency_score": None,
+    }
+    feature_2 = {
+        "id": "test-002",
+        "title": "Playlist Placement Tracker",
+        "description": "Track when and where your songs get added to editorial and algorithmic playlists across Spotify, Apple Music, and Deezer. See historical placement data and get alerts for new additions.",
+        "release_status": True,
+        "release_date": "2026-03-30",
+    }
+
+    try:
+        first_draft = generate_for_channel(feature_1, "twitter")
+
+        approved_text = "Compare your fanbase with any artist. Our new Audience Overlap tool shows listener crossover across Spotify, Instagram, and YouTube. #Chartmetric #AudienceData"
+        feedback_record = save_feedback(
+            channel="twitter",
+            feature_title=feature_1["title"],
+            original_draft=first_draft["content"],
+            approved_draft=approved_text,
+            feedback_note="Shorter, more direct, no questions, just state what it does clearly",
+        )
+
+        second_draft = generate_for_channel(feature_2, "twitter")
+
+        return jsonify({
+            "first_generation": first_draft,
+            "feedback_saved": feedback_record,
+            "second_generation_after_learning": second_draft,
+        })
+    except Exception as e:
+        logger.error(f"Test feedback-loop error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/test/claude")
 def test_claude():
     from ai.claude_client import generate_content
