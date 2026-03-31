@@ -6,8 +6,14 @@ import config
 logger = logging.getLogger("amplify.claude")
 
 
+def _sanitize_text(text: str) -> str:
+    return text.encode("utf-8", errors="replace").decode("utf-8")
+
+
 def generate_content(system_prompt: str, user_prompt: str, max_tokens: int = 1024) -> dict:
     try:
+        system_prompt = _sanitize_text(system_prompt)
+        user_prompt = _sanitize_text(user_prompt)
         client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
         message = client.messages.create(
             model="claude-sonnet-4-20250514",

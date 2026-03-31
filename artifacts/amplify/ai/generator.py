@@ -55,6 +55,9 @@ Title: {title}
 Description: {description}
 Release Status: {release_status}
 Release Date: {release_date}
+Assignee: {assignee}
+Engineer: {engineer}
+Planner: {planner}
 Team Reactions: {reactions_info}
 
 CHANNEL: {channel_display_name}
@@ -138,6 +141,9 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
         description=feature_data.get("description", ""),
         release_status="Released" if release_status else "In Progress",
         release_date=feature_data.get("release_date", "N/A"),
+        assignee=feature_data.get("assignee") or "N/A",
+        engineer=feature_data.get("engineer") or "N/A",
+        planner=feature_data.get("planner") or "N/A",
         reactions_info=reactions_info,
         channel_display_name=config["display_name"],
         max_chars=config["max_chars"],
