@@ -267,6 +267,20 @@ def test_classify():
     return jsonify({"sample_feature": sample, "classification": classification})
 
 
+@app.route("/api/test/channels")
+def test_channels():
+    from ai.channel_configs import CHANNEL_CONFIGS
+    channels = [{"key": k, "display_name": v["display_name"]} for k, v in CHANNEL_CONFIGS.items()]
+    return jsonify({"channels": channels, "total": len(channels)})
+
+
+@app.route("/api/test/claude")
+def test_claude():
+    from ai.claude_client import generate_content
+    result = generate_content("You are a helpful assistant.", "Say hello in one sentence.", max_tokens=64)
+    return jsonify(result)
+
+
 if __name__ == "__main__":
     signal.signal(signal.SIGTERM, lambda *args: os._exit(0))
     port = config.PORT
