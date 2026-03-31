@@ -48,7 +48,8 @@ IMPORTANT RULES:
 - If the feature is backend-only or not user-facing, focus on the indirect user benefit (e.g., faster load times, more accurate data)
 - If the feature context is vague, infer the most likely user benefit from context clues
 - Reference specific Chartmetric features/pages by name when relevant (e.g., 'Artist Page', 'Track Page', 'Playlist tab')
-- Never fabricate data points or statistics \u2014 only reference data if it's in the feature context"""
+- Never fabricate data points or statistics \u2014 only reference data if it's in the feature context
+- NEVER use em dashes (\u2014) anywhere in generated content. Use commas, periods, or rewrite the sentence instead. This applies to ALL channels."""
 
 USER_PROMPT_TEMPLATE = """FEATURE CONTEXT:
 Title: {title}
