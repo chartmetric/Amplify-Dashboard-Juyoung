@@ -488,6 +488,30 @@ def test_generate_twitter():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/test/generate-samples")
+def test_generate_samples():
+    sample = {
+        "id": "test-samples-001",
+        "title": "Playlists to Pitch: Personalized Playlist Recommendations",
+        "description": "A new feature on Track Pages that recommends playlists tailored to your specific track. Each recommendation includes a Fit Analysis explaining why the playlist is a strong match, key metrics like Added Reach and Added Streams, and direct links to reach out to playlist curators.",
+        "release_status": True,
+        "release_date": "2026-03-30",
+        "reactions_breakdown": [
+            {"name": "rocket", "count": 8},
+            {"name": "fire", "count": 5},
+            {"name": "heart", "count": 4},
+        ],
+        "total_reactions": 17,
+        "urgency_score": None,
+    }
+    try:
+        results = generate_all_channels(sample)
+        return jsonify({"feature": sample, "generated_content": results})
+    except Exception as e:
+        logger.error(f"Test generate-samples error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/test/claude")
 def test_claude():
     from ai.claude_client import generate_content
