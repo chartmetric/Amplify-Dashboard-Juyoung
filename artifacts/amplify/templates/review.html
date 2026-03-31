@@ -283,7 +283,7 @@ function showChannelSelector(recommended) {
   });
   renderChannelChips();
   var urlInput = document.getElementById('feature-url-input');
-  urlInput.value = (selectedFeature && (selectedFeature.pr_preview_link || selectedFeature.feature_url)) || '';
+  urlInput.value = '';
   document.getElementById('feature-url-section').style.display = 'block';
   document.getElementById('channel-selector-section').style.display = 'block';
   document.getElementById('content-section').style.display = 'none';

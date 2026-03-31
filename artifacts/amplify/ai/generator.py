@@ -154,7 +154,7 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
         engineer=feature_data.get("engineer") or "N/A",
         planner=feature_data.get("planner") or "N/A",
         reactions_info=reactions_info,
-        feature_url=feature_data.get("feature_url") or feature_data.get("pr_preview_link") or "Not provided",
+        feature_url=feature_data.get("feature_url") or "Not provided",
         channel_display_name=config["display_name"],
         max_chars=config["max_chars"],
         tone=config["tone"],
