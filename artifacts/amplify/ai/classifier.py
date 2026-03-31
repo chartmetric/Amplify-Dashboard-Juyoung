@@ -26,8 +26,8 @@ IMPORTANCE SCORING (1-5):
 
 CATEGORY-IMPORTANCE CAPS:
 - "new_feature" and "improvement" can score 1-5 (no cap)
-- "bug_fix" can score at most 3 (even major bug fixes are not marketing-worthy beyond newsletter mentions)
-- "infrastructure" can score at most 2 (never externally marketed)
+- "bug_fix" can score at most 2. Bug fixes should NEVER be recommended for any marketing channel. Set recommended_channels to an empty array [] for all bug fixes. They appear in the input list but are never marketed.
+- "infrastructure" can score at most 2 (never externally marketed). Set recommended_channels to [] for infrastructure.
 - "deprecation" can score at most 3 (users need to know, but it's not a positive marketing moment)
 - "mobile" can score 1-5 (same as new_feature/improvement, depending on impact)
 
