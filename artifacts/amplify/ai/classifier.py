@@ -37,15 +37,26 @@ RULES FOR is_user_facing:
 - If a backend change improves performance/accuracy users will notice -> true
 - If a backend change fixes data calculation users rely on -> true
 
+CHANNEL USE CASES (understand these before recommending):
+- "twitter": High frequency. Any time an important user-facing feature releases. Good for quick announcements with data hooks. Use for score >= 3 if user-facing.
+- "email_newsletter": Low frequency (monthly). Holistic product update with 3-4 key features. Only the most important features make the cut. Use for score >= 4 only.
+- "email_standalone": Weekly/biweekly/monthly opt-in "what's new" digest. More inclusive than newsletter. Use for score >= 3 if user-facing.
+- "inapp": High frequency. Any time an important user-facing feature releases. Users see this inside the product. Use for score >= 3 if user-facing.
+- "linkedin": Thought-leadership posts connecting features to industry trends. Use for score >= 4 when there's a compelling industry narrative.
+- "notion_monthly": Low frequency (monthly). Internal doc listing 10-12 key features of the month. Use for score >= 3.
+- "article_hmc": Low frequency. Long-form blog articles combining multiple features around a theme (marketing, content, playlist, influencer). Rarely for a single feature unless score = 5. Use for score >= 5, or flag with note "combine with related features" for score 4.
+
 RULES FOR recommended_channels:
-- importance_score 5: all external channels (twitter, email_newsletter, linkedin, inapp, article_hmc) + notion_monthly
-- importance_score 4: 2-3 most relevant external channels + notion_monthly
-- importance_score 3: 1-2 channels (email_newsletter likely) + notion_monthly
+- importance_score 5: twitter, email_newsletter, email_standalone, inapp, linkedin, notion_monthly, article_hmc (all channels)
+- importance_score 4: twitter, email_newsletter, email_standalone, inapp, notion_monthly (+ linkedin if industry-relevant, + article_hmc only if thematic)
+- importance_score 3 (user-facing): twitter, email_standalone, inapp, notion_monthly
+- importance_score 3 (not user-facing): notion_monthly only
 - importance_score 2: notion_monthly only
-- importance_score 1: notion_monthly only
-- Always include notion_monthly (it's the internal record of everything)
-- For user-facing features: always include inapp if score >= 4
-- For data/analytics features: always include article_hmc if score >= 4
+- importance_score 1: (none — skip marketing entirely)
+- Always include notion_monthly for score >= 2
+- twitter and inapp go together — if a feature is worth tweeting, it's worth an in-app announcement
+- email_newsletter is reserved for the best features (score >= 4) — it's a curated monthly digest, not a catch-all
+- article_hmc is almost never for a single feature — it's for thematic bundles. Only include for score 5 standalone features
 
 RULES FOR target_audience -- pick the most relevant subset of:
 ["artists", "managers", "labels", "publishers", "curators", "all"]
