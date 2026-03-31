@@ -49,7 +49,14 @@ IMPORTANT RULES:
 - If the feature context is vague, infer the most likely user benefit from context clues
 - Reference specific Chartmetric features/pages by name when relevant (e.g., 'Artist Page', 'Track Page', 'Playlist tab')
 - Never fabricate data points or statistics \u2014 only reference data if it's in the feature context
-- NEVER use em dashes (\u2014) anywhere in generated content. Use commas, periods, or rewrite the sentence instead. This applies to ALL channels."""
+- NEVER use em dashes (\u2014) anywhere in generated content. Use commas, periods, or rewrite the sentence instead. This applies to ALL channels.
+- If a Feature URL is provided, embed it as a hyperlink within a natural CTA phrase. Do NOT paste the raw URL. Instead, use markdown link format: [anchor text](URL). The anchor text should be a natural phrase that tells the user where to go, like [Artist Page](https://app.chartmetric.com/artist/123), [Charts section](https://app.chartmetric.com/charts), or [Try it here](URL). Channel-specific rules for URLs:
+  - Twitter: Do NOT include any URL in the tweet text. URLs get added separately.
+  - Email (newsletter + standalone): Use markdown hyperlink format [text](URL) in the CTA.
+  - In-app: Use markdown hyperlink format [text](URL) in the CTA.
+  - LinkedIn: Use markdown hyperlink format [text](URL) or plain URL at the end.
+  - Notion monthly: Include as a markdown hyperlink reference.
+  - HMC article: Do not include the feature URL."""
 
 USER_PROMPT_TEMPLATE = """FEATURE CONTEXT:
 Title: {title}
@@ -60,6 +67,7 @@ Assignee: {assignee}
 Engineer: {engineer}
 Planner: {planner}
 Team Reactions: {reactions_info}
+Feature URL: {feature_url}
 
 CHANNEL: {channel_display_name}
 CHARACTER LIMIT: {max_chars}
@@ -146,6 +154,7 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
         engineer=feature_data.get("engineer") or "N/A",
         planner=feature_data.get("planner") or "N/A",
         reactions_info=reactions_info,
+        feature_url=feature_data.get("feature_url") or feature_data.get("pr_preview_link") or "Not provided",
         channel_display_name=config["display_name"],
         max_chars=config["max_chars"],
         tone=config["tone"],
