@@ -52,11 +52,11 @@ CHANNEL_CONFIGS = {
     "notion_monthly": {
         "display_name": "Notion Monthly Meeting Doc",
         "description": "Feature summary block for monthly product meeting notes",
-        "max_chars": 1500,
-        "tone": "Structured, factual, internal-audience. Like meeting prep notes for leadership.",
-        "format_rules": "Structure: Feature name as heading, then sections: Overview (2-3 sentences), User Impact (who benefits and how), Technical Notes (brief, non-jargon), Key Contributor (name), Status (based on release_status field). Use markdown formatting.",
+        "max_chars": 600,
+        "tone": "Concise, factual, scannable. Like a quick update in a meeting doc. Get to the point in 2-3 sentences.",
+        "format_rules": "Structure: Bold feature name as a heading, then 2-3 sentences covering what changed and why it matters to users. Include a relevant link if available. End with key contributors. That's it. No separate sections for Overview, User Impact, Technical Notes. Keep it tight and scannable.",
         "audience": "Chartmetric leadership and cross-functional team in a monthly product review meeting",
-        "example_output_format": "## [Feature Name]\n\n**Overview:** [2-3 sentences]\n\n**User Impact:** [who and how]\n\n**Technical Notes:** [brief]\n\n**Key Contributor:** [name if available]\n\n**Status:** [Released/In Progress/Planned]",
+        "example_output_format": "### **[Feature Name]**\n\n[2-3 sentence summary of what changed and user impact]. [Link if relevant]\n\nKey Contributors: [names]",
         "enabled": True,
     },
     "article_hmc": {
