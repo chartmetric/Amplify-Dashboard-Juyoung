@@ -2,6 +2,7 @@ import logging
 
 from ai.channel_configs import CHANNEL_CONFIGS
 from ai.claude_client import generate_content
+from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 
 logger = logging.getLogger("amplify.generator")
 
@@ -106,6 +107,14 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
     if feedback:
         feedback_section = f"FEEDBACK ON PREVIOUS DRAFT \u2014 please improve based on this: {feedback}"
 
+    examples = FEW_SHOT_EXAMPLES.get(channel_key, [])[:3]
+    few_shot_section = ""
+    if examples:
+        parts = ["EXAMPLES OF REAL CHARTMETRIC CONTENT FOR THIS CHANNEL (match this style and quality):"]
+        for ex in examples:
+            parts.append(f"---\nContext: {ex['feature_context']}\nPublished Content:\n{ex['content']}\n---")
+        few_shot_section = "\n".join(parts)
+
     user_prompt = USER_PROMPT_TEMPLATE.format(
         title=feature_data.get("title", ""),
         description=feature_data.get("description", ""),
@@ -118,7 +127,7 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
         format_rules=config["format_rules"],
         audience=config["audience"],
         example_output_format=config["example_output_format"],
-        few_shot_section="",
+        few_shot_section=few_shot_section,
         custom_instructions_section=custom_instructions_section,
         feedback_section=feedback_section,
     )

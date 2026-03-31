@@ -12,6 +12,7 @@ from sources.slack_source import SlackSource
 from sources.manual_source import ManualSource
 from ai.classifier import classify_features_batch, classify_feature, set_manual_override, get_manual_overrides, remove_manual_override, apply_manual_overrides
 from ai.generator import generate_for_channel, generate_all_channels
+from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from datetime import datetime, timezone
 
 app = Flask(__name__, template_folder="templates")
@@ -269,6 +270,51 @@ def delete_manual_override(feature_id):
 @app.route("/api/features/overrides")
 def list_manual_overrides():
     return jsonify({"overrides": get_manual_overrides()})
+
+
+@app.route("/api/examples")
+def list_all_examples():
+    return jsonify(FEW_SHOT_EXAMPLES)
+
+
+@app.route("/api/examples/<channel_key>", methods=["GET"])
+def get_channel_examples(channel_key):
+    examples = FEW_SHOT_EXAMPLES.get(channel_key)
+    if examples is None:
+        return jsonify({"error": f"No examples found for channel '{channel_key}'"}), 404
+    return jsonify({"channel": channel_key, "examples": examples})
+
+
+@app.route("/api/examples/<channel_key>", methods=["POST"])
+def add_channel_example(channel_key):
+    data = request.get_json() or {}
+    feature_context = data.get("feature_context")
+    content = data.get("content")
+    if not feature_context or not content:
+        return jsonify({"error": "Both 'feature_context' and 'content' are required"}), 400
+
+    if channel_key not in FEW_SHOT_EXAMPLES:
+        FEW_SHOT_EXAMPLES[channel_key] = []
+
+    FEW_SHOT_EXAMPLES[channel_key].append({
+        "feature_context": feature_context,
+        "content": content,
+    })
+    print(f"[examples] Added example for channel '{channel_key}' (now {len(FEW_SHOT_EXAMPLES[channel_key])} total)", flush=True)
+    return jsonify({"channel": channel_key, "examples": FEW_SHOT_EXAMPLES[channel_key]})
+
+
+@app.route("/api/examples/<channel_key>/<int:index>", methods=["DELETE"])
+def delete_channel_example(channel_key, index):
+    examples = FEW_SHOT_EXAMPLES.get(channel_key)
+    if examples is None:
+        return jsonify({"error": f"No examples found for channel '{channel_key}'"}), 404
+    if index < 0 or index >= len(examples):
+        return jsonify({"error": f"Index {index} out of range (0-{len(examples)-1})"}), 400
+
+    removed = examples.pop(index)
+    print(f"[examples] Removed example {index} from channel '{channel_key}' (now {len(examples)} total)", flush=True)
+    return jsonify({"channel": channel_key, "removed": removed, "examples": examples})
 
 
 @app.route("/api/generate", methods=["POST"])

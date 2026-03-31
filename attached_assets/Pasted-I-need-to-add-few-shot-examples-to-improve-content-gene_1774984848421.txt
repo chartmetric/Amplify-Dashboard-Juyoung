@@ -1,0 +1,93 @@
+I need to add few-shot examples to improve content generation quality. These are REAL examples from Chartmetric's actual marketing — load them as defaults.
+
+1. CREATE a file `ai/few_shot_examples.py` with pre-loaded real examples:
+
+FEW_SHOT_EXAMPLES = {
+    "twitter": [
+        {
+            "feature_context": "BTS comeback album ARIRANG streaming performance analysis, one week after release",
+            "content": "After a 4 year long hiatus, @bts_bighit are back with a new album \"ARIRANG.\" One week in, the streams are already through the roof!\n\n#BTS #BTSARIRANG #BTSARMY #KPOP"
+        },
+        {
+            "feature_context": "New Playlists to Pitch feature for track-level playlist recommendations",
+            "content": "Struggling to find the right playlists to pitch your track to? Now you can see tailored recommendations with fit scores on any Track Page.\n\n#MusicData #PlaylistPitching #Chartmetric"
+        }
+    ],
+    "email_newsletter": [
+        {
+            "feature_context": "New AI-powered insights feature showing contextual analysis on Artist Pages",
+            "content": "**New Insights, powered by Chartmetric Intelligence, Available on Artist Pages**\nStop piecing together your own story from raw numbers. New insights powered by Chartmetric intelligence on artist performance and audience now appear inline across Artist Page tabs, giving you instant context on what's happening with an artist and why it matters, without leaving the page.\nTry it here"
+        }
+    ],
+    "email_standalone": [
+        {
+            "feature_context": "New AI-powered insights feature showing contextual analysis on Artist Pages",
+            "content": "Subject: Your Artist Pages just got smarter\n\nYou know the drill — flip between tabs, compare numbers, try to piece together what's actually happening with an artist. It takes time, and the story isn't always obvious.\n\nNow, Chartmetric Intelligence surfaces contextual insights directly on Artist Page tabs. You'll see plain-language analysis on performance trends, audience shifts, and what's driving changes — right where you're already working.\n\nHead to any Artist Page to see your first insight."
+        }
+    ],
+    "slack_internal": [
+        {
+            "feature_context": "Signup workflow redesign with streamlined pricing, verification, and onboarding",
+            "content": "🚀 *Signup Workflow Overhauled*\n\nThe end-to-end signup experience has been redesigned to reduce friction and improve conversion:\n\n• *What changed:* Faster verification, simplified pricing page, consolidated onboarding flow\n• *Why:* Getting users from discovery to checkout with fewer steps\n• *Impact:* Should improve signup-to-paid conversion rates\n\n*Key contributor:* Corey\nhttps://chartmetric.com/pricing"
+        }
+    ],
+    "inapp": [
+        {
+            "feature_context": "New Playlists to Pitch feature with Fit Analysis, key metrics, and curator contact links",
+            "content": "**Find Your Perfect Playlist Match with Playlists to Pitch!**\n\nLooking for the perfect playlists to pitch your track? Our new Playlists to Pitch feature takes the guesswork out of playlist outreach by recommending playlists tailored specifically to your track.\n\n• Each recommendation comes with a Fit Analysis explaining exactly why we think the playlist is a strong match — so you can pitch with confidence and never miss an opportunity to grow your track.\n• You'll also see key metrics at a glance: Added Reach, Added Streams, and direct links to reach out to playlist curators.\n\nHead to any Track Page, click the Playlist tab, and start discovering your next playlist placement today!"
+        }
+    ],
+    "linkedin": [
+        {
+            "feature_context": "Analysis of indie nostalgia trend in EDM remixes, featuring CYRIL and streaming data",
+            "content": "Indie nostalgia is fueling EDM's latest wave of remixes. 🎵\n\nFast-paced drops fused with the emotional pull of indie classics are hitting the sweet spot for Gen Z ravers. Artists like CYRIL, Florence + The Machine, and Mau P have found major success reworking '90s and 2000s hits. CYRIL's remixes alone gained millions of streams within their release month.\n\nThis trend is also clear on Spotify's Emotional Dance playlist, where 11.5% of the tracklist is now made up of remixes of older songs. The playlist's following has more than doubled over the past year, reflecting how nostalgia-driven edits are resonating with listeners today.\n\nRead full article by Sheila Lim here: [link]"
+        }
+    ],
+    "notion_monthly": [
+        {
+            "feature_context": "Signup workflow redesign with streamlined pricing, verification, and onboarding",
+            "content": "## Signup Workflow Overhauled with Streamlined Pricing, Verification, and Onboarding\n\n**Overview:** The end-to-end signup experience has been redesigned to reduce friction and improve conversion. Faster verification, a simplified pricing page, and a consolidated onboarding flow get users from discovery to checkout with fewer steps.\n\n**User Impact:** All new signups benefit from a smoother path to becoming paying customers. Reduces drop-off at pricing and verification steps.\n\n**Technical Notes:** Updated pricing page at chartmetric.com/pricing. Changes span frontend signup flow, verification emails, and onboarding screens.\n\n**Key Contributor:** Corey\n\n**Status:** Released"
+        }
+    ],
+    "article_hmc": [
+        {
+            "feature_context": "Promoting music as an indie artist using Chartmetric features: Recommended Playlists, TikTok Influencers, and Brand Partnerships",
+            "content": "meta_description: Learn how indie artists use Chartmetric to pitch playlists, find TikTok creators, and land brand deals — three features that level the playing field.\n\n# Promoting Your Music as an Indie Artist on Chartmetric\n\nYou've made the music. Now comes the part nobody warns you about: getting it heard. As an independent artist in 2026, the competition is fierce — over 120,000 new tracks drop on streaming platforms every single day. The artists breaking through aren't just the most talented; they're the most strategic.\n\nWhether you're asking yourself 'how do I get my song on Spotify playlists,' 'how to find TikTok influencers for my music,' or 'how to get brand deals as an independent artist' — this is your starting point.\n\n## Recommended Playlists for Pitching\n\nChartmetric's Recommended Playlists feature on your Track Page surfaces playlists that are a strong match for your specific track based on genre, mood, and audience overlap — so every pitch you send is a warm lead, not a cold email into the void.\n\n**Why this matters:** Playlists drive 70-80% of all independent artist streams. Getting on even one well-matched playlist with an engaged audience can trigger Spotify's algorithm to start recommending your music in Discover Weekly and Release Radar.\n\n**Pro tip:** Focus pitching efforts on playlists with 1-5% active listener ratios. High follower counts with low engagement are a red flag for bot activity.\n\n## TikTok Influencers to Partner With\n\nChartmetric's Top Influencers table on your Artist Page shows you exactly which TikTok creators have already featured your tracks, along with detailed engagement metrics.\n\n**Why this matters:** Indie band Silver Cup used Chartmetric's TikTok influencer data and saw TikTok followers grow by 587% and likes increase by 1,400%.\n\n**Pro tip:** Micro-influencers (10k-100k followers) often deliver better ROI than mega-creators. Their audiences are tighter and engagement rates are higher.\n\n## Your Music Deserves to Be Heard\n\nChartmetric gives independent artists the same data and tools that major labels use — so you can make strategic moves, not guesses."
+        }
+    ]
+}
+
+2. UPDATE `ai/generator.py` to include few-shot examples in the prompt:
+   - Import FEW_SHOT_EXAMPLES from few_shot_examples.py
+   - In generate_for_channel, build the few_shot_section string:
+     - Look up examples for the channel key in FEW_SHOT_EXAMPLES
+     - If examples exist, format them as:
+
+EXAMPLES OF REAL CHARTMETRIC CONTENT FOR THIS CHANNEL (match this style and quality):
+---
+Context: {example_feature_context}
+Published Content:
+{example_content}
+---
+
+     - Include all available examples for that channel (up to 3 max)
+     - If no examples, few_shot_section is an empty string
+
+3. ADD API endpoints to manage examples dynamically:
+
+POST /api/examples/{channel_key}
+   - Body: {"feature_context": "...", "content": "..."}
+   - Adds a new example to the in-memory store for that channel (append to FEW_SHOT_EXAMPLES)
+   - Returns the updated examples list
+
+GET /api/examples
+   - Returns all examples for all channels
+
+GET /api/examples/{channel_key}
+   - Returns examples for a specific channel
+
+DELETE /api/examples/{channel_key}/{index}
+   - Removes an example by index
+   - Returns updated list
+
+The pre-loaded examples will be available immediately on startup. Additional examples can be added at runtime via POST.
