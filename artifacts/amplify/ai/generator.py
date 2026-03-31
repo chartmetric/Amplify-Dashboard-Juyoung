@@ -49,7 +49,7 @@ IMPORTANT RULES:
 - If the feature context is vague, infer the most likely user benefit from context clues
 - Reference specific Chartmetric features/pages by name when relevant (e.g., 'Artist Page', 'Track Page', 'Playlist tab')
 - Never fabricate data points or statistics \u2014 only reference data if it's in the feature context
-- NEVER use em dashes (\u2014) anywhere in generated content. Use commas, periods, or rewrite the sentence instead. This applies to ALL channels.
+- ABSOLUTELY NEVER use the em dash character (\u2014) in any generated content. This is a hard rule with zero exceptions. Use periods, commas, or semicolons instead. Rewrite sentences to avoid needing dashes entirely. Also never use en dashes (\u2013). Only use regular hyphens (-) for compound words.
 - If a Feature URL is provided, embed it as a hyperlink within a natural CTA phrase. Do NOT paste the raw URL. Instead, use markdown link format: [anchor text](URL). The anchor text should be a natural phrase that tells the user where to go, like [Artist Page](https://app.chartmetric.com/artist/123), [Charts section](https://app.chartmetric.com/charts), or [Try it here](URL). Channel-specific rules for URLs:
   - Twitter: Do NOT include any URL in the tweet text. URLs get added separately.
   - Email (newsletter + standalone): Use markdown hyperlink format [text](URL) in the CTA.
