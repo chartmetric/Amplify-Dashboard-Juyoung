@@ -86,6 +86,32 @@ Return a JSON object with these fields:
 - skip_reason (string or null: if importance_score <= 1, explain why this should be skipped for marketing)"""
 
 
+CATEGORY_CAPS = {
+    "bug_fix": 2,
+    "infrastructure": 2,
+    "deprecation": 3,
+}
+
+NO_CHANNEL_CATEGORIES = {"bug_fix", "infrastructure"}
+
+
+def _enforce_classification_rules(classification: dict):
+    category = classification.get("category", "")
+    score = classification.get("importance_score", 0)
+
+    if category in CATEGORY_CAPS:
+        cap = CATEGORY_CAPS[category]
+        if score > cap:
+            classification["importance_score"] = cap
+
+    if category in NO_CHANNEL_CATEGORIES:
+        classification["recommended_channels"] = []
+
+    score = classification.get("importance_score", 0)
+    if score <= 1:
+        classification["recommended_channels"] = []
+
+
 def classify_feature(feature_data: dict) -> dict:
     feature_id = feature_data.get("id", "")
     title = feature_data.get("title", "")
@@ -121,6 +147,7 @@ def classify_feature(feature_data: dict) -> dict:
         classification = json.loads(result["content"])
         classification["feature_id"] = feature_id
         classification["title"] = title
+        _enforce_classification_rules(classification)
         return classification
     except json.JSONDecodeError:
         logger.error(f"Failed to parse classification JSON for {feature_id}: {result['content'][:200]}")

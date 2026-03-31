@@ -115,6 +115,8 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
     content = result.get("content", "")
     return {
         "channel": channel_key,
+        "channel_display_name": config["display_name"],
+        "max_chars": config["max_chars"],
         "content": content,
         "char_count": len(content),
         "success": result["success"],

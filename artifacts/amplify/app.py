@@ -10,7 +10,9 @@ import config
 from sources.asana_source import AsanaSource
 from sources.slack_source import SlackSource
 from sources.manual_source import ManualSource
-from ai.classifier import classify_features_batch, set_manual_override, get_manual_overrides, remove_manual_override, apply_manual_overrides
+from ai.classifier import classify_features_batch, classify_feature, set_manual_override, get_manual_overrides, remove_manual_override, apply_manual_overrides
+from ai.generator import generate_for_channel, generate_all_channels
+from datetime import datetime, timezone
 
 app = Flask(__name__, template_folder="templates")
 app.secret_key = config.SESSION_SECRET
@@ -267,6 +269,137 @@ def delete_manual_override(feature_id):
 @app.route("/api/features/overrides")
 def list_manual_overrides():
     return jsonify({"overrides": get_manual_overrides()})
+
+
+@app.route("/api/generate", methods=["POST"])
+def generate_content_endpoint():
+    data = request.get_json() or {}
+    feature = data.get("feature")
+    if not feature or not isinstance(feature, dict):
+        return jsonify({"error": "feature is required and must be a feature object"}), 400
+
+    channels = data.get("channels")
+    custom_instructions = data.get("custom_instructions", "")
+
+    if channels is not None and (not isinstance(channels, list) or not all(isinstance(c, str) for c in channels)):
+        return jsonify({"error": "channels must be a list of strings"}), 400
+
+    if not channels:
+        classification = feature.get("classification", {})
+        channels = classification.get("recommended_channels")
+
+    try:
+        print(f"[generate] Generating content for '{feature.get('title', 'unknown')}' on channels: {channels}", flush=True)
+        results = generate_all_channels(feature, channels=channels, custom_instructions=custom_instructions or None)
+        return jsonify({
+            "feature_id": feature.get("id", ""),
+            "feature_title": feature.get("title", ""),
+            "generated_content": results,
+            "classification": feature.get("classification"),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        logger.error(f"Generate endpoint error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/generate/single", methods=["POST"])
+def generate_single_endpoint():
+    data = request.get_json() or {}
+    feature = data.get("feature")
+    channel = data.get("channel")
+
+    if not feature or not isinstance(feature, dict):
+        return jsonify({"error": "feature is required and must be a feature object"}), 400
+    if not channel or not isinstance(channel, str):
+        return jsonify({"error": "channel is required (e.g. 'twitter')"}), 400
+
+    from ai.channel_configs import CHANNEL_CONFIGS
+    if channel not in CHANNEL_CONFIGS:
+        return jsonify({"error": f"Unknown channel: '{channel}'. Valid channels: {list(CHANNEL_CONFIGS.keys())}"}), 400
+    if not CHANNEL_CONFIGS[channel].get("enabled", False):
+        return jsonify({"error": f"Channel '{channel}' is disabled"}), 400
+
+    custom_instructions = data.get("custom_instructions", "")
+    feedback = data.get("feedback", "")
+
+    try:
+        print(f"[generate/single] Regenerating '{feature.get('title', 'unknown')}' for channel '{channel}' (feedback: {bool(feedback)})", flush=True)
+        result = generate_for_channel(
+            feature, channel,
+            custom_instructions=custom_instructions or None,
+            feedback=feedback or None,
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Generate single endpoint error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/generate/batch", methods=["POST"])
+def generate_batch_endpoint():
+    data = request.get_json() or {}
+    features = data.get("features")
+    channels = data.get("channels")
+    min_importance = data.get("min_importance", 3)
+
+    if not features or not isinstance(features, list):
+        return jsonify({"error": "features is required and must be a list of feature objects"}), 400
+    if not all(isinstance(f, dict) for f in features):
+        return jsonify({"error": "Each feature must be a JSON object"}), 400
+    if channels is not None and (not isinstance(channels, list) or not all(isinstance(c, str) for c in channels)):
+        return jsonify({"error": "channels must be a list of strings"}), 400
+    if not isinstance(min_importance, (int, float)):
+        return jsonify({"error": "min_importance must be a number"}), 400
+    min_importance = int(min_importance)
+
+    try:
+        print(f"[generate/batch] Processing {len(features)} features, min_importance={min_importance}", flush=True)
+
+        needs_classification = [f for f in features if "classification" not in f]
+        already_classified = [f for f in features if "classification" in f]
+
+        if needs_classification:
+            print(f"[generate/batch] Classifying {len(needs_classification)} unclassified features", flush=True)
+            newly_classified = classify_features_batch(needs_classification)
+            already_classified.extend(newly_classified)
+
+        all_features = apply_manual_overrides(already_classified)
+        total_features = len(all_features)
+
+        filtered = [
+            f for f in all_features
+            if f.get("classification", {}).get("importance_score", 0) >= min_importance
+        ]
+        skipped = total_features - len(filtered)
+
+        print(f"[generate/batch] {len(filtered)} features passed importance filter (skipped {skipped})", flush=True)
+
+        results = []
+        for f in filtered:
+            feature_channels = channels
+            if not feature_channels:
+                feature_channels = f.get("classification", {}).get("recommended_channels")
+
+            content = generate_all_channels(f, channels=feature_channels)
+            results.append({
+                "feature_id": f.get("id", ""),
+                "feature_title": f.get("title", ""),
+                "generated_content": content,
+                "classification": f.get("classification"),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+        return jsonify({
+            "results": results,
+            "total_features": total_features,
+            "filtered_features": len(filtered),
+            "skipped_features": skipped,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        logger.error(f"Generate batch endpoint error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/debug/slack-links")

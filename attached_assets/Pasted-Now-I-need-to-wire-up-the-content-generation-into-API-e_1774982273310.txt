@@ -1,0 +1,62 @@
+Now I need to wire up the content generation into API endpoints so the frontend can request content generation.
+
+ADD these endpoints to the Flask app:
+
+1. POST /api/generate
+   - Request body:
+   {
+       "feature": { ... },
+       "channels": ["twitter", "email_newsletter"],
+       "custom_instructions": ""
+   }
+   - "feature" is required — a single feature object from the enriched or classified endpoint
+   - "channels" is optional — if omitted AND feature has classification.recommended_channels, use those. Otherwise generate for all enabled channels.
+   - "custom_instructions" is optional — extra marketer guidance
+   - Response:
+   {
+       "feature_id": "...",
+       "feature_title": "...",
+       "generated_content": {
+           "twitter": {
+               "content": "...",
+               "char_count": 142,
+               "channel_display_name": "X / Twitter",
+               "max_chars": 280,
+               "success": true,
+               "error": null
+           },
+           "email_newsletter": { ... }
+       },
+       "classification": { ... },
+       "generated_at": "2026-03-30T12:00:00Z"
+   }
+
+2. POST /api/generate/single
+   - Request body:
+   {
+       "feature": { ... },
+       "channel": "twitter",
+       "custom_instructions": "",
+       "feedback": ""
+   }
+   - This is for the "Regenerate" button — regenerate one channel, optionally with feedback on the previous draft (e.g., "make it shorter", "more emphasis on the data accuracy angle")
+   - Response: single channel result object (same structure as one entry in generated_content above)
+
+3. POST /api/generate/batch
+   - Request body:
+   {
+       "features": [ ... ],
+       "channels": ["twitter", "email_newsletter"],
+       "min_importance": 3
+   }
+   - Classifies features first (if not already classified), filters by min_importance, then generates content for each feature
+   - Response:
+   {
+       "results": [ ... ],
+       "total_features": 10,
+       "filtered_features": 5,
+       "skipped_features": 5,
+       "generated_at": "..."
+   }
+
+Make sure all endpoints have proper error handling (try/except), return appropriate HTTP status codes (400 for bad requests, 500 for API errors), and log what they're doing with print statements. Use Flask's jsonify for all responses.
