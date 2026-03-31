@@ -231,65 +231,99 @@ function renderContent(content) {
     section.style.display = 'block';
     return;
   }
-  grid.innerHTML = keys.map(ch => {
+  grid.innerHTML = '';
+  keys.forEach(function(ch) {
     const item = content[ch];
     const type = CHANNEL_TYPES[ch] || 'article';
     const displayName = item.channel_display_name || ch;
     const charCount = item.char_count || (item.content || '').length;
     const maxChars = item.max_chars || '?';
-    const trimmed = item.was_trimmed;
-    return `<div class="content-card" data-type="${type}" data-channel="${esc(ch)}" id="card-${esc(ch)}">
-      <div class="card-header">
-        <h4>${esc(displayName)}</h4>
-        <span class="badge badge-chars">${charCount} / ${maxChars} chars</span>
-      </div>
-      <div class="card-body" id="body-${esc(ch)}">${esc(item.content || item.error || 'No content')}</div>
-      ${trimmed ? '<div class="trimmed-note" style="padding:0 1rem">Content was trimmed to fit character limit</div>' : ''}
-      <div class="card-footer">
-        <input type="text" id="feedback-${esc(ch)}" placeholder="Feedback for regeneration...">
-        <div class="card-regen-spinner" id="spinner-${esc(ch)}"></div>
-        <button class="btn btn-sm" onclick="regenerate('${esc(ch)}')">Regenerate</button>
-      </div>
-    </div>`;
-  }).join('');
-  section.style.display = 'block';
-}
 
-async function regenerate(channel) {
-  if (!selectedFeature) return;
-  const feedback = document.getElementById('feedback-' + channel).value.trim();
-  const spinner = document.getElementById('spinner-' + channel);
-  const body = document.getElementById('body-' + channel);
-  const card = document.getElementById('card-' + channel);
-  spinner.style.display = 'inline-block';
+    const card = document.createElement('div');
+    card.className = 'content-card';
+    card.setAttribute('data-type', type);
+    card.setAttribute('data-channel', ch);
 
-  try {
-    const res = await fetch('/api/generate/single', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({feature: selectedFeature, channel, feedback})
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    header.innerHTML = '<h4>' + esc(displayName) + '</h4><span class="badge badge-chars">' + charCount + ' / ' + maxChars + ' chars</span>';
+    card.appendChild(header);
 
-    body.textContent = data.content || 'No content';
-    const charCount = data.char_count || (data.content || '').length;
-    const maxChars = data.max_chars || '?';
-    const badge = card.querySelector('.badge-chars');
-    if (badge) badge.textContent = charCount + ' / ' + maxChars + ' chars';
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    body.textContent = item.content || item.error || 'No content';
+    card.appendChild(body);
 
-    const existingTrimNote = card.querySelector('.trimmed-note');
-    if (existingTrimNote) existingTrimNote.remove();
-    if (data.was_trimmed) {
+    if (item.was_trimmed) {
       const note = document.createElement('div');
       note.className = 'trimmed-note';
       note.style.padding = '0 1rem';
       note.textContent = 'Content was trimmed to fit character limit';
-      body.parentNode.insertBefore(note, card.querySelector('.card-footer'));
+      card.appendChild(note);
     }
 
-    document.getElementById('feedback-' + channel).value = '';
+    const footer = document.createElement('div');
+    footer.className = 'card-footer';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Feedback for regeneration...';
+    footer.appendChild(input);
+
+    const spinner = document.createElement('div');
+    spinner.className = 'card-regen-spinner';
+    footer.appendChild(spinner);
+
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm';
+    btn.textContent = 'Regenerate';
+    btn.addEventListener('click', function() {
+      regenerate(ch, card, body, input, spinner);
+    });
+    footer.appendChild(btn);
+
+    card.appendChild(footer);
+    grid.appendChild(card);
+  });
+  section.style.display = 'block';
+}
+
+async function regenerate(channel, card, body, input, spinner) {
+  if (!selectedFeature) {
+    console.error('No feature selected');
+    return;
+  }
+  var feedback = input.value.trim();
+  spinner.style.display = 'inline-block';
+
+  try {
+    var res = await fetch('/api/generate/single', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({feature: selectedFeature, channel: channel, feedback: feedback})
+    });
+    var data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    body.textContent = data.content || 'No content';
+    var charCount = data.char_count || (data.content || '').length;
+    var maxChars = data.max_chars || '?';
+    var badge = card.querySelector('.badge-chars');
+    if (badge) badge.textContent = charCount + ' / ' + maxChars + ' chars';
+
+    var existingTrimNote = card.querySelector('.trimmed-note');
+    if (existingTrimNote) existingTrimNote.remove();
+    if (data.was_trimmed) {
+      var note = document.createElement('div');
+      note.className = 'trimmed-note';
+      note.style.padding = '0 1rem';
+      note.textContent = 'Content was trimmed to fit character limit';
+      card.insertBefore(note, card.querySelector('.card-footer'));
+    }
+
+    input.value = '';
   } catch (e) {
+    console.error('Regeneration failed:', e);
     body.textContent = 'Regeneration failed: ' + e.message;
   } finally {
     spinner.style.display = 'none';
