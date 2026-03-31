@@ -15,7 +15,7 @@ paths = [ "/", "/api" ]
 localPort = 5000
 
 [services.development]
-run = "python app.py"
+run = "bash run.sh"
 
 [services.production]
 
