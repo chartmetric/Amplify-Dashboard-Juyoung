@@ -184,11 +184,21 @@ def classify_features_endpoint():
 
 @app.route("/api/features/classified")
 def classified_features():
+    limit = request.args.get("limit", default=20, type=int)
+    released_only = request.args.get("released_only", default="false").lower() == "true"
+
     try:
         enriched = _get_enriched_features()
     except Exception as e:
         logger.error(f"Classified endpoint - enrichment error: {e}")
         return jsonify({"error": f"Feature enrichment failed: {e}"}), 500
+
+    total_enriched = len(enriched)
+
+    if released_only:
+        enriched = [f for f in enriched if f.get("release_status")]
+
+    enriched = enriched[:limit]
 
     try:
         classified = classify_features_batch(enriched)
@@ -206,8 +216,11 @@ def classified_features():
 
     return jsonify({
         "classified_features": classified,
-        "total": total,
+        "total_enriched": total_enriched,
+        "classified_count": total,
         "filtered": len(classified),
+        "limit_applied": limit,
+        "released_only": released_only,
         "min_importance_applied": min_importance,
     })
 
