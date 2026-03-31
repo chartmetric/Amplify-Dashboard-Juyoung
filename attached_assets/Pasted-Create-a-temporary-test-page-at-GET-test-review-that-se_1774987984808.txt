@@ -1,0 +1,35 @@
+Create a temporary test page at GET /test/review that serves an HTML page for reviewing generated content across all channels.
+
+The page should:
+
+1. STYLING:
+   - Page background: #f5f5f5
+   - Card backgrounds: white (#ffffff) with a subtle #e0e0e0 border
+   - Text: dark gray (#333333)
+   - Buttons and accents: teal (#00C9A7)
+   - Clean sans-serif font (system-ui or Inter)
+   - Good spacing between cards
+   - Content text 16px minimum
+   - Scrollable cards if content is long
+   - Use white-space: pre-wrap for generated content so line breaks display properly
+
+2. TOP SECTION - FEATURE SELECTOR:
+   - When the page loads, automatically call GET /api/features/classified?min_importance=3 to fetch real features from Asana/Slack
+   - Display fetched features as clickable cards at the top. Each card shows: title, category badge, importance score, importance_score_reason, and marketing_summary
+   - Also include a "Manual Input" form (title + description text fields + submit button) as a fallback option below the feature cards
+
+3. GENERATION + REVIEW:
+   - When you click a feature card (or submit manual input), call POST /api/generate with that feature for ALL enabled channels. Show a loading spinner while waiting.
+   - Display the classification result: category badge, importance score, importance_score_reason, recommended channels, target audience
+   - Show generated content as a grid of cards (2-3 columns), one card per channel
+   - Each card has:
+     - Header: channel display name + char count badge
+     - Body: the generated content with line breaks preserved
+     - Footer: a small text input for feedback + a "Regenerate" button
+   - Give each card a subtle left-border color based on channel type (teal for social channels, green for email channels, orange for internal channels, gray for articles)
+
+4. REGENERATE:
+   - Each card's "Regenerate" button calls POST /api/generate/single with the feature data, channel key, and the feedback text from the input field
+   - On success, update just that card's content and char count without refreshing the page
+
+Keep all JS inline in the HTML. Use fetch() for API calls.

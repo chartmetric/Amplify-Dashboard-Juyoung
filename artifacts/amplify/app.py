@@ -1051,6 +1051,17 @@ def test_claude():
     return jsonify(result)
 
 
+@app.route("/test/review")
+def test_review():
+    """Content review page for testing generated marketing content.
+
+    Category: Testing
+
+    Response: HTML page with feature selector and content generation/review UI.
+    """
+    return render_template("review.html")
+
+
 @app.route("/api/docs")
 def api_docs():
     """Auto-generated API documentation page.
