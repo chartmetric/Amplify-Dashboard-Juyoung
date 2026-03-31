@@ -298,19 +298,29 @@ if __name__ == "__main__":
     import threading
     import time
 
-    signal.signal(signal.SIGTERM, lambda *args: os._exit(0))
+    _shutdown = False
+
+    def handle_sigterm(*args):
+        global _shutdown
+        _shutdown = True
+        logger.info("Received SIGTERM, shutting down gracefully")
+        sys.stdout.flush()
+        os._exit(0)
+
+    signal.signal(signal.SIGTERM, handle_sigterm)
 
     def keep_alive():
-        while True:
+        while not _shutdown:
             logger.info("Amplify heartbeat — server alive")
             sys.stdout.flush()
-            time.sleep(60)
+            time.sleep(30)
 
     heartbeat = threading.Thread(target=keep_alive, daemon=True)
     heartbeat.start()
 
     port = config.PORT
     logger.info(f"Amplify starting on port {port}")
+    print(f"Amplify starting on port {port}", flush=True)
     sys.stdout.flush()
     from waitress import serve
     serve(
@@ -320,4 +330,5 @@ if __name__ == "__main__":
         _quiet=False,
         channel_timeout=300,
         recv_bytes=65536,
+        threads=8,
     )
