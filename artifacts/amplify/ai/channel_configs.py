@@ -29,16 +29,6 @@ CHANNEL_CONFIGS = {
         "example_output_format": "Subject: [subject]\n\n[Pain point hook paragraph]\n\n[Feature + benefit paragraph]\n\n[CTA paragraph]",
         "enabled": True,
     },
-    "slack_internal": {
-        "display_name": "Slack (Internal Update)",
-        "description": "Internal team announcement in Slack",
-        "max_chars": 2000,
-        "tone": "Casual, informative, celebratory. Like a teammate sharing exciting news. Credit contributors.",
-        "format_rules": "Start with an emoji header (e.g., \U0001f680 or \u2728). Bold the feature name. Use bullet points for what changed/why/impact. Include 'Key contributor:' line crediting the person(s). Add relevant link if applicable. Keep it scannable. Use Slack markdown (*bold*, _italic_).",
-        "audience": "Chartmetric internal team \u2014 engineers, product, marketing, sales, CS",
-        "example_output_format": "\U0001f680 *[Feature Name]*\n\n\u2022 What: ...\n\u2022 Why: ...\n\u2022 Impact: ...\n\n*Key contributor:* [name]\n[link]",
-        "enabled": True,
-    },
     "inapp": {
         "display_name": "In-App Announcement",
         "description": "Product announcement displayed inside the Chartmetric app",

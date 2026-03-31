@@ -31,10 +31,10 @@ RULES FOR is_user_facing:
 - If a backend change fixes data calculation users rely on -> true
 
 RULES FOR recommended_channels:
-- importance_score 5: all external channels (twitter, email_newsletter, linkedin, inapp, article_hmc) + slack_internal + notion_monthly
-- importance_score 4: 2-3 most relevant external channels + slack_internal + notion_monthly
-- importance_score 3: 1-2 channels (email_newsletter likely) + slack_internal + notion_monthly
-- importance_score 2: slack_internal + notion_monthly only
+- importance_score 5: all external channels (twitter, email_newsletter, linkedin, inapp, article_hmc) + notion_monthly
+- importance_score 4: 2-3 most relevant external channels + notion_monthly
+- importance_score 3: 1-2 channels (email_newsletter likely) + notion_monthly
+- importance_score 2: notion_monthly only
 - importance_score 1: notion_monthly only
 - Always include notion_monthly (it's the internal record of everything)
 - For user-facing features: always include inapp if score >= 4
