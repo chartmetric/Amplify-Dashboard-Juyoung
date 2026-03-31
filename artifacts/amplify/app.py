@@ -40,8 +40,13 @@ def dashboard():
 
 @app.route("/api/health")
 def health():
+    from ai.channel_configs import CHANNEL_CONFIGS
+    examples_loaded = {k: len(v) for k, v in FEW_SHOT_EXAMPLES.items()}
     return jsonify({
         "status": "ok",
+        "api_key_configured": bool(config.ANTHROPIC_API_KEY),
+        "channels_loaded": len(CHANNEL_CONFIGS),
+        "examples_loaded": examples_loaded,
         "keys": {
             "anthropic": bool(config.ANTHROPIC_API_KEY),
             "asana": bool(config.ASANA_ACCESS_TOKEN),
@@ -555,11 +560,57 @@ def test_classify():
     return jsonify({"sample_feature": sample, "classification": classification})
 
 
+@app.route("/api/channels")
 @app.route("/api/test/channels")
 def test_channels():
     from ai.channel_configs import CHANNEL_CONFIGS
-    channels = [{"key": k, "display_name": v["display_name"]} for k, v in CHANNEL_CONFIGS.items()]
+    channels = [
+        {
+            "key": k,
+            "display_name": v["display_name"],
+            "description": v.get("description", ""),
+            "max_chars": v.get("max_chars"),
+            "enabled": v.get("enabled", False),
+        }
+        for k, v in CHANNEL_CONFIGS.items()
+    ]
     return jsonify({"channels": channels, "total": len(channels)})
+
+
+@app.route("/api/test/generate")
+def test_generate_full():
+    sample = {
+        "id": "test-001",
+        "title": "New Artist Audience Overlap Tool",
+        "description": "We've built a new tool that lets artists and managers compare their audience demographics with other artists. This helps identify collaboration opportunities, understand fan crossover, and plan tour routing based on shared audience geography. Available in the Artist Profile section under the new 'Audience Insights' tab. The tool shows percentage overlap across Spotify listeners, Instagram followers, and YouTube subscribers, with geographic heatmaps for the top 20 shared cities.",
+        "release_status": True,
+        "release_date": "2026-03-28",
+        "reactions_breakdown": [
+            {"name": "rocket", "count": 5},
+            {"name": "fire", "count": 3},
+            {"name": "heart", "count": 2},
+        ],
+        "total_reactions": 10,
+        "urgency_score": None,
+    }
+    try:
+        print("[test/generate] Classifying sample feature...", flush=True)
+        classification = classify_feature(sample)
+        sample["classification"] = classification
+
+        print(f"[test/generate] Classification: score={classification.get('importance_score')}, channels={classification.get('recommended_channels')}", flush=True)
+        print("[test/generate] Generating content for all enabled channels...", flush=True)
+        content = generate_all_channels(sample)
+
+        return jsonify({
+            "feature": sample,
+            "classification": classification,
+            "generated_content": content,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        logger.error(f"Test generate error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/test/generate-twitter")
@@ -702,6 +753,12 @@ if __name__ == "__main__":
     port = config.PORT
     logger.info(f"Amplify starting on port {port}")
     print(f"Amplify starting on port {port}", flush=True)
+
+    print("\n=== Registered Routes ===", flush=True)
+    for rule in sorted(app.url_map.iter_rules(), key=lambda r: r.rule):
+        methods = ",".join(sorted(rule.methods - {"HEAD", "OPTIONS"}))
+        print(f"  {methods:8s} {rule.rule}", flush=True)
+    print("=========================\n", flush=True)
     sys.stdout.flush()
     from waitress import serve
     serve(

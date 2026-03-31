@@ -1,0 +1,44 @@
+Create a route GET /api/docs that returns an HTML page (not JSON) listing all available API endpoints with their method, URL, description, request body format, and response format. Make it clean and readable with basic CSS styling. Group endpoints by category:
+
+Categories and endpoints:
+
+1. SOURCES (Feature Ingestion)
+   - GET /api/features/enriched — Fetch all features from Asana + Slack with enriched data
+   - GET /api/features/classified — Fetch and auto-classify all features, sorted by importance. Query params: ?min_importance=N
+   - POST /api/features/classify — Classify a custom list of features. Body: {"features": [...]}
+
+2. CONTENT GENERATION
+   - POST /api/generate — Generate content for one feature across multiple channels. Body: {"feature": {...}, "channels": ["twitter", "email_newsletter"], "custom_instructions": ""}
+   - POST /api/generate/single — Regenerate one channel with optional feedback. Body: {"feature": {...}, "channel": "twitter", "custom_instructions": "", "feedback": ""}
+   - POST /api/generate/batch — Bulk generate for multiple features. Body: {"features": [...], "channels": [...], "min_importance": 3}
+
+3. CHANNELS
+   - GET /api/channels — List all channel configs (key, display name, description, max chars, enabled status)
+
+4. FEW-SHOT EXAMPLES
+   - GET /api/examples — View all few-shot examples for all channels
+   - GET /api/examples/{channel} — View examples for one channel
+   - POST /api/examples/{channel} — Add a new example. Body: {"feature_context": "...", "content": "..."}
+   - DELETE /api/examples/{channel}/{index} — Remove an example by index
+
+5. FEEDBACK LOOP
+   - POST /api/approve — Approve a draft and save feedback for future learning. Body: {"feature": {...}, "channel": "twitter", "original_draft": "...", "approved_draft": "...", "feedback_note": ""}
+   - POST /api/feedback — Save a feedback record directly. Body: {"channel": "...", "feature_title": "...", "original_draft": "...", "approved_draft": "...", "feedback_note": "..."}
+   - GET /api/feedback — View all feedback history
+   - GET /api/feedback/{channel} — View feedback for one channel
+
+6. SYSTEM
+   - GET /api/health — Health check (API key status, channels loaded, examples count)
+   - GET /api/docs — This page
+
+7. TESTING (can be removed before demo)
+   - GET /api/test/channels — List channel configs
+   - GET /api/test/claude — Test Claude API connection
+   - GET /api/test/classify — Classify a sample feature
+   - GET /api/test/generate-twitter — Generate a sample tweet
+   - GET /api/test/generate-samples — Generate sample content for all channels
+   - GET /api/test/generate — Full pipeline test (classify + generate all channels)
+   - GET /api/test/feedback-loop — Demo the feedback loop
+   - GET /api/test/raw-fields — Show all raw fields from Asana
+
+Style the page with a simple clean design. Use a monospace font for URLs and JSON examples. Add a header that says "Amplify API Documentation" with a subtitle "Product Marketing Autopilot". Make each endpoint clickable (as an anchor link) and include the request/response JSON format as code blocks under each endpoint.

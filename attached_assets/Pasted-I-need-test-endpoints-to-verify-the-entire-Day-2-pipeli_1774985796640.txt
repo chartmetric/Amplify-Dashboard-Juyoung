@@ -1,0 +1,37 @@
+I need test endpoints to verify the entire Day 2 pipeline works end-to-end.
+
+1. CREATE a test endpoint:
+
+GET /api/test/generate
+   - Uses this hardcoded sample feature data (realistic Chartmetric feature):
+   {
+       "id": "test-001",
+       "title": "New Artist Audience Overlap Tool",
+       "description": "We've built a new tool that lets artists and managers compare their audience demographics with other artists. This helps identify collaboration opportunities, understand fan crossover, and plan tour routing based on shared audience geography. Available in the Artist Profile section under the new 'Audience Insights' tab. The tool shows percentage overlap across Spotify listeners, Instagram followers, and YouTube subscribers, with geographic heatmaps for the top overlapping regions.",
+       "release_status": true,
+       "release_date": "2026-03-28",
+       "reactions_breakdown": {"rocket": 5, "fire": 3, "heart": 2},
+       "total_reactions": 10,
+       "urgency_score": null
+   }
+   - First classifies the feature, then generates content for ALL enabled channels
+   - Returns the full result with both classification and all generated content
+   - This is for quick testing without needing Asana/Slack
+
+2. GET /api/test/classify
+   - Just classifies the same sample feature, returns classification only
+
+3. GET /api/channels
+   - Returns the list of all channel configs (without few-shot examples data to keep response small):
+   {"channels": [{"key": "twitter", "display_name": "X / Twitter", "description": "...", "max_chars": 280, "enabled": true}, ...]}
+
+4. GET /api/health
+   - Simple health check that verifies:
+     - Claude API key is configured (not empty)
+     - Channel configs are loaded (returns count)
+     - Few-shot examples are loaded (returns count per channel)
+   - Response: {"status": "ok", "channels_loaded": 8, "api_key_configured": true, "examples_loaded": {"twitter": 1, "email_newsletter": 1, ...}}
+
+5. Make sure the app.py imports everything correctly from the ai/ module and all routes are registered. Print a startup message listing all registered routes.
+
+After building this, I'll test by hitting /api/test/generate in the browser to see if Claude generates content for all 8 channels.
