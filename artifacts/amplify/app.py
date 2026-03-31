@@ -512,6 +512,16 @@ def test_generate_samples():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/test/raw-fields")
+def test_raw_fields():
+    try:
+        enriched = _get_enriched_features()
+        return jsonify({"features": enriched, "total": len(enriched)})
+    except Exception as e:
+        logger.error(f"Test raw-fields error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/test/claude")
 def test_claude():
     from ai.claude_client import generate_content

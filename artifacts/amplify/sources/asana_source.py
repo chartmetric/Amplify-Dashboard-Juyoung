@@ -38,27 +38,60 @@ class AsanaSource(SourceAdapter):
             self._client = asana.ApiClient(configuration)
         return self._client
 
+    CUSTOM_FIELD_MAP = {
+        "Engineer": "engineer",
+        "Team": "team",
+        "Task Type": "task_type",
+        "Planning Priority": "planning_priority",
+        "Urgency Score": "urgency_score",
+        "Slack URL": "slack_url",
+        "PR Preview Link": "pr_preview_link",
+        "Planner": "planner",
+    }
+
+    def _extract_custom_field_value(self, cf: dict):
+        if cf.get("number_value") is not None:
+            return cf["number_value"]
+        if cf.get("enum_value") and cf["enum_value"].get("name"):
+            return cf["enum_value"]["name"]
+        if cf.get("display_value"):
+            return cf["display_value"]
+        if cf.get("text_value"):
+            return cf["text_value"]
+        return None
+
     def _parse_task(self, t: dict, source_label: str) -> dict:
-        urgency_score = None
+        parsed_custom = {v: None for v in self.CUSTOM_FIELD_MAP.values()}
+
         for cf in (t.get("custom_fields") or []):
-            if cf.get("name") == "Urgency Score":
-                urgency_score = cf.get("display_value") or cf.get("number_value")
-                break
+            cf_name = cf.get("name", "")
+            if cf_name in self.CUSTOM_FIELD_MAP:
+                val = self._extract_custom_field_value(cf)
+                if val is not None:
+                    parsed_custom[self.CUSTOM_FIELD_MAP[cf_name]] = val
+
+        assignee_obj = t.get("assignee")
+        assignee_name = None
+        if isinstance(assignee_obj, dict):
+            assignee_name = assignee_obj.get("name")
 
         return {
             "id": t.get("gid", ""),
             "title": t.get("name", ""),
             "description": t.get("notes", ""),
             "date": t.get("modified_at") or t.get("created_at", ""),
-            "urgency_score": urgency_score,
             "section": source_label,
+            "assignee": assignee_name,
+            **parsed_custom,
         }
+
+    TASK_OPT_FIELDS = "name,completed,created_at,modified_at,notes,assignee,assignee.name,custom_fields,custom_fields.name,custom_fields.display_value,custom_fields.number_value,custom_fields.enum_value,custom_fields.enum_value.name,custom_fields.text_value"
 
     def _get_tasks_for_section(self, section_gid: str, section_name: str) -> list[dict]:
         client = self._get_client()
         tasks_api = asana.TasksApi(client)
         opts = {
-            "opt_fields": "name,completed,created_at,modified_at,notes,custom_fields",
+            "opt_fields": self.TASK_OPT_FIELDS,
         }
         results = []
         try:
@@ -74,7 +107,7 @@ class AsanaSource(SourceAdapter):
         tasks_api = asana.TasksApi(client)
         since = (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
         opts = {
-            "opt_fields": "name,completed,completed_at,created_at,modified_at,notes,custom_fields",
+            "opt_fields": self.TASK_OPT_FIELDS + ",completed_at",
             "completed_since": since,
         }
         results = []
