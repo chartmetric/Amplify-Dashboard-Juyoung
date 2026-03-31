@@ -217,7 +217,7 @@ async function fetchFeatures() {
   errEl.style.display = 'none';
   loading.style.display = 'block';
   try {
-    var res = await fetch('/api/features/classified?limit=20');
+    var res = await fetch('/api/features/classified?limit=40');
     var data = await res.json();
     if (data.error) throw new Error(data.error);
     allFeatures = data.classified_features || [];
