@@ -60,6 +60,7 @@ Return a JSON object with these fields:
 - title (string)
 - category (string: new_feature|improvement|bug_fix|infrastructure|mobile|deprecation)
 - importance_score (integer 1-5)
+- importance_score_reason (string: 1-2 sentence explanation of why you assigned that importance score)
 - is_user_facing (boolean)
 - target_audience (array of strings)
 - marketing_summary (string: 1-sentence plain-English summary of user impact)
@@ -90,6 +91,7 @@ def classify_feature(feature_data: dict) -> dict:
             "title": title,
             "category": "unknown",
             "importance_score": 0,
+            "importance_score_reason": "",
             "is_user_facing": False,
             "target_audience": [],
             "marketing_summary": "",
@@ -109,6 +111,7 @@ def classify_feature(feature_data: dict) -> dict:
             "title": title,
             "category": "unknown",
             "importance_score": 0,
+            "importance_score_reason": "",
             "is_user_facing": False,
             "target_audience": [],
             "marketing_summary": "",
