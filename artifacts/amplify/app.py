@@ -10,7 +10,7 @@ import config
 from sources.asana_source import AsanaSource
 from sources.slack_source import SlackSource
 from sources.manual_source import ManualSource
-from ai.classifier import classify_features_batch
+from ai.classifier import classify_features_batch, set_manual_override, get_manual_overrides, remove_manual_override, apply_manual_overrides
 
 app = Flask(__name__, template_folder="templates")
 app.secret_key = config.SESSION_SECRET
@@ -206,6 +206,8 @@ def classified_features():
         logger.error(f"Classified endpoint - classification error: {e}")
         return jsonify({"error": f"Classification failed: {e}"}), 500
 
+    classified = apply_manual_overrides(classified)
+
     total = len(classified)
     min_importance = request.args.get("min_importance", type=int)
     if min_importance is not None:
@@ -222,7 +224,49 @@ def classified_features():
         "limit_applied": limit,
         "released_only": released_only,
         "min_importance_applied": min_importance,
+        "manual_overrides_applied": len(get_manual_overrides()),
     })
+
+
+@app.route("/api/features/override", methods=["POST"])
+def add_manual_override():
+    data = request.get_json() or {}
+    feature_id = data.get("feature_id")
+    if not feature_id:
+        return jsonify({"error": "feature_id is required"}), 400
+
+    override = {}
+    if "importance_score" in data:
+        override["importance_score"] = int(data["importance_score"])
+    if "importance_score_reason" in data:
+        override["importance_score_reason"] = data["importance_score_reason"]
+    if "category" in data:
+        override["category"] = data["category"]
+    if "recommended_channels" in data:
+        override["recommended_channels"] = data["recommended_channels"]
+    if "marketing_summary" in data:
+        override["marketing_summary"] = data["marketing_summary"]
+    if "target_audience" in data:
+        override["target_audience"] = data["target_audience"]
+
+    if not override:
+        return jsonify({"error": "Provide at least one field to override (e.g. importance_score, category, recommended_channels)"}), 400
+
+    set_manual_override(feature_id, override)
+    return jsonify({"status": "override_set", "feature_id": feature_id, "override": override})
+
+
+@app.route("/api/features/override/<feature_id>", methods=["DELETE"])
+def delete_manual_override(feature_id):
+    removed = remove_manual_override(feature_id)
+    if removed is None:
+        return jsonify({"error": f"No override found for {feature_id}"}), 404
+    return jsonify({"status": "override_removed", "feature_id": feature_id})
+
+
+@app.route("/api/features/overrides")
+def list_manual_overrides():
+    return jsonify({"overrides": get_manual_overrides()})
 
 
 @app.route("/api/debug/slack-links")

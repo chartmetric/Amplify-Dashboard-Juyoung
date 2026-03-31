@@ -127,14 +127,54 @@ def classify_feature(feature_data: dict) -> dict:
         }
 
 
-def classify_features_batch(features: list[dict]) -> list[dict]:
-    classified = []
-    for feature in features:
+def classify_features_batch(features: list[dict], max_workers: int = 8) -> list[dict]:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    classified = [None] * len(features)
+
+    def classify_at_index(idx, feature):
         classification = classify_feature(feature)
-        classified.append({
-            **feature,
-            "classification": classification,
-        })
+        return idx, {**feature, "classification": classification}
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(classify_at_index, i, f): i
+            for i, f in enumerate(features)
+        }
+        for future in as_completed(futures):
+            idx, result = future.result()
+            classified[idx] = result
 
     classified.sort(key=lambda f: f["classification"].get("importance_score", 0), reverse=True)
     return classified
+
+
+_manual_overrides = {}
+
+
+def set_manual_override(feature_id: str, override: dict):
+    _manual_overrides[feature_id] = override
+
+
+def get_manual_overrides():
+    return dict(_manual_overrides)
+
+
+def remove_manual_override(feature_id: str):
+    return _manual_overrides.pop(feature_id, None)
+
+
+def apply_manual_overrides(classified_features: list[dict]) -> list[dict]:
+    for feature in classified_features:
+        fid = feature.get("id", "")
+        if fid in _manual_overrides:
+            override = _manual_overrides[fid]
+            if "classification" not in feature:
+                feature["classification"] = {}
+            feature["classification"].update(override)
+            feature["classification"]["manual_override"] = True
+    classified_features.sort(
+        key=lambda f: f.get("classification", {}).get("importance_score", 0),
+        reverse=True,
+    )
+    return classified_features
