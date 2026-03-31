@@ -12,6 +12,7 @@ from sources.asana_source import AsanaSource
 from sources.slack_source import SlackSource
 from sources.manual_source import ManualSource
 from ai.classifier import classify_features_batch, classify_feature, set_manual_override, get_manual_overrides, remove_manual_override, apply_manual_overrides
+from ai.pre_filter import pre_filter_batch
 from ai.generator import generate_for_channel, generate_all_channels
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
@@ -316,27 +317,39 @@ def classified_features():
 
     enriched = enriched[:limit]
 
-    try:
-        classified = classify_features_batch(enriched)
-    except Exception as e:
-        logger.error(f"Classified endpoint - classification error: {e}")
-        return jsonify({"error": f"Classification failed: {e}"}), 500
+    print(f"[classified] Pre-filtering {len(enriched)} features...", flush=True)
+    filter_result = pre_filter_batch(enriched)
+    to_classify = filter_result["to_classify"]
+    skipped = filter_result["skipped"]
+    print(f"[classified] {len(to_classify)} need Claude classification, {len(skipped)} pre-filtered out", flush=True)
 
-    classified = apply_manual_overrides(classified)
+    classified = []
+    if to_classify:
+        try:
+            classified = classify_features_batch(to_classify)
+        except Exception as e:
+            logger.error(f"Classified endpoint - classification error: {e}")
+            return jsonify({"error": f"Classification failed: {e}"}), 500
 
-    total = len(classified)
+    all_features = classified + skipped
+    all_features = apply_manual_overrides(all_features)
+    all_features.sort(key=lambda f: f.get("classification", {}).get("importance_score", 0), reverse=True)
+
+    total = len(all_features)
     min_importance = request.args.get("min_importance", type=int)
     if min_importance is not None:
-        classified = [
-            f for f in classified
+        all_features = [
+            f for f in all_features
             if f.get("classification", {}).get("importance_score", 0) >= min_importance
         ]
 
     return jsonify({
-        "classified_features": classified,
+        "classified_features": all_features,
         "total_enriched": total_enriched,
         "classified_count": total,
-        "filtered": len(classified),
+        "filtered": len(all_features),
+        "pre_filtered_skipped": len(skipped),
+        "sent_to_claude": len(to_classify),
         "limit_applied": limit,
         "released_only": released_only,
         "min_importance_applied": min_importance,

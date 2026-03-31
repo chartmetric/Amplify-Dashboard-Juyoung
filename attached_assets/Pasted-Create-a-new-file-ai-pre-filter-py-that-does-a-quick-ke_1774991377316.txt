@@ -1,0 +1,42 @@
+Create a new file ai/pre_filter.py that does a quick keyword-based pre-filter on features BEFORE calling Claude's classifier. This saves API credits by skipping obviously low-value items.
+
+Function: pre_filter_feature(feature_data: dict) -> dict
+
+It should return:
+{
+    "feature_id": "...",
+    "title": "...",
+    "pre_filter_score": 1-5,
+    "pre_filter_reason": "why this score was assigned",
+    "skip_classification": true/false
+}
+
+Rules for scoring (check title and description, case-insensitive):
+
+Score 1 (skip_classification = True):
+- Title or description contains: "fix", "bug", "hotfix", "typo", "lint", "refactor", "CI/CD", "pipeline", "dependency", "upgrade package", "revert"
+
+Score 2 (skip_classification = True):
+- Title or description contains: "BE only", "backend only", "internal only", "devops", "cleanup", "rename", "minor", "tweak"
+- No emoji reactions (total_reactions is null or 0) AND title or description contains none of the Score 4/5 keywords
+
+Score 3 (skip_classification = False, send to Claude):
+- Default. Any feature that doesn't match Score 1, 2, 4, or 5 keywords gets Score 3. No other criteria needed.
+
+Score 4 (skip_classification = False, send to Claude):
+- Title or description contains: "new", "launch", "release", "redesign", "overhaul"
+- OR total_reactions >= 5
+
+Score 5 (skip_classification = False, send to Claude):
+- Title or description contains: "new feature", "new tool", "major", "v2"
+- OR total_reactions >= 10
+
+When skip_classification is True, the feature still gets stored with its pre_filter_score as the importance_score, but we never call Claude to classify it. When skip_classification is False, we send it to Claude for full classification.
+
+Also create a function pre_filter_batch(features: list[dict]) -> dict that returns:
+{
+    "to_classify": [...],
+    "skipped": [...],
+}
+
+Update the GET /api/features/classified endpoint to use this pre-filter first, then only call Claude's classifier on the "to_classify" list. The skipped features should still appear in the response but with their pre_filter data as the classification.
