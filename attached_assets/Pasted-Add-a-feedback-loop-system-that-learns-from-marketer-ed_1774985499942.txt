@@ -1,0 +1,71 @@
+Add a feedback loop system that learns from marketer edits over time. Here's what to build:
+
+1. CREATE a new file `ai/feedback_store.py` that:
+   - Maintains an in-memory store (dictionary) called FEEDBACK_HISTORY, keyed by channel name
+   - Each entry is a list of feedback records with this structure:
+   {
+       "feature_title": "...",
+       "original_draft": "the AI-generated content",
+       "approved_draft": "the marketer's final edited version",
+       "channel": "twitter",
+       "feedback_note": "optional note from marketer about what they changed and why",
+       "timestamp": "2026-03-31T12:00:00Z"
+   }
+   - Has functions:
+     - save_feedback(channel, feature_title, original_draft, approved_draft, feedback_note=None) -> dict
+     - get_feedback_history(channel, limit=5) -> list  (returns most recent N records for a channel)
+     - get_all_feedback() -> dict  (returns all feedback across all channels)
+     - clear_feedback(channel=None) -> None  (clears one channel or all)
+
+2. ADD these API endpoints:
+
+POST /api/feedback
+   - Body:
+   {
+       "channel": "twitter",
+       "feature_title": "Artist Audience Overlap Tool",
+       "original_draft": "the AI generated text...",
+       "approved_draft": "the marketer's edited final version...",
+       "feedback_note": "Made it shorter, removed the question format, added specific data point"
+   }
+   - Saves the feedback record
+   - Returns: {"success": true, "total_feedback_for_channel": N}
+
+GET /api/feedback
+   - Returns all feedback history across all channels
+
+GET /api/feedback/{channel_key}
+   - Returns feedback history for a specific channel, most recent first
+
+3. UPDATE `ai/generator.py` to use feedback history in content generation:
+   - Import get_feedback_history from feedback_store.py
+   - In generate_for_channel, AFTER the few-shot examples section, add a new section to the user prompt if feedback history exists for that channel:
+
+   If there are feedback records for the channel, add this block:
+
+   LEARNING FROM PAST EDITS (the marketer revised these AI drafts - learn from their corrections):
+   ---
+   Feature: {feature_title}
+   Original AI Draft: {original_draft}
+   Marketer's Approved Version: {approved_draft}
+   What changed: {feedback_note}
+   ---
+
+   Include up to 3 most recent feedback records per channel. This teaches Claude what the marketer prefers for each channel specifically.
+
+4. ADD a convenience endpoint for the approve-and-save workflow:
+
+POST /api/approve
+   - Body:
+   {
+       "feature": { ... },
+       "channel": "twitter",
+       "original_draft": "AI generated text...",
+       "approved_draft": "final edited text...",
+       "feedback_note": "optional note"
+   }
+   - Saves the feedback record (calls save_feedback)
+   - Returns: {"success": true, "message": "Approved and feedback saved for future learning"}
+   - This is the endpoint the frontend Approve button will call on Day 3
+
+This creates a feedback loop: every time a marketer edits and approves a draft, the system gets smarter for that specific channel. The more drafts get approved, the better future generations match the marketer's preferences.

@@ -3,6 +3,7 @@ import logging
 from ai.channel_configs import CHANNEL_CONFIGS
 from ai.claude_client import generate_content
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
+from ai.feedback_store import get_feedback_history
 
 logger = logging.getLogger("amplify.generator")
 
@@ -65,6 +66,8 @@ EXPECTED OUTPUT FORMAT: {example_output_format}
 
 {few_shot_section}
 
+{feedback_learning_section}
+
 {custom_instructions_section}
 
 {feedback_section}
@@ -115,6 +118,21 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
             parts.append(f"---\nContext: {ex['feature_context']}\nPublished Content:\n{ex['content']}\n---")
         few_shot_section = "\n".join(parts)
 
+    feedback_records = get_feedback_history(channel_key, limit=3)
+    feedback_learning_section = ""
+    if feedback_records:
+        parts = ["LEARNING FROM PAST EDITS (the marketer revised these AI drafts - learn from their corrections):"]
+        for rec in feedback_records:
+            parts.append(
+                f"---\n"
+                f"Feature: {rec['feature_title']}\n"
+                f"Original AI Draft: {rec['original_draft']}\n"
+                f"Marketer's Approved Version: {rec['approved_draft']}\n"
+                f"What changed: {rec['feedback_note']}\n"
+                f"---"
+            )
+        feedback_learning_section = "\n".join(parts)
+
     user_prompt = USER_PROMPT_TEMPLATE.format(
         title=feature_data.get("title", ""),
         description=feature_data.get("description", ""),
@@ -128,6 +146,7 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
         audience=config["audience"],
         example_output_format=config["example_output_format"],
         few_shot_section=few_shot_section,
+        feedback_learning_section=feedback_learning_section,
         custom_instructions_section=custom_instructions_section,
         feedback_section=feedback_section,
     )

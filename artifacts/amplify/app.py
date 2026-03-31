@@ -13,6 +13,7 @@ from sources.manual_source import ManualSource
 from ai.classifier import classify_features_batch, classify_feature, set_manual_override, get_manual_overrides, remove_manual_override, apply_manual_overrides
 from ai.generator import generate_for_channel, generate_all_channels
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
+from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
 from datetime import datetime, timezone
 
 app = Flask(__name__, template_folder="templates")
@@ -315,6 +316,57 @@ def delete_channel_example(channel_key, index):
     removed = examples.pop(index)
     print(f"[examples] Removed example {index} from channel '{channel_key}' (now {len(examples)} total)", flush=True)
     return jsonify({"channel": channel_key, "removed": removed, "examples": examples})
+
+
+@app.route("/api/feedback", methods=["POST"])
+def save_feedback_endpoint():
+    data = request.get_json() or {}
+    channel = data.get("channel")
+    feature_title = data.get("feature_title")
+    original_draft = data.get("original_draft")
+    approved_draft = data.get("approved_draft")
+    feedback_note = data.get("feedback_note", "")
+
+    if not channel or not feature_title or not original_draft or not approved_draft:
+        return jsonify({"error": "channel, feature_title, original_draft, and approved_draft are all required"}), 400
+
+    record = save_feedback(channel, feature_title, original_draft, approved_draft, feedback_note)
+    total = len(get_feedback_history(channel, limit=999))
+    print(f"[feedback] Saved feedback for '{feature_title}' on channel '{channel}' (total for channel: {total})", flush=True)
+    return jsonify({"success": True, "total_feedback_for_channel": total, "record": record})
+
+
+@app.route("/api/feedback", methods=["GET"])
+def get_all_feedback_endpoint():
+    return jsonify(get_all_feedback())
+
+
+@app.route("/api/feedback/<channel_key>", methods=["GET"])
+def get_channel_feedback(channel_key):
+    limit = request.args.get("limit", default=10, type=int)
+    records = get_feedback_history(channel_key, limit=limit)
+    return jsonify({"channel": channel_key, "feedback": records, "total": len(records)})
+
+
+@app.route("/api/approve", methods=["POST"])
+def approve_and_save():
+    data = request.get_json() or {}
+    channel = data.get("channel")
+    original_draft = data.get("original_draft")
+    approved_draft = data.get("approved_draft")
+    feedback_note = data.get("feedback_note", "")
+
+    feature = data.get("feature", {})
+    feature_title = feature.get("title", "") if isinstance(feature, dict) else ""
+    if not feature_title:
+        feature_title = data.get("feature_title", "")
+
+    if not channel or not original_draft or not approved_draft:
+        return jsonify({"error": "channel, original_draft, and approved_draft are required"}), 400
+
+    save_feedback(channel, feature_title, original_draft, approved_draft, feedback_note)
+    print(f"[approve] Approved draft for '{feature_title}' on channel '{channel}'", flush=True)
+    return jsonify({"success": True, "message": "Approved and feedback saved for future learning"})
 
 
 @app.route("/api/generate", methods=["POST"])
