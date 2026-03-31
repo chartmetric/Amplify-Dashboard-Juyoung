@@ -5,6 +5,21 @@ from ai.claude_client import generate_content
 
 logger = logging.getLogger("amplify.generator")
 
+
+def _truncate_to_last_sentence(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars]
+    for sep in [". ", "! ", "? ", ".\n", "!\n", "?\n"]:
+        last_pos = truncated.rfind(sep)
+        if last_pos > 0:
+            return truncated[:last_pos + 1]
+    last_space = truncated.rfind(" ")
+    if last_space > 0:
+        return truncated[:last_space] + "..."
+    return truncated[:max_chars - 3] + "..."
+
+
 SYSTEM_PROMPT = """You are Amplify, a product marketing AI for Chartmetric \u2014 the leading music data analytics platform used by artists, managers, labels, publishers, and playlist curators worldwide.
 
 Your job: Transform raw feature/update context into publish-ready marketing content for a specific channel.
@@ -113,12 +128,34 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
     result = generate_content(SYSTEM_PROMPT, user_prompt, max_tokens=max_tokens)
 
     content = result.get("content", "")
+    was_trimmed = False
+    char_limit = config["max_chars"]
+
+    if result["success"] and len(content) > char_limit:
+        logger.info(f"[{channel_key}] Content is {len(content)} chars, exceeds {char_limit}. Requesting shorter version.")
+        shorten_prompt = (
+            f"The following content is {len(content)} characters but must be under {char_limit} characters. "
+            f"Shorten it while keeping the same tone and key message. Output ONLY the shortened version:\n\n{content}"
+        )
+        retry_result = generate_content(SYSTEM_PROMPT, shorten_prompt, max_tokens=max_tokens)
+        if retry_result["success"] and retry_result.get("content"):
+            content = retry_result["content"]
+            was_trimmed = True
+            logger.info(f"[{channel_key}] Shortened to {len(content)} chars.")
+
+        if len(content) > char_limit:
+            logger.warning(f"[{channel_key}] Still {len(content)} chars after retry. Truncating at last sentence.")
+            truncated = _truncate_to_last_sentence(content, char_limit)
+            content = truncated
+            was_trimmed = True
+
     return {
         "channel": channel_key,
         "channel_display_name": config["display_name"],
-        "max_chars": config["max_chars"],
+        "max_chars": char_limit,
         "content": content,
         "char_count": len(content),
+        "was_trimmed": was_trimmed,
         "success": result["success"],
         "error": result.get("error"),
     }
