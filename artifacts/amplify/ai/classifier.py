@@ -18,11 +18,18 @@ CLASSIFICATION RULES:
 - "deprecation": Removing or replacing a feature
 
 IMPORTANCE SCORING (1-5):
-5 = Major new feature or significant improvement that many users across multiple personas will notice and benefit from. Always worth full marketing push. Examples: new analytics tool, new data source integration, major UI overhaul.
-4 = Notable improvement or new feature for a specific audience segment. Worth marketing to that segment. Examples: new chart type for labels, improved playlist analytics.
+5 = Major new feature or significant improvement that many users across multiple personas will notice and benefit from. Always worth full marketing push. Examples: new analytics tool, new data source integration, major UI overhaul. ONLY for categories "new_feature" or "improvement".
+4 = Notable improvement or new feature for a specific audience segment. Worth marketing to that segment. Examples: new chart type for labels, improved playlist analytics. ONLY for categories "new_feature" or "improvement".
 3 = Moderate improvement. Worth mentioning in newsletter and internal updates. Examples: UX polish, performance improvement users will notice, minor new option.
 2 = Minor tweak, small bug fix, or internal improvement with marginal user impact. Internal channels only. Examples: tooltip fix, minor data correction.
 1 = Pure infrastructure, internal tooling, refactoring, or trivial fix. Internal documentation only. Examples: CI/CD changes, code refactor, dependency update.
+
+CATEGORY-IMPORTANCE CAPS:
+- "new_feature" and "improvement" can score 1-5 (no cap)
+- "bug_fix" can score at most 3 (even major bug fixes are not marketing-worthy beyond newsletter mentions)
+- "infrastructure" can score at most 2 (never externally marketed)
+- "deprecation" can score at most 3 (users need to know, but it's not a positive marketing moment)
+- "mobile" can score 1-5 (same as new_feature/improvement, depending on impact)
 
 RULES FOR is_user_facing:
 - If the change affects what users see, interact with, or get value from -> true
