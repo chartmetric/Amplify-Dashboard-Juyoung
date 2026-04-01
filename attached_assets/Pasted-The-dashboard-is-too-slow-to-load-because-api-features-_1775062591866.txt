@@ -1,0 +1,81 @@
+The dashboard is too slow to load because /api/features/classified calls Claude to classify every feature one-by-one before returning anything. I need a faster architecture. Here's what to change:
+
+1. NEW ENDPOINT — fast feature loading WITHOUT classification:
+
+   GET /api/features/all
+   - Calls the existing enriched features logic (Asana + Slack cross-reference) but does NOT classify
+   - Returns ALL features immediately, no filtering, no Claude calls
+   - Response: {"features": [...], "total": N}
+   - This should be fast (just Asana + Slack API calls, no AI)
+
+2. CLASSIFICATION CACHING — add to `ai/classifier.py`:
+
+   - Create an in-memory cache: CLASSIFICATION_CACHE = {} (keyed by feature ID)
+   - When classify_feature is called, first check the cache. If a cached result exists for that feature ID, return it instantly.
+   - After classifying, store the result in the cache.
+   - Add a function `get_cached_classification(feature_id) -> dict or None`
+   - Add a function `get_all_cached_classifications() -> dict` (returns the full cache)
+   - Add a function `clear_cache(feature_id=None)` (clear one or all)
+
+   New endpoints:
+   GET /api/classifications/cache
+   - Returns all cached classifications
+
+   POST /api/features/{feature_id}/classify
+   - Classifies a SINGLE feature on demand (check cache first)
+   - Body: {"feature": {...}}
+   - Returns the classification
+
+   POST /api/features/classify-batch-async
+   - Takes: {"features": [...]}
+   - Starts classifying features one-by-one in a background thread
+   - Returns immediately: {"status": "started", "total": N, "already_cached": M}
+   - Each classification is stored in the cache as it completes
+
+   GET /api/classifications/status
+   - Returns: {"total_features": N, "classified": M, "pending": P, "in_progress": feature_id_or_null}
+   - Frontend can poll this to show progress
+
+3. REWRITE THE DASHBOARD LOADING FLOW:
+
+   Replace the current page load logic with this sequence:
+
+   a. On page load, call GET /api/features/all — this returns ALL features fast (no classification)
+   b. Display ALL feature cards immediately in the list. For features that don't have a cached classification yet:
+      - Show importance score as "—" with a gray color
+      - Show category badge as "Unclassified" (gray pill)
+      - Show marketing_summary as "Awaiting AI classification..." in italic muted text
+      - The "Generate Content" button still works (it will classify on-demand before generating)
+      - The card is fully clickable, expandable, and overridable even without classification
+   c. Simultaneously, call POST /api/features/classify-batch-async to start background classification
+   d. Poll GET /api/classifications/status every 3 seconds
+   e. As each classification completes, update that feature's card in-place with a subtle fade animation:
+      - Score number appears with color
+      - Category badge swaps from "Unclassified" to the real category
+      - Marketing summary fills in
+      - Recommended channels appear
+   f. Show a small progress bar at the top of the feature list: "Classifying features... 8/22" — disappears when done
+   g. Stop polling when all features are classified
+
+4. UPDATE FILTERING to work with partially-classified data:
+
+   - Importance filter: unclassified features are treated as "unscored" and shown at the bottom of the list in a separate "Unclassified" section
+   - Category filter: unclassified features show under "All" and under a new "Unclassified" filter pill
+   - Add a toggle/button: "Show All Features" (default ON) vs "Show Classified Only"
+   - When "Show All Features" is on, ALL features appear regardless of importance filter — the importance filter only affects the classified ones. Unclassified features always appear in the "Unclassified" section at the bottom.
+
+5. "CLASSIFY NOW" BUTTON on unclassified feature cards:
+
+   - Add a small "Classify ✨" button on unclassified cards (where the importance score would be)
+   - Clicking it calls POST /api/features/{id}/classify for just that feature
+   - Shows a small spinner on that card while classifying
+   - When done, card updates in-place with the classification result
+   - This lets the marketer prioritize classifying specific features they care about
+
+6. SORTING with mixed classified/unclassified:
+
+   - Classified features sort by importance (highest first) at the top
+   - Unclassified features appear in a visually distinct "Needs Classification" section below, sorted by title alphabetically
+   - After a feature gets classified (background or manual), it animates up into the correct sorted position in the classified section
+
+This way the page loads in 1-2 seconds with all features visible, and classifications fill in progressively over the next 30-60 seconds. The marketer can start working immediately — browse, expand, override, or manually classify individual features — without waiting for AI to process everything.
