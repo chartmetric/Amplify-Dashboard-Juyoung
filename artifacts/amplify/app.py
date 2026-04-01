@@ -3,6 +3,7 @@ import sys
 import signal
 import logging
 import html
+import json
 import re as re_module
 import threading
 import time
@@ -447,15 +448,44 @@ def unified_list(source_type):
 
 _pipeline_cache = {}
 _PIPELINE_TTL = 120
+_FEATURES_CACHE_DIR = os.path.dirname(__file__)
+_pipeline_refresh_lock = threading.Lock()
+_pipeline_refreshing_keys = set()
+_disk_write_lock = threading.Lock()
 
-def _get_slack_first_features(days: int = 30, force_refresh: bool = False) -> dict:
-    import time
-    now = time.time()
-    cache_key = f"days_{days}"
-    cached = _pipeline_cache.get(cache_key)
-    if not force_refresh and cached is not None and (now - cached["timestamp"]) < _PIPELINE_TTL:
-        return {"features": cached["features"], "debug": cached["debug"]}
 
+def _disk_cache_path(days: int) -> str:
+    return os.path.join(_FEATURES_CACHE_DIR, f".features_cache_days{days}.json")
+
+
+def _load_features_from_disk(days: int = 30) -> dict | None:
+    path = _disk_cache_path(days)
+    try:
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                data = json.load(f)
+            if data.get("features") and data.get("days") == days:
+                logger.info(f"[pipeline] Loaded {len(data['features'])} features from disk cache (days={days})")
+                return data
+    except Exception as e:
+        logger.warning(f"[pipeline] Failed to load features cache from disk: {e}")
+    return None
+
+
+def _save_features_to_disk(features: list, debug_info: dict, timestamp: float, days: int = 30):
+    import uuid
+    path = _disk_cache_path(days)
+    with _disk_write_lock:
+        try:
+            tmp = path + f".{uuid.uuid4().hex[:8]}.tmp"
+            with open(tmp, "w") as f:
+                json.dump({"features": features, "debug": debug_info, "timestamp": timestamp, "days": days}, f, separators=(",", ":"))
+            os.replace(tmp, path)
+        except Exception as e:
+            logger.warning(f"[pipeline] Failed to save features cache to disk: {e}")
+
+
+def _run_pipeline_fetch(days: int = 30):
     slack_source = SOURCE_REGISTRY["slack"]
     asana_source = SOURCE_REGISTRY["asana"]
 
@@ -501,15 +531,64 @@ def _get_slack_first_features(days: int = 30, force_refresh: bool = False) -> di
         debug_info["asana_only_count"] = 0
 
     debug_info["total_features_final"] = len(features)
+    now = time.time()
     logger.info(f"[pipeline] Pipeline complete: {len(features)} total features ({debug_info['asana_matches']})")
 
+    cache_key = f"days_{days}"
     _pipeline_cache[cache_key] = {
         "features": features,
         "debug": debug_info,
         "timestamp": now,
     }
+    _save_features_to_disk(features, debug_info, now, days=days)
 
     return {"features": features, "debug": debug_info}
+
+
+def _trigger_background_refresh(days: int = 30):
+    cache_key = f"days_{days}"
+    with _pipeline_refresh_lock:
+        if cache_key in _pipeline_refreshing_keys:
+            return
+        _pipeline_refreshing_keys.add(cache_key)
+
+    def _do_refresh():
+        try:
+            _run_pipeline_fetch(days=days)
+        except Exception as e:
+            logger.error(f"[pipeline] Background refresh failed: {e}")
+        finally:
+            with _pipeline_refresh_lock:
+                _pipeline_refreshing_keys.discard(cache_key)
+
+    t = threading.Thread(target=_do_refresh, daemon=True)
+    t.start()
+
+
+def _get_slack_first_features(days: int = 30, force_refresh: bool = False) -> dict:
+    now = time.time()
+    cache_key = f"days_{days}"
+
+    cached = _pipeline_cache.get(cache_key)
+    if not force_refresh and cached is not None and (now - cached["timestamp"]) < _PIPELINE_TTL:
+        return {"features": cached["features"], "debug": cached["debug"]}
+
+    if not force_refresh:
+        if cached is None:
+            disk = _load_features_from_disk(days=days)
+            if disk is not None:
+                _pipeline_cache[cache_key] = {
+                    "features": disk["features"],
+                    "debug": disk.get("debug", {}),
+                    "timestamp": disk.get("timestamp", now),
+                }
+                _trigger_background_refresh(days=days)
+                return {"features": disk["features"], "debug": disk.get("debug", {})}
+        else:
+            _trigger_background_refresh(days=days)
+            return {"features": cached["features"], "debug": cached["debug"]}
+
+    return _run_pipeline_fetch(days=days)
 
 
 def _get_enriched_features():
