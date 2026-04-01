@@ -215,88 +215,70 @@ def unified_list(source_type):
 
 
 _pipeline_cache = {}
-_PIPELINE_TTL = 300
-_pipeline_lock = threading.Lock()
+_PIPELINE_TTL = 120
 
 def _get_slack_first_features(days: int = 30, force_refresh: bool = False) -> dict:
     import time
-    cache_key = f"days_{days}"
-
     now = time.time()
+    cache_key = f"days_{days}"
     cached = _pipeline_cache.get(cache_key)
     if not force_refresh and cached is not None and (now - cached["timestamp"]) < _PIPELINE_TTL:
         return {"features": cached["features"], "debug": cached["debug"]}
 
-    acquired = _pipeline_lock.acquire(timeout=180)
-    if not acquired:
-        if cached is not None:
-            logger.warning(f"[pipeline] Lock timeout for {cache_key}, returning stale cache")
-            return {"features": cached["features"], "debug": cached["debug"]}
-        logger.error(f"[pipeline] Lock timeout for {cache_key} with no cache, returning empty")
-        return {"features": [], "debug": {"error": "pipeline_timeout"}}
+    slack_source = SOURCE_REGISTRY["slack"]
+    asana_source = SOURCE_REGISTRY["asana"]
+
+    logger.info(f"[pipeline] Starting Slack-first pipeline (days={days})")
+
+    slack_result = slack_source.extract_features_from_channel(days=days)
+    features = slack_result["features"]
+    debug_info = slack_result["stats"]
+    debug_info["skipped"] = slack_result["skipped"]
+    debug_info["parse_errors"] = slack_result["parse_errors"]
+    debug_info["asana_matches"] = {"url": 0, "search": 0, "none": 0}
+
+    logger.info(f"[pipeline] Extracted {len(features)} features from Slack, enriching with Asana...")
+
+    def _enrich_one(f):
+        try:
+            asana_source.enrich_feature(f)
+            return f.get("asana_match_method", "none")
+        except Exception as e:
+            logger.warning(f"Asana enrichment failed for '{f.get('title', '')[:50]}': {e}")
+            f["asana_linked"] = False
+            f["asana_match_method"] = "error"
+            return "none"
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        methods = list(pool.map(_enrich_one, features))
+    for m in methods:
+        debug_info["asana_matches"][m] = debug_info["asana_matches"].get(m, 0) + 1
+
+    announced_ids = set()
+    for f in features:
+        tid = f.get("asana_task_id")
+        if tid:
+            announced_ids.add(tid)
 
     try:
-        now = time.time()
-        cached = _pipeline_cache.get(cache_key)
-        if not force_refresh and cached is not None and (now - cached["timestamp"]) < _PIPELINE_TTL:
-            return {"features": cached["features"], "debug": cached["debug"]}
+        unannounced = asana_source.list_unannounced_tasks(days=days, announced_task_ids=announced_ids)
+        debug_info["asana_only_count"] = len(unannounced)
+        features.extend(unannounced)
+    except Exception as e:
+        logger.warning(f"Asana unannounced scan failed: {e}")
+        debug_info["asana_only_count"] = 0
 
-        slack_source = SOURCE_REGISTRY["slack"]
-        asana_source = SOURCE_REGISTRY["asana"]
+    debug_info["total_features_final"] = len(features)
+    logger.info(f"[pipeline] Pipeline complete: {len(features)} total features ({debug_info['asana_matches']})")
 
-        logger.info(f"[pipeline] Starting Slack-first pipeline (days={days})")
+    _pipeline_cache[cache_key] = {
+        "features": features,
+        "debug": debug_info,
+        "timestamp": now,
+    }
 
-        slack_result = slack_source.extract_features_from_channel(days=days)
-        features = slack_result["features"]
-        debug_info = slack_result["stats"]
-        debug_info["skipped"] = slack_result["skipped"]
-        debug_info["parse_errors"] = slack_result["parse_errors"]
-        debug_info["asana_matches"] = {"url": 0, "search": 0, "none": 0}
-
-        logger.info(f"[pipeline] Extracted {len(features)} features from Slack, enriching with Asana...")
-
-        def _enrich_one(f):
-            try:
-                asana_source.enrich_feature(f)
-                return f.get("asana_match_method", "none")
-            except Exception as e:
-                logger.warning(f"Asana enrichment failed for '{f.get('title', '')[:50]}': {e}")
-                f["asana_linked"] = False
-                f["asana_match_method"] = "error"
-                return "none"
-
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=5) as pool:
-            methods = list(pool.map(_enrich_one, features))
-        for m in methods:
-            debug_info["asana_matches"][m] = debug_info["asana_matches"].get(m, 0) + 1
-
-        announced_ids = set()
-        for f in features:
-            tid = f.get("asana_task_id")
-            if tid:
-                announced_ids.add(tid)
-
-        try:
-            unannounced = asana_source.list_unannounced_tasks(days=days, announced_task_ids=announced_ids)
-            debug_info["asana_only_count"] = len(unannounced)
-            features.extend(unannounced)
-        except Exception as e:
-            logger.warning(f"Asana unannounced scan failed: {e}")
-            debug_info["asana_only_count"] = 0
-
-        debug_info["total_features_final"] = len(features)
-        logger.info(f"[pipeline] Pipeline complete: {len(features)} total features ({debug_info['asana_matches']})")
-
-        _pipeline_cache[cache_key] = {
-            "features": features,
-            "debug": debug_info,
-            "timestamp": time.time(),
-        }
-
-        return {"features": features, "debug": debug_info}
-    finally:
-        _pipeline_lock.release()
+    return {"features": features, "debug": debug_info}
 
 
 def _get_enriched_features():
@@ -350,7 +332,7 @@ def classify_features_endpoint():
         return jsonify({"error": "Each feature must be a JSON object with at least id, title, and description"}), 400
 
     try:
-        classified, tier_counts = classify_features_batch(features)
+        classified = classify_features_batch(features)
     except Exception as e:
         logger.error(f"Classification error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -362,16 +344,12 @@ def classify_features_endpoint():
             if f.get("classification", {}).get("importance_score", 0) >= min_importance
         ]
 
-    return jsonify({
-        "classified_features": classified,
-        "quick_classified_count": tier_counts.get("quick_keyword", 0),
-        "claude_classified_count": tier_counts.get("claude", 0),
-    })
+    return jsonify({"classified_features": classified})
 
 
-@app.route("/api/features/all-classified")
+@app.route("/api/features/all")
 def all_features_endpoint():
-    """Return all Asana features classified via Claude, optionally skipping pre-filter.
+    """Return all Asana features, optionally skipping pre-filter.
 
     Category: Sources
 
@@ -431,11 +409,10 @@ def all_features_endpoint():
     logger.info(f"[all_features] Step 2 result: {len(to_classify)} to classify, {len(skipped)} skipped by pre-filter")
 
     classified = []
-    tier_counts = {"quick_keyword": 0, "claude": 0}
     if to_classify:
         logger.info(f"[all_features] Step 3 – Claude classification: sending {len(to_classify)} features")
         try:
-            classified, tier_counts = classify_features_batch(to_classify)
+            classified = classify_features_batch(to_classify)
             logger.info(f"[all_features] Step 3 result: {len(classified)} classified")
         except Exception as e:
             logger.error(f"all_features endpoint - classification error: {e}")
@@ -452,8 +429,6 @@ def all_features_endpoint():
         "pre_filter_applied": True,
         "pre_filter_skipped_count": len(skipped),
         "sent_to_claude_count": len(to_classify),
-        "quick_classified_count": tier_counts.get("quick_keyword", 0),
-        "claude_classified_count": tier_counts.get("claude", 0),
     })
 
 
@@ -510,7 +485,7 @@ def features_debug():
     classified = []
     if to_classify:
         try:
-            classified, _tier_counts = classify_features_batch(to_classify)
+            classified = classify_features_batch(to_classify)
             logger.info(f"[debug] Step 4 – classified: {len(classified)} returned from Claude")
         except Exception as e:
             logger.error(f"debug endpoint - classification error: {e}")
@@ -579,31 +554,19 @@ def classified_features():
 
     Category: Sources
 
-    Query Params: ?page=1&per_page=25&min_importance=N&released_only=true&pre_filter=false
-                  Use per_page=all to return everything at once.
+    Query Params: ?limit=20&min_importance=N&released_only=true&pre_filter=false
 
     Response:
     {
         "classified_features": [...],
         "total_enriched": 356,
         "classified_count": 20,
-        "filtered": 15,
-        "page": 1,
-        "per_page": 25,
-        "total_pages": 7,
-        "has_next": true,
-        "has_prev": false,
-        "total_classified": N,
-        "total_unclassified": N
+        "filtered": 15
     }
     """
+    limit = request.args.get("limit", default=20, type=int)
     released_only = request.args.get("released_only", default="false").lower() == "true"
     use_pre_filter = request.args.get("pre_filter", default="true").lower() != "false"
-    per_page_raw = request.args.get("per_page", default="25")
-    page = request.args.get("page", default=1, type=int)
-    if page < 1:
-        page = 1
-    category = request.args.get("category", default=None)
 
     try:
         enriched = _get_enriched_features()
@@ -619,23 +582,26 @@ def classified_features():
         enriched = [f for f in enriched if f.get("release_status")]
         logger.info(f"[classified] Step 2 – released_only filter: {before} → {len(enriched)} (excluded {before - len(enriched)})")
 
+    before_limit = len(enriched)
+    enriched = enriched[:limit]
+    logger.info(f"[classified] Step 3 – limit={limit}: {before_limit} → {len(enriched)}")
+
     if use_pre_filter:
-        logger.info(f"[classified] Step 3 – pre-filter: evaluating {len(enriched)} features")
+        logger.info(f"[classified] Step 4 – pre-filter: evaluating {len(enriched)} features")
         filter_result = pre_filter_batch(enriched)
         to_classify = filter_result["to_classify"]
         skipped = filter_result["skipped"]
-        logger.info(f"[classified] Step 3 result: {len(to_classify)} to classify, {len(skipped)} skipped (condition: skip_classification=True)")
+        logger.info(f"[classified] Step 4 result: {len(to_classify)} to classify, {len(skipped)} skipped (condition: skip_classification=True)")
     else:
-        logger.info(f"[classified] Step 3 – pre-filter BYPASSED (pre_filter=false), sending all {len(enriched)} to classify")
+        logger.info(f"[classified] Step 4 – pre-filter BYPASSED (pre_filter=false), sending all {len(enriched)} to classify")
         to_classify = enriched
         skipped = []
 
     classified = []
-    tier_counts = {"quick_keyword": 0, "claude": 0}
     if to_classify:
-        logger.info(f"[classified] Step 4 – Claude classification: sending {len(to_classify)} features")
+        logger.info(f"[classified] Step 5 – Claude classification: sending {len(to_classify)} features")
         try:
-            classified, tier_counts = classify_features_batch(to_classify)
+            classified = classify_features_batch(to_classify)
             logger.info(f"[classified] Step 5 result: {len(classified)} classified")
         except Exception as e:
             logger.error(f"Classified endpoint - classification error: {e}")
@@ -645,7 +611,7 @@ def classified_features():
     all_features = apply_manual_overrides(all_features)
     all_features.sort(key=lambda f: f.get("classification", {}).get("importance_score", 0), reverse=True)
 
-    classified_count = len(all_features)
+    total = len(all_features)
     min_importance = request.args.get("min_importance", type=int)
     if min_importance is not None:
         before_imp = len(all_features)
@@ -653,68 +619,22 @@ def classified_features():
             f for f in all_features
             if f.get("classification", {}).get("importance_score", 0) >= min_importance
         ]
-        logger.info(f"[classified] Step 5 – min_importance={min_importance}: {before_imp} → {len(all_features)} (excluded {before_imp - len(all_features)})")
+        logger.info(f"[classified] Step 6 – min_importance={min_importance}: {before_imp} → {len(all_features)} (excluded {before_imp - len(all_features)})")
 
-    if category and category != "all":
-        before_cat = len(all_features)
-        def _feature_matches_cat(f, cat):
-            cl = f.get("classification") or {}
-            cats = cl.get("categories") or ([cl.get("category")] if cl.get("category") else [])
-            return cat in cats
-        all_features = [f for f in all_features if _feature_matches_cat(f, category)]
-        logger.info(f"[classified] Step 6 – category={category}: {before_cat} → {len(all_features)}")
-
-    total = len(all_features)
-    total_classified = sum(1 for f in all_features if f.get("classification") and not f["classification"].get("pre_filtered"))
-    total_unclassified = total - total_classified
-
-    logger.info(f"[classified] Pre-pagination: {total} features after all filters")
-
-    if per_page_raw.lower() == "all":
-        paged = all_features
-        per_page = total
-        total_pages = 1
-        has_next = False
-        has_prev = False
-        page = 1
-    else:
-        try:
-            per_page = int(per_page_raw)
-        except (ValueError, TypeError):
-            per_page = 25
-        if per_page < 1:
-            per_page = 25
-        total_pages = max(1, (total + per_page - 1) // per_page)
-        if page > total_pages:
-            page = total_pages
-        start = (page - 1) * per_page
-        end = start + per_page
-        paged = all_features[start:end]
-        has_next = page < total_pages
-        has_prev = page > 1
-
-    logger.info(f"[classified] Final: page {page}/{total_pages}, showing {len(paged)} of {total} filtered features ({total_enriched} total enriched)")
+    logger.info(f"[classified] Final: showing {len(all_features)} of {total_enriched} total features")
 
     return jsonify({
-        "classified_features": paged,
+        "classified_features": all_features,
         "total_enriched": total_enriched,
-        "classified_count": classified_count,
-        "filtered": total,
-        "page": page,
-        "per_page": per_page,
-        "total_pages": total_pages,
-        "has_next": has_next,
-        "has_prev": has_prev,
-        "total_classified": total_classified,
-        "total_unclassified": total_unclassified,
+        "classified_count": total,
+        "filtered": len(all_features),
         "pre_filtered_skipped": len(skipped),
         "sent_to_claude": len(to_classify),
+        "limit_applied": limit,
         "released_only": released_only,
         "pre_filter_applied": use_pre_filter,
         "min_importance_applied": min_importance,
         "manual_overrides_applied": len(get_manual_overrides()),
-        "quick_classified_count": tier_counts.get("quick_keyword", 0),
-        "claude_classified_count": tier_counts.get("claude", 0),
     })
 
 
@@ -724,37 +644,22 @@ def all_features_unclassified():
 
     Category: Sources
 
-    Query Params: ?days=30&page=1&per_page=25&refresh=false
-                  Use per_page=all to return everything at once.
+    Query Params: ?days=30&limit=100&refresh=false
 
-    Response: {
-        "features": [...],
-        "total": N,
-        "page": 1,
-        "per_page": 25,
-        "total_pages": 7,
-        "has_next": true,
-        "has_prev": false,
-        "total_classified": N,
-        "total_unclassified": N
-    }
+    Response: {"features": [...], "total": N}
     """
     days = request.args.get("days", default=30, type=int)
+    limit = request.args.get("limit", default=100, type=int)
     force_refresh = request.args.get("refresh", default="false").lower() == "true"
-    per_page_raw = request.args.get("per_page", default="25")
-    page = request.args.get("page", default=1, type=int)
-    min_importance = request.args.get("min_importance", type=int)
-    category = request.args.get("category", default=None)
-    classified_only = request.args.get("classified_only", default="false").lower() == "true"
-    if page < 1:
-        page = 1
-
     try:
         result = _get_slack_first_features(days=days, force_refresh=force_refresh)
         features = result["features"]
     except Exception as e:
         logger.error(f"All features endpoint error: {e}")
         return jsonify({"error": f"Feature pipeline failed: {e}"}), 500
+
+    if limit and limit < len(features):
+        features = features[:limit]
 
     cache = get_all_cached_classifications()
     overrides = get_manual_overrides()
@@ -768,67 +673,7 @@ def all_features_unclassified():
             if fid in overrides:
                 f["classification"]["manual_override"] = True
 
-    total_all = len(features)
-    total_classified_all = sum(1 for f in features if f.get("classification"))
-    total_unclassified_all = total_all - total_classified_all
-
-    if classified_only:
-        features = [f for f in features if f.get("classification")]
-
-    if min_importance is not None:
-        features = [
-            f for f in features
-            if not f.get("classification") or f.get("classification", {}).get("importance_score", 0) >= min_importance
-        ]
-
-    if category and category != "all":
-        def _matches_cat(f, cat):
-            cl = f.get("classification") or {}
-            cats = cl.get("categories") or ([cl.get("category")] if cl.get("category") else [])
-            return cat in cats
-        if category == "unclassified":
-            features = [f for f in features if not f.get("classification")]
-        else:
-            features = [f for f in features if f.get("classification") and _matches_cat(f, category)]
-
-    total = len(features)
-    total_classified = sum(1 for f in features if f.get("classification"))
-    total_unclassified = total - total_classified
-
-    if per_page_raw.lower() == "all":
-        paged = features
-        per_page = total
-        total_pages = 1
-        has_next = False
-        has_prev = False
-        page = 1
-    else:
-        try:
-            per_page = int(per_page_raw)
-        except (ValueError, TypeError):
-            per_page = 25
-        if per_page < 1:
-            per_page = 25
-        total_pages = max(1, (total + per_page - 1) // per_page)
-        if page > total_pages:
-            page = total_pages
-        start = (page - 1) * per_page
-        end = start + per_page
-        paged = features[start:end]
-        has_next = page < total_pages
-        has_prev = page > 1
-
-    return jsonify({
-        "features": paged,
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "total_pages": total_pages,
-        "has_next": has_next,
-        "has_prev": has_prev,
-        "total_classified": total_classified,
-        "total_unclassified": total_unclassified,
-    })
+    return jsonify({"features": features, "total": len(features)})
 
 
 @app.route("/api/features/<feature_id>/classify", methods=["POST"])
@@ -1105,18 +950,6 @@ def add_classification_override():
         "manual_override": True,
     })
 
-    original_method = original.get("classification_method", "")
-    original_new_score = override.get("importance_score", original.get("importance_score", 1))
-    if original_method == "quick_keyword" and original_new_score >= 3:
-        matched_keyword = original.get("matched_keyword", "")
-        if matched_keyword:
-            try:
-                from ai.db import increment_keyword_override
-                increment_keyword_override(matched_keyword)
-                logger.info(f"[override] Keyword override count incremented for '{matched_keyword}'")
-            except Exception as e:
-                logger.error(f"[override] Failed to increment keyword override for '{matched_keyword}': {e}")
-
     return jsonify({
         "success": True,
         "message": "Override saved and will improve future classifications",
@@ -1135,172 +968,6 @@ def list_classification_overrides():
     """
     overrides = get_classification_overrides()
     return jsonify({"overrides": overrides, "count": len(overrides)})
-
-
-@app.route("/api/classifier/keywords", methods=["GET"])
-def get_classifier_keywords():
-    """Return all quick-classify keywords with match/override stats.
-
-    Category: Classifier
-
-    Response: {"keywords": [{"keyword": "fix", "category": "bug_fix", "match_count": 10, "override_count": 1, ...}]}
-    """
-    from ai.classifier import QUICK_CLASSIFY_KEYWORDS
-    try:
-        from ai.db import load_keyword_stats
-        stats = {row["keyword"]: row for row in load_keyword_stats()}
-    except Exception as e:
-        logger.error(f"[keywords] Failed to load keyword stats: {e}")
-        stats = {}
-
-    keyword_list = []
-    for category, keywords in QUICK_CLASSIFY_KEYWORDS.items():
-        for kw in keywords:
-            row = stats.get(kw, {})
-            keyword_list.append({
-                "keyword": kw,
-                "category": category,
-                "match_count": row.get("match_count", 0),
-                "override_count": row.get("override_count", 0),
-                "last_overridden_at": row.get("last_overridden_at"),
-                "auto_skipping_disabled": row.get("override_count", 0) >= 3,
-            })
-
-    return jsonify({"keywords": keyword_list, "threshold": 3})
-
-
-@app.route("/api/classifier/keywords", methods=["POST"])
-def manage_classifier_keywords():
-    """Add or remove a keyword from the quick-classify keyword list.
-
-    Category: Classifier
-
-    Body: {"action": "add"|"remove", "keyword": "myword", "category": "bug_fix"}
-
-    Response: {"status": "added"|"removed", "keyword": "myword"}
-    """
-    from ai.classifier import QUICK_CLASSIFY_KEYWORDS
-    data = request.get_json() or {}
-    action = data.get("action")
-    keyword = (data.get("keyword") or "").strip().lower()
-    category = data.get("category", "")
-
-    if not keyword:
-        return jsonify({"error": "keyword is required"}), 400
-    if action not in ("add", "remove"):
-        return jsonify({"error": "action must be 'add' or 'remove'"}), 400
-
-    if action == "add":
-        if not category or category not in QUICK_CLASSIFY_KEYWORDS:
-            valid = list(QUICK_CLASSIFY_KEYWORDS.keys())
-            return jsonify({"error": f"category must be one of {valid}"}), 400
-        kw_list = QUICK_CLASSIFY_KEYWORDS[category]
-        if keyword not in kw_list:
-            kw_list.append(keyword)
-        return jsonify({"status": "added", "keyword": keyword, "category": category})
-    else:
-        removed = False
-        for kw_list in QUICK_CLASSIFY_KEYWORDS.values():
-            if keyword in kw_list:
-                kw_list.remove(keyword)
-                removed = True
-                break
-        if not removed:
-            return jsonify({"error": f"Keyword '{keyword}' not found"}), 404
-        return jsonify({"status": "removed", "keyword": keyword})
-
-
-@app.route("/api/features/<feature_id>/reclassify", methods=["POST"])
-def reclassify_feature_with_ai(feature_id):
-    """Force full Claude classification for an auto-classified feature.
-
-    Category: Classifier
-
-    Response: {"classification": {...}, "feature_id": "..."}
-    """
-    from ai.classifier import (
-        CLASSIFICATION_CACHE, CLASSIFICATION_SYSTEM_PROMPT,
-        CLASSIFICATION_USER_PROMPT, _enforce_classification_rules,
-    )
-
-    CLASSIFICATION_CACHE.pop(feature_id, None)
-    try:
-        from ai.db import load_classification_by_id, save_classification
-        cached_in_db = load_classification_by_id(feature_id)
-        if cached_in_db and cached_in_db.get("classification_method") == "quick_keyword":
-            from ai.db import _get_conn
-            with _get_conn() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "DELETE FROM amplify_classifications WHERE feature_id = %s",
-                        (feature_id,),
-                    )
-    except Exception as e:
-        logger.warning(f"[reclassify] Could not clear DB cache for {feature_id}: {e}")
-
-    try:
-        features = _get_enriched_features()
-    except Exception as e:
-        return jsonify({"error": f"Feature pipeline failed: {e}"}), 500
-
-    feature = next((f for f in features if f.get("id") == feature_id), None)
-    if feature is None:
-        return jsonify({"error": f"Feature {feature_id} not found"}), 404
-
-    try:
-        from ai.classification_overrides import get_override_learning_context
-        from ai.claude_client import generate_content
-        import json as _json
-
-        title = feature.get("title", "")
-        description = feature.get("description", "")
-        release_status = "Released" if feature.get("release_status") else "In Progress"
-        urgency_score = feature.get("urgency_score", "N/A")
-
-        user_prompt = CLASSIFICATION_USER_PROMPT.format(
-            feature_id=feature_id,
-            title=title,
-            description=description,
-            release_status=release_status,
-            urgency_score=urgency_score,
-        )
-        learning_context = get_override_learning_context(limit=3)
-        system_prompt = CLASSIFICATION_SYSTEM_PROMPT
-        if learning_context:
-            system_prompt = system_prompt + "\n" + learning_context
-
-        result = generate_content(system_prompt, user_prompt, max_tokens=512)
-        if not result["success"]:
-            return jsonify({"error": f"Claude classification failed: {result.get('error')}"}), 500
-
-        content = result["content"].strip()
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-            if content.endswith("```"):
-                content = content[:-3].strip()
-        classification = _json.loads(content)
-        classification["feature_id"] = feature_id
-        classification["title"] = title
-        classification["classification_method"] = "claude"
-        if "categories" not in classification or not classification["categories"]:
-            classification["categories"] = [classification.get("category", "unknown")]
-        if "category" not in classification and classification.get("categories"):
-            classification["category"] = classification["categories"][0]
-        _enforce_classification_rules(classification)
-
-        CLASSIFICATION_CACHE[feature_id] = classification
-        try:
-            from ai.db import save_classification
-            save_classification(feature_id, classification)
-        except Exception as e:
-            logger.error(f"[reclassify] Failed to persist reclassification for {feature_id}: {e}")
-
-        logger.info(f"[reclassify] Forced Claude classification for {feature_id}")
-        return jsonify({"classification": classification, "feature_id": feature_id})
-
-    except Exception as e:
-        logger.error(f"[reclassify] Error during forced classification for {feature_id}: {e}")
-        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/examples")
@@ -1616,7 +1283,7 @@ def generate_batch_endpoint():
 
         if needs_classification:
             print(f"[generate/batch] Classifying {len(needs_classification)} unclassified features", flush=True)
-            newly_classified, _tc = classify_features_batch(needs_classification)
+            newly_classified = classify_features_batch(needs_classification)
             already_classified.extend(newly_classified)
 
         all_features = apply_manual_overrides(already_classified)
@@ -1686,8 +1353,8 @@ def test_channels():
     return jsonify({"channels": channels, "total": len(channels)})
 
 
-@app.route("/api/features/pipeline-debug")
-def pipeline_debug():
+@app.route("/api/features/debug")
+def features_debug():
     """Debug endpoint showing full pipeline diagnostics.
 
     Category: System

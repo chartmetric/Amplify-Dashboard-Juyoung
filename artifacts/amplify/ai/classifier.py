@@ -7,67 +7,6 @@ logger = logging.getLogger("amplify.classifier")
 
 CLASSIFICATION_CACHE: dict = {}
 
-QUICK_CLASSIFY_KEYWORDS: dict[str, list[str]] = {
-    "bug_fix": [
-        "fix", "bug", "hotfix", "bugfix", "typo", "lint", "revert",
-    ],
-    "infrastructure": [
-        "refactor", "ci/cd", "pipeline", "dependency", "upgrade package",
-        "devops", "cleanup", "internal only", "backend only", "be only",
-        "rename", "deprecate", "migration", "migrate db",
-    ],
-    "deprecation": [
-        "remove legacy", "sunset", "decommission",
-    ],
-}
-
-_QUICK_OVERRIDE_THRESHOLD = 3
-
-
-def quick_classify(feature: dict) -> dict | None:
-    feature_id = feature.get("id", "")
-    title = feature.get("title", "") or ""
-    description = feature.get("description", "") or ""
-    combined = f"{title} {description}".lower()
-
-    try:
-        from ai.db import get_keyword_override_counts
-        override_counts = get_keyword_override_counts()
-    except Exception:
-        override_counts = {}
-
-    for category, keywords in QUICK_CLASSIFY_KEYWORDS.items():
-        for kw in keywords:
-            if kw in combined:
-                if override_counts.get(kw, 0) >= _QUICK_OVERRIDE_THRESHOLD:
-                    logger.info(
-                        f"[quick_classify] Keyword '{kw}' has {override_counts[kw]} overrides — deferring to Claude for {feature_id}"
-                    )
-                    continue
-                logger.info(f"[quick_classify] Auto-skip '{feature_id}' — matched keyword '{kw}' (category={category})")
-                try:
-                    from ai.db import increment_keyword_match
-                    increment_keyword_match(kw)
-                except Exception as e:
-                    logger.error(f"[quick_classify] Failed to increment match count for '{kw}': {e}")
-                return {
-                    "feature_id": feature_id,
-                    "title": title,
-                    "category": category,
-                    "categories": [category],
-                    "importance_score": 1,
-                    "importance_score_reason": f"Auto-classified: matched low-value keyword '{kw}'",
-                    "is_user_facing": False,
-                    "target_audience": [],
-                    "marketing_summary": "",
-                    "recommended_channels": [],
-                    "skip_reason": f"Auto-skipped: matched keyword '{kw}'",
-                    "classification_method": "quick_keyword",
-                    "matched_keyword": kw,
-                }
-    return None
-
-
 CLASSIFICATION_SYSTEM_PROMPT = """You are a product marketing classifier for Chartmetric, a music data analytics platform used by artists, managers, labels, publishers, and playlist curators.
 
 Given a feature or update from our development team, classify it for marketing purposes.
@@ -178,19 +117,6 @@ def _enforce_classification_rules(classification: dict):
         classification["recommended_channels"] = []
 
 
-def _load_cache_from_db():
-    try:
-        from ai.db import load_classifications, is_available
-        if not is_available():
-            return
-        data = load_classifications()
-        CLASSIFICATION_CACHE.update(data)
-        if data:
-            logger.info(f"[classifier] Loaded {len(data)} classifications from database")
-    except Exception as e:
-        logger.error(f"[classifier] Failed to load classifications from db: {e}")
-
-
 def get_cached_classification(feature_id: str) -> dict | None:
     return CLASSIFICATION_CACHE.get(feature_id)
 
@@ -201,11 +127,6 @@ def get_all_cached_classifications() -> dict:
 
 def clear_cache():
     CLASSIFICATION_CACHE.clear()
-    try:
-        from ai.db import delete_all_classifications
-        delete_all_classifications()
-    except Exception as e:
-        logger.error(f"[classifier] Failed to clear classifications in db: {e}")
 
 
 def classify_feature(feature_data: dict) -> dict:
@@ -214,28 +135,6 @@ def classify_feature(feature_data: dict) -> dict:
     cached = get_cached_classification(feature_id)
     if cached is not None:
         return cached
-
-    if feature_id:
-        try:
-            from ai.db import load_classification_by_id
-            db_result = load_classification_by_id(feature_id)
-            if db_result is not None:
-                CLASSIFICATION_CACHE[feature_id] = db_result
-                return db_result
-        except Exception as e:
-            logger.error(f"[classifier] DB cache-miss lookup failed for {feature_id}: {e}")
-
-    quick_result = quick_classify(feature_data)
-    if quick_result is not None:
-        if feature_id:
-            CLASSIFICATION_CACHE[feature_id] = quick_result
-            try:
-                from ai.db import save_classification
-                save_classification(feature_id, quick_result)
-            except Exception as e:
-                logger.error(f"[classifier] Failed to persist quick classification for {feature_id}: {e}")
-        logger.info(f"[classifier] Tier 1 (quick_keyword) used for {feature_id}")
-        return quick_result
 
     title = feature_data.get("title", "")
     description = feature_data.get("description", "")
@@ -281,20 +180,13 @@ def classify_feature(feature_data: dict) -> dict:
         classification = json.loads(content)
         classification["feature_id"] = feature_id
         classification["title"] = title
-        classification["classification_method"] = "claude"
         if "categories" not in classification or not classification["categories"]:
             classification["categories"] = [classification.get("category", "unknown")]
         if "category" not in classification and classification.get("categories"):
             classification["category"] = classification["categories"][0]
         _enforce_classification_rules(classification)
-        logger.info(f"[classifier] Tier 2 (claude) used for {feature_id}")
         if feature_id:
             CLASSIFICATION_CACHE[feature_id] = classification
-            try:
-                from ai.db import save_classification
-                save_classification(feature_id, classification)
-            except Exception as e:
-                logger.error(f"[classifier] Failed to persist classification for {feature_id}: {e}")
         return classification
     except json.JSONDecodeError:
         logger.error(f"Failed to parse classification JSON for {feature_id}: {result['content'][:200]}")
@@ -312,18 +204,14 @@ def classify_feature(feature_data: dict) -> dict:
         }
 
 
-def classify_features_batch(
-    features: list[dict], max_workers: int = 2
-) -> tuple[list[dict], dict]:
+def classify_features_batch(features: list[dict], max_workers: int = 2) -> list[dict]:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     classified = [None] * len(features)
-    tier_counts = {"quick_keyword": 0, "claude": 0, "cached": 0}
 
     def classify_at_index(idx, feature):
         classification = classify_feature(feature)
-        method = classification.get("classification_method", "claude")
-        return idx, {**feature, "classification": classification}, method
+        return idx, {**feature, "classification": classification}
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
@@ -331,43 +219,18 @@ def classify_features_batch(
             for i, f in enumerate(features)
         }
         for future in as_completed(futures):
-            idx, result, method = future.result()
+            idx, result = future.result()
             classified[idx] = result
-            if method == "quick_keyword":
-                tier_counts["quick_keyword"] += 1
-            else:
-                tier_counts["claude"] += 1
 
     classified.sort(key=lambda f: f["classification"].get("importance_score", 0), reverse=True)
-    logger.info(
-        f"[classifier] Batch done: {tier_counts['quick_keyword']} quick, {tier_counts['claude']} claude"
-    )
-    return classified, tier_counts
+    return classified
 
 
 _manual_overrides = {}
 
 
-def _load_manual_overrides_from_db():
-    try:
-        from ai.db import load_manual_overrides, is_available
-        if not is_available():
-            return
-        data = load_manual_overrides()
-        _manual_overrides.update(data)
-        if data:
-            logger.info(f"[classifier] Loaded {len(data)} manual overrides from database")
-    except Exception as e:
-        logger.error(f"[classifier] Failed to load manual overrides from db: {e}")
-
-
 def set_manual_override(feature_id: str, override: dict):
     _manual_overrides[feature_id] = override
-    try:
-        from ai.db import save_manual_override
-        save_manual_override(feature_id, override)
-    except Exception as e:
-        logger.error(f"[classifier] Failed to persist manual override for {feature_id}: {e}")
 
 
 def get_manual_overrides():
@@ -375,13 +238,7 @@ def get_manual_overrides():
 
 
 def remove_manual_override(feature_id: str):
-    result = _manual_overrides.pop(feature_id, None)
-    try:
-        from ai.db import delete_manual_override
-        delete_manual_override(feature_id)
-    except Exception as e:
-        logger.error(f"[classifier] Failed to delete manual override for {feature_id} from db: {e}")
-    return result
+    return _manual_overrides.pop(feature_id, None)
 
 
 def apply_manual_overrides(classified_features: list[dict]) -> list[dict]:
@@ -398,11 +255,3 @@ def apply_manual_overrides(classified_features: list[dict]) -> list[dict]:
         reverse=True,
     )
     return classified_features
-
-
-def init_from_db():
-    _load_cache_from_db()
-    _load_manual_overrides_from_db()
-
-
-init_from_db()

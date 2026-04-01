@@ -5,4 +5,3 @@ slack-sdk
 requests
 python-dotenv
 waitress
-psycopg2-binary
