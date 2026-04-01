@@ -517,6 +517,130 @@
             padding: 40px; color: #8899aa; gap: 10px;
         }
         .channel-card-loading .spinner { width: 20px; height: 20px; border-width: 2px; }
+
+        .btn-prep-content {
+            background: #00C9A7; color: #0f1923; border: none; padding: 10px 22px;
+            border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer;
+            font-family: inherit; white-space: nowrap; flex-shrink: 0;
+        }
+        .btn-prep-content:hover { background: #00e0bb; }
+        .prep-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500;
+            background: #0f1923; overflow-y: auto;
+        }
+        .prep-breadcrumb {
+            padding: 12px 24px; font-size: 12px; color: #6b7a8d;
+            border-bottom: 1px solid #1a2733; background: #15202b;
+        }
+        .prep-step { max-width: 1000px; margin: 0 auto; padding: 20px 24px 100px; }
+        .prep-step-header { margin-bottom: 20px; }
+        .prep-title { font-size: 22px; font-weight: 700; color: #fff; margin: 12px 0 4px; }
+        .prep-subtitle { font-size: 14px; color: #8899aa; margin: 0; }
+        .use-case-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+        @media (max-width: 700px) { .use-case-grid { grid-template-columns: 1fr; } }
+        .use-case-card {
+            background: #1a2733; border: 1px solid #2a3a4a; border-radius: 12px;
+            padding: 20px; cursor: pointer; transition: border-color 0.2s, transform 0.1s;
+        }
+        .use-case-card:hover { border-color: #00C9A7; transform: translateY(-2px); }
+        .use-case-card-icon { font-size: 28px; margin-bottom: 8px; }
+        .use-case-card-name { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+        .use-case-card-desc { font-size: 13px; color: #8899aa; margin-bottom: 8px; line-height: 1.4; }
+        .use-case-card-count { font-size: 12px; color: #00C9A7; font-weight: 600; }
+        .picker-controls {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+        }
+        .picker-quick-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn-quick {
+            background: #1a2733; border: 1px solid #2a3a4a; color: #8899aa; padding: 6px 12px;
+            border-radius: 6px; font-size: 12px; cursor: pointer; font-family: inherit;
+        }
+        .btn-quick:hover { color: #e0e0e0; border-color: #4a5a6a; }
+        .picker-search {
+            flex: 1; min-width: 140px; background: #0d1520; color: #e0e0e0;
+            border: 1px solid #2a3a4a; border-radius: 6px; padding: 6px 12px;
+            font-size: 13px; font-family: inherit; outline: none;
+        }
+        .picker-search:focus { border-color: #00C9A7; }
+        .picker-count { font-size: 13px; color: #00C9A7; font-weight: 600; white-space: nowrap; }
+        .picker-filters { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+        .picker-list { display: flex; flex-direction: column; gap: 6px; max-height: 55vh; overflow-y: auto; }
+        .picker-row {
+            display: flex; align-items: center; gap: 10px; background: #1a2733;
+            border: 1px solid #2a3a4a; border-radius: 8px; padding: 10px 14px; cursor: pointer;
+            transition: border-color 0.15s;
+        }
+        .picker-row:hover { border-color: #4a5a6a; }
+        .picker-row.selected { border-color: #00C9A7; background: rgba(0,201,167,0.05); }
+        .picker-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: #00C9A7; flex-shrink: 0; cursor: pointer; }
+        .picker-row-title { font-size: 14px; color: #e0e0e0; font-weight: 600; flex: 1; }
+        .picker-row-summary { font-size: 12px; color: #6b7a8d; margin-top: 2px; }
+        .picker-bottom-bar {
+            position: fixed; bottom: 0; left: 0; right: 0; background: #15202b;
+            border-top: 1px solid #2a3a4a; padding: 14px 24px;
+            display: flex; align-items: center; justify-content: center; gap: 20px; z-index: 510;
+        }
+        .btn-generate-batch {
+            background: #00C9A7; color: #0f1923; border: none; padding: 10px 28px;
+            border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+        }
+        .btn-generate-batch:hover { background: #00e0bb; }
+        .btn-generate-batch:disabled { opacity: 0.4; cursor: not-allowed; }
+        .batch-progress { margin-bottom: 16px; }
+        .batch-progress-text { font-size: 13px; color: #8899aa; margin-top: 6px; display: inline-block; }
+        .batch-actions-top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+        .batch-approved-count { font-size: 13px; color: #8899aa; font-weight: 500; }
+        .batch-results-list { display: flex; flex-direction: column; gap: 14px; padding-bottom: 80px; }
+        .batch-item {
+            background: #1a2733; border: 1px solid #2a3a4a; border-radius: 12px; overflow: hidden;
+            transition: border-color 0.2s;
+        }
+        .batch-item.approved { border-left: 3px solid #00C9A7; }
+        .batch-item-header {
+            display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+            background: #15202b; border-bottom: 1px solid #2a3a4a; cursor: grab;
+        }
+        .batch-item-drag { color: #4a5a6a; font-size: 16px; cursor: grab; user-select: none; }
+        .batch-item-title { font-size: 14px; font-weight: 600; color: #e0e0e0; flex: 1; }
+        .batch-item-body { padding: 12px 16px; }
+        .batch-item-actions {
+            display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+            border-top: 1px solid #2a3a4a; flex-wrap: wrap;
+        }
+        .batch-item-loading {
+            display: flex; align-items: center; justify-content: center;
+            padding: 30px; color: #8899aa; gap: 8px;
+        }
+        .batch-item-loading .spinner { width: 18px; height: 18px; border-width: 2px; }
+        .batch-bottom-bar {
+            position: fixed; bottom: 0; left: 0; right: 0; background: #15202b;
+            border-top: 1px solid #2a3a4a; padding: 14px 24px;
+            display: flex; align-items: center; justify-content: center; gap: 20px; z-index: 510;
+        }
+        .combined-preview-wrap {
+            background: #1a2733; border: 1px solid #2a3a4a; border-radius: 12px;
+            padding: 24px; margin-bottom: 20px; max-height: 60vh; overflow-y: auto;
+        }
+        .combined-preview {
+            color: #e0e0e0; font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word;
+        }
+        .combined-preview h1, .combined-preview h2, .combined-preview h3 { color: #fff; margin: 14px 0 6px; }
+        .combined-preview h1 { font-size: 20px; } .combined-preview h2 { font-size: 17px; } .combined-preview h3 { font-size: 15px; }
+        .combined-preview strong { color: #00C9A7; }
+        .combined-preview hr { border: none; border-top: 1px solid #2a3a4a; margin: 16px 0; }
+        .publish-actions {
+            display: flex; align-items: center; gap: 12px; justify-content: center; flex-wrap: wrap;
+        }
+        .btn-copy-all {
+            background: #00C9A7; color: #0f1923; border: none; padding: 10px 24px;
+            border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+        }
+        .btn-copy-all:hover { background: #00e0bb; }
+        .btn-done {
+            background: none; border: 1px solid #2a3a4a; color: #8899aa; padding: 10px 24px;
+            border-radius: 8px; font-size: 14px; cursor: pointer; font-family: inherit;
+        }
+        .btn-done:hover { color: #e0e0e0; border-color: #4a5a6a; }
     </style>
 </head>
 <body>
@@ -597,6 +721,7 @@
 
         <div class="paste-bar" id="paste-bar">
             <input type="text" id="paste-input" class="paste-input" placeholder="Paste Slack thread, Asana task, or GitHub PR URL... (or type a feature title)">
+            <button class="btn-prep-content" onclick="startPrepWorkflow()">Prep Content for...</button>
         </div>
         <div class="paste-status" id="paste-status" style="display:none;"></div>
 
@@ -623,6 +748,86 @@
         <div class="content-bottom-bar" id="content-bottom-bar" style="display:none;">
             <span class="approved-counter" id="approved-counter">Approved: 0/0 channels</span>
             <button class="btn-publish" id="btn-publish" disabled>Publish All Approved &rarr;</button>
+        </div>
+    </div>
+
+    <div id="prep-overlay" class="prep-overlay" style="display:none;">
+        <div class="prep-breadcrumb" id="prep-breadcrumb">Dashboard</div>
+
+        <div id="prep-step1" class="prep-step" style="display:none;">
+            <div class="prep-step-header">
+                <button class="btn-back" onclick="exitPrepWorkflow()">&larr; Back to Dashboard</button>
+                <h2 class="prep-title">What are you prepping content for?</h2>
+                <p class="prep-subtitle">Pick a channel to batch-generate content for multiple features at once</p>
+            </div>
+            <div class="use-case-grid" id="use-case-grid"></div>
+        </div>
+
+        <div id="prep-step2" class="prep-step" style="display:none;">
+            <div class="prep-step-header">
+                <button class="btn-back" onclick="prepGoToStep(1)">&larr; Back to use cases</button>
+                <h2 class="prep-title" id="step2-title"></h2>
+            </div>
+            <div class="picker-controls">
+                <div class="picker-quick-btns">
+                    <button class="btn-quick" onclick="pickerSelectAll()">Select All</button>
+                    <button class="btn-quick" onclick="pickerDeselectAll()">Deselect All</button>
+                    <button class="btn-quick" onclick="pickerSelectTop(5)">Top 5</button>
+                    <button class="btn-quick" onclick="pickerSelectTop(10)">Top 10</button>
+                    <button class="btn-quick" onclick="pickerSelectByScore(4)">Score 4+</button>
+                </div>
+                <input type="text" class="picker-search" id="picker-search" placeholder="Search features..." oninput="renderFeaturePicker()">
+                <span class="picker-count" id="picker-count">0 features selected</span>
+            </div>
+            <div class="picker-filters">
+                <span class="filter-label">Min importance</span>
+                <select id="picker-importance" onchange="renderFeaturePicker()">
+                    <option value="1">1+</option>
+                    <option value="2">2+</option>
+                    <option value="3" selected>3+</option>
+                    <option value="4">4+</option>
+                    <option value="5">5 only</option>
+                </select>
+            </div>
+            <div class="picker-list" id="picker-list"></div>
+            <div class="picker-bottom-bar">
+                <span class="picker-count" id="picker-count-bottom">0 features selected</span>
+                <button class="btn-generate-batch" id="btn-generate-batch" disabled onclick="prepGoToStep(3)">Generate for 0 features &rarr;</button>
+            </div>
+        </div>
+
+        <div id="prep-step3" class="prep-step" style="display:none;">
+            <div class="prep-step-header">
+                <button class="btn-back" onclick="prepBatchResults=[];prepGoToStep(2)">&larr; Back to feature selection</button>
+                <h2 class="prep-title" id="step3-title"></h2>
+            </div>
+            <div class="batch-progress" id="batch-progress" style="display:none;">
+                <div class="progress-bar-track"><div class="progress-bar-fill" id="batch-progress-fill" style="width:0%"></div></div>
+                <span class="batch-progress-text" id="batch-progress-text">Generating...</span>
+            </div>
+            <div class="batch-actions-top" id="batch-actions-top" style="display:none;">
+                <button class="btn-quick" onclick="batchApproveAll()">Approve All</button>
+                <span class="batch-approved-count" id="batch-approved-count">0/0 approved</span>
+            </div>
+            <div class="batch-results-list" id="batch-results-list"></div>
+            <div class="batch-bottom-bar" id="batch-bottom-bar" style="display:none;">
+                <span class="batch-approved-count" id="batch-approved-count-bottom">0/0 approved</span>
+                <button class="btn-generate-batch" id="btn-preview-combined" onclick="prepGoToStep(4)">Preview Combined &rarr;</button>
+            </div>
+        </div>
+
+        <div id="prep-step4" class="prep-step" style="display:none;">
+            <div class="prep-step-header">
+                <button class="btn-back" onclick="prepGoToStep(3)">&larr; Back to review</button>
+                <h2 class="prep-title" id="step4-title"></h2>
+            </div>
+            <div class="combined-preview-wrap">
+                <div class="combined-preview" id="combined-preview"></div>
+            </div>
+            <div class="publish-actions" id="publish-actions">
+                <button class="btn-copy-all" onclick="copyAllCombined()">Copy All Combined</button>
+                <button class="btn-done" onclick="exitPrepWorkflow()">Done - Back to Dashboard</button>
+            </div>
         </div>
     </div>
 
@@ -2289,6 +2494,504 @@ function exitContentView() {
     contentViewInitialDrafts = {};
     contentViewApproved = {};
     contentViewRegenFeedback = {};
+}
+
+var USE_CASES = [
+    { key: 'notion_monthly', icon: '\uD83D\uDCCB', name: 'All Hands / Monthly Meeting', desc: 'Feature summaries for your monthly product meeting notes' },
+    { key: 'email_newsletter', icon: '\uD83D\uDCE7', name: 'Newsletter', desc: 'Product update blocks for the Chartmetric newsletter' },
+    { key: 'email_standalone', icon: '\uD83D\uDCE8', name: 'Standalone Email Blast', desc: 'Dedicated feature launch or update emails' },
+    { key: 'twitter', icon: '\uD83D\uDC26', name: 'Twitter / X Thread', desc: 'Short-form social posts for X' },
+    { key: 'linkedin', icon: '\uD83D\uDCBC', name: 'LinkedIn Post', desc: 'Professional thought-leadership posts for LinkedIn' },
+    { key: 'inapp', icon: '\uD83D\uDCF1', name: 'In-App Announcements', desc: 'Product announcements inside Chartmetric' },
+    { key: 'article_hmc', icon: '\uD83D\uDCDD', name: 'HMC Blog Article', desc: 'Long-form SEO articles for How Music Charts' }
+];
+var prepChannel = null;
+var prepSelectedIds = {};
+var prepBatchResults = [];
+var prepBatchApproved = {};
+var prepBatchInitialDrafts = {};
+var prepBatchRegenFeedback = {};
+var prepDragItem = null;
+
+function startPrepWorkflow() {
+    document.getElementById('prep-overlay').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    prepGoToStep(1);
+}
+
+function exitPrepWorkflow() {
+    document.getElementById('prep-overlay').style.display = 'none';
+    document.body.style.overflow = '';
+    prepChannel = null;
+    prepSelectedIds = {};
+    prepBatchResults = [];
+    prepBatchApproved = {};
+    prepBatchInitialDrafts = {};
+    prepBatchRegenFeedback = {};
+}
+
+function prepGoToStep(step) {
+    ['prep-step1','prep-step2','prep-step3','prep-step4'].forEach(function(id) {
+        document.getElementById(id).style.display = 'none';
+    });
+    document.getElementById('prep-step' + step).style.display = 'block';
+
+    if (step === 1) renderUseCaseGrid();
+    if (step === 2) renderFeaturePicker();
+    if (step === 3) {
+        if (prepBatchResults.length === 0) startBatchGeneration();
+        else {
+            document.getElementById('batch-actions-top').style.display = 'flex';
+            document.getElementById('batch-bottom-bar').style.display = 'flex';
+        }
+    }
+    if (step === 4) renderCombinedPreview();
+
+    updatePrepBreadcrumb(step);
+    window.scrollTo(0, 0);
+}
+
+function updatePrepBreadcrumb(step) {
+    var bc = document.getElementById('prep-breadcrumb');
+    var parts = ['Dashboard'];
+    var ucName = prepChannel ? USE_CASES.find(function(u) { return u.key === prepChannel; }) : null;
+    if (step >= 2 && ucName) parts.push(ucName.name);
+    var selCount = Object.keys(prepSelectedIds).length;
+    if (step >= 3 && selCount) parts.push(selCount + ' features');
+    if (step === 4) parts.push('Preview');
+    bc.textContent = parts.join(' > ');
+}
+
+function renderUseCaseGrid() {
+    var grid = document.getElementById('use-case-grid');
+    var featureCount = allFeatures.filter(function(f) {
+        return f.classification && f.classification.importance_score >= 3;
+    }).length;
+    grid.innerHTML = USE_CASES.map(function(uc) {
+        return '<div class="use-case-card" onclick="selectUseCase(\'' + uc.key + '\')">' +
+            '<div class="use-case-card-icon">' + uc.icon + '</div>' +
+            '<div class="use-case-card-name">' + escHtml(uc.name) + '</div>' +
+            '<div class="use-case-card-desc">' + escHtml(uc.desc) + '</div>' +
+            '<div class="use-case-card-count">' + featureCount + ' features available (score 3+)</div>' +
+        '</div>';
+    }).join('');
+}
+
+function selectUseCase(channelKey) {
+    prepChannel = channelKey;
+    prepSelectedIds = {};
+    var uc = USE_CASES.find(function(u) { return u.key === channelKey; });
+    document.getElementById('step2-title').textContent = 'Prepping: ' + (uc ? uc.name : channelKey);
+    prepGoToStep(2);
+}
+
+function getPickerFeatures() {
+    var minImp = parseInt(document.getElementById('picker-importance').value) || 1;
+    var search = (document.getElementById('picker-search').value || '').toLowerCase().trim();
+    return allFeatures.filter(function(f) {
+        var score = (f.classification || {}).importance_score || 0;
+        if (score < minImp) return false;
+        if (search && f.title.toLowerCase().indexOf(search) === -1) return false;
+        return true;
+    }).sort(function(a, b) {
+        return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
+    });
+}
+
+function renderFeaturePicker() {
+    var features = getPickerFeatures();
+    var list = document.getElementById('picker-list');
+    list.innerHTML = features.map(function(f) {
+        var cl = f.classification || {};
+        var score = cl.importance_score || 0;
+        var cats = cl.categories || [cl.category || 'unclassified'];
+        var checked = prepSelectedIds[f.id] ? ' checked' : '';
+        var selected = prepSelectedIds[f.id] ? ' selected' : '';
+        var catHtml = cats.map(function(c) {
+            return '<span class="cat-badge cat-' + c + '" style="font-size:10px;padding:1px 6px;">' + (CAT_LABELS[c] || c) + '</span>';
+        }).join('');
+        var summary = cl.marketing_summary || '';
+        if (summary.length > 80) summary = summary.substring(0, 80) + '...';
+        return '<label class="picker-row' + selected + '" data-fid="' + escAttr(f.id) + '">' +
+            '<input type="checkbox"' + checked + ' onchange="togglePickerFeature(\'' + escAttr(f.id) + '\', this.checked)">' +
+            '<span class="score-badge score-' + score + '" style="width:26px;height:26px;font-size:13px;">' + score + '</span>' +
+            '<div style="flex:1;min-width:0;">' +
+                '<div class="picker-row-title">' + escHtml(f.title) + '</div>' +
+                (summary ? '<div class="picker-row-summary">' + escHtml(summary) + '</div>' : '') +
+            '</div>' +
+            catHtml +
+        '</label>';
+    }).join('');
+    updatePickerCount();
+}
+
+function togglePickerFeature(fid, checked) {
+    if (checked) prepSelectedIds[fid] = true;
+    else delete prepSelectedIds[fid];
+    var row = document.querySelector('.picker-row[data-fid="' + fid + '"]');
+    if (row) { if (checked) row.classList.add('selected'); else row.classList.remove('selected'); }
+    updatePickerCount();
+}
+
+function updatePickerCount() {
+    var count = Object.keys(prepSelectedIds).length;
+    var txt = count + ' feature' + (count !== 1 ? 's' : '') + ' selected';
+    var el1 = document.getElementById('picker-count');
+    var el2 = document.getElementById('picker-count-bottom');
+    if (el1) el1.textContent = txt;
+    if (el2) el2.textContent = txt;
+    var btn = document.getElementById('btn-generate-batch');
+    if (btn) {
+        btn.disabled = count === 0;
+        btn.textContent = 'Generate for ' + count + ' feature' + (count !== 1 ? 's' : '') + ' \u2192';
+    }
+}
+
+function pickerSelectAll() {
+    getPickerFeatures().forEach(function(f) { prepSelectedIds[f.id] = true; });
+    renderFeaturePicker();
+}
+function pickerDeselectAll() {
+    prepSelectedIds = {};
+    renderFeaturePicker();
+}
+function pickerSelectTop(n) {
+    prepSelectedIds = {};
+    getPickerFeatures().slice(0, n).forEach(function(f) { prepSelectedIds[f.id] = true; });
+    renderFeaturePicker();
+}
+function pickerSelectByScore(minScore) {
+    prepSelectedIds = {};
+    getPickerFeatures().forEach(function(f) {
+        if ((f.classification || {}).importance_score >= minScore) prepSelectedIds[f.id] = true;
+    });
+    renderFeaturePicker();
+}
+
+function startBatchGeneration() {
+    var selectedFeatures = allFeatures.filter(function(f) { return prepSelectedIds[f.id]; });
+    if (selectedFeatures.length === 0) { prepGoToStep(2); return; }
+
+    selectedFeatures.sort(function(a, b) {
+        return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
+    });
+
+    var uc = USE_CASES.find(function(u) { return u.key === prepChannel; });
+    document.getElementById('step3-title').textContent = (uc ? uc.name : prepChannel) + ' - ' + selectedFeatures.length + ' features';
+
+    prepBatchResults = [];
+    prepBatchApproved = {};
+    prepBatchInitialDrafts = {};
+    prepBatchRegenFeedback = {};
+    document.getElementById('batch-results-list').innerHTML = '';
+    document.getElementById('batch-actions-top').style.display = 'none';
+    document.getElementById('batch-bottom-bar').style.display = 'none';
+
+    var progressWrap = document.getElementById('batch-progress');
+    progressWrap.style.display = 'block';
+    document.getElementById('batch-progress-fill').style.width = '0%';
+    document.getElementById('batch-progress-text').textContent = 'Generating... 0/' + selectedFeatures.length + ' features done';
+
+    fetch('/api/generate/batch-single-channel', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ features: selectedFeatures, channel: prepChannel })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { showToast('Batch generation failed: ' + data.error, true); return; }
+
+        prepBatchResults = data.results || [];
+        var list = document.getElementById('batch-results-list');
+        list.innerHTML = '';
+
+        prepBatchResults.forEach(function(r, idx) {
+            prepBatchApproved[idx] = false;
+            prepBatchInitialDrafts[idx] = r.content || '';
+            prepBatchRegenFeedback[idx] = '';
+            var item = buildBatchItem(r, idx);
+            list.appendChild(item);
+        });
+
+        progressWrap.style.display = 'none';
+        document.getElementById('batch-progress-fill').style.width = '100%';
+        document.getElementById('batch-progress-text').textContent = 'Done! ' + data.succeeded + '/' + data.total + ' succeeded';
+        document.getElementById('batch-actions-top').style.display = 'flex';
+        document.getElementById('batch-bottom-bar').style.display = 'flex';
+        updateBatchApprovalCount();
+        initBatchDragDrop();
+    })
+    .catch(function(err) {
+        progressWrap.style.display = 'none';
+        showToast('Error: ' + err.message, true);
+    });
+}
+
+function buildBatchItem(r, idx) {
+    var item = document.createElement('div');
+    item.className = 'batch-item';
+    item.id = 'batch-item-' + idx;
+    item.setAttribute('data-idx', idx);
+    item.setAttribute('draggable', 'true');
+
+    var maxChars = r.max_chars || 9999;
+    var content = r.content || '';
+    var charClass = content.length <= maxChars ? 'ok' : 'over';
+
+    item.innerHTML =
+        '<div class="batch-item-header">' +
+            '<span class="batch-item-drag">\u2261</span>' +
+            '<span class="batch-item-title">' + escHtml(r.feature_title || '') + '</span>' +
+            '<span class="char-count-badge ' + charClass + '" id="batch-char-' + idx + '">' + content.length + '/' + maxChars + '</span>' +
+            '<span class="status-badge draft" id="batch-status-' + idx + '">Draft</span>' +
+        '</div>' +
+        '<div class="batch-item-body" id="batch-body-' + idx + '">' +
+            '<textarea class="channel-textarea" id="batch-ta-' + idx + '" data-idx="' + idx + '" data-max="' + maxChars + '">' + escHtml(content) + '</textarea>' +
+        '</div>' +
+        '<div class="batch-item-loading" id="batch-loading-' + idx + '" style="display:none;"><div class="spinner"></div><span>Regenerating...</span></div>' +
+        '<div class="batch-item-actions" id="batch-actions-' + idx + '">' +
+            '<button class="btn-regen" onclick="batchRegenItem(' + idx + ')">Regenerate</button>' +
+            '<input type="text" class="regen-feedback-input" id="batch-feedback-' + idx + '" placeholder="Optional: what to change...">' +
+            '<button class="btn-approve" id="batch-approve-btn-' + idx + '" onclick="batchApproveItem(' + idx + ')">Approve \u2713</button>' +
+        '</div>';
+
+    var ta = item.querySelector('textarea');
+    ta.addEventListener('input', function() {
+        var len = this.value.length;
+        var max = parseInt(this.getAttribute('data-max'));
+        var badge = document.getElementById('batch-char-' + idx);
+        if (badge) {
+            badge.textContent = len + '/' + max;
+            badge.className = 'char-count-badge ' + (len <= max ? 'ok' : 'over');
+        }
+    });
+    setTimeout(function() { autoResizeTextarea(ta); }, 0);
+    ta.addEventListener('input', function() { autoResizeTextarea(this); });
+
+    return item;
+}
+
+function batchRegenItem(idx) {
+    var feedbackInput = document.getElementById('batch-feedback-' + idx);
+    var feedback = feedbackInput ? feedbackInput.value.trim() : '';
+    var bodyEl = document.getElementById('batch-body-' + idx);
+    var actionsEl = document.getElementById('batch-actions-' + idx);
+    var loadingEl = document.getElementById('batch-loading-' + idx);
+
+    if (bodyEl) bodyEl.style.display = 'none';
+    if (actionsEl) actionsEl.style.display = 'none';
+    if (loadingEl) loadingEl.style.display = 'flex';
+
+    var feature = allFeatures.find(function(f) { return f.id === prepBatchResults[idx].feature_id; }) || { title: prepBatchResults[idx].feature_title };
+
+    fetch('/api/generate/single', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ feature: feature, channel: prepChannel, feedback: feedback })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (bodyEl) bodyEl.style.display = 'block';
+        if (actionsEl) actionsEl.style.display = 'flex';
+        if (data.error) { showToast('Regeneration failed: ' + data.error, true); return; }
+
+        var ta = document.getElementById('batch-ta-' + idx);
+        if (ta) { ta.value = data.content || ''; autoResizeTextarea(ta); ta.dispatchEvent(new Event('input')); }
+        prepBatchResults[idx].content = data.content || '';
+        prepBatchRegenFeedback[idx] = feedback;
+        if (feedbackInput) feedbackInput.value = '';
+        if (prepBatchApproved[idx]) {
+            prepBatchApproved[idx] = false;
+            updateBatchItemStatus(idx);
+            updateBatchApprovalCount();
+        }
+    })
+    .catch(function(err) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (bodyEl) bodyEl.style.display = 'block';
+        if (actionsEl) actionsEl.style.display = 'flex';
+        showToast('Error: ' + err.message, true);
+    });
+}
+
+function batchApproveItem(idx) {
+    var ta = document.getElementById('batch-ta-' + idx);
+    var currentContent = ta ? ta.value : '';
+    var initialContent = prepBatchInitialDrafts[idx] || '';
+    var feedbackParts = [];
+    if (prepBatchRegenFeedback[idx]) feedbackParts.push('Regenerated with feedback: ' + prepBatchRegenFeedback[idx]);
+    if (currentContent !== (prepBatchResults[idx].content || '')) feedbackParts.push('Marketer edited the draft');
+    var feedbackNote = feedbackParts.join('. ');
+
+    var feature = allFeatures.find(function(f) { return f.id === prepBatchResults[idx].feature_id; }) || { title: prepBatchResults[idx].feature_title };
+    var approveBtn = document.getElementById('batch-approve-btn-' + idx);
+    if (approveBtn) { approveBtn.textContent = 'Saving...'; approveBtn.disabled = true; }
+
+    fetch('/api/approve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            feature: feature, channel: prepChannel,
+            original_draft: initialContent, approved_draft: currentContent, feedback_note: feedbackNote
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { showToast('Approve failed: ' + data.error, true); if (approveBtn) { approveBtn.textContent = 'Approve \u2713'; approveBtn.disabled = false; } return; }
+        prepBatchApproved[idx] = true;
+        prepBatchResults[idx].approved_content = ta ? ta.value : currentContent;
+        updateBatchItemStatus(idx);
+        updateBatchApprovalCount();
+        showToast('Approved!');
+    })
+    .catch(function(err) {
+        showToast('Error: ' + err.message, true);
+        if (approveBtn) { approveBtn.textContent = 'Approve \u2713'; approveBtn.disabled = false; }
+    });
+}
+
+function batchApproveAll() {
+    for (var i = 0; i < prepBatchResults.length; i++) {
+        if (!prepBatchApproved[i]) batchApproveItem(i);
+    }
+}
+
+function updateBatchItemStatus(idx) {
+    var item = document.getElementById('batch-item-' + idx);
+    var status = document.getElementById('batch-status-' + idx);
+    var actions = document.getElementById('batch-actions-' + idx);
+    if (prepBatchApproved[idx]) {
+        if (item) item.classList.add('approved');
+        if (status) { status.className = 'status-badge approved-badge'; status.textContent = 'Approved \u2713'; }
+        if (actions) {
+            var btn = actions.querySelector('.btn-approve');
+            if (btn) btn.style.display = 'none';
+            if (!actions.querySelector('.btn-undo-approve')) {
+                var undo = document.createElement('button');
+                undo.className = 'btn-undo-approve';
+                undo.textContent = 'Undo';
+                undo.onclick = function() { batchUndoApprove(idx); };
+                actions.appendChild(undo);
+            }
+        }
+    } else {
+        if (item) item.classList.remove('approved');
+        if (status) { status.className = 'status-badge draft'; status.textContent = 'Draft'; }
+        if (actions) {
+            var btn = actions.querySelector('.btn-approve');
+            if (btn) { btn.style.display = ''; btn.textContent = 'Approve \u2713'; btn.disabled = false; }
+            var undo = actions.querySelector('.btn-undo-approve');
+            if (undo) undo.remove();
+        }
+    }
+}
+
+function batchUndoApprove(idx) {
+    prepBatchApproved[idx] = false;
+    updateBatchItemStatus(idx);
+    updateBatchApprovalCount();
+}
+
+function updateBatchApprovalCount() {
+    var total = prepBatchResults.length;
+    var approved = 0;
+    for (var i = 0; i < total; i++) { if (prepBatchApproved[i]) approved++; }
+    var txt = approved + '/' + total + ' approved';
+    var el1 = document.getElementById('batch-approved-count');
+    var el2 = document.getElementById('batch-approved-count-bottom');
+    if (el1) el1.textContent = txt;
+    if (el2) el2.textContent = txt;
+    var btn = document.getElementById('btn-preview-combined');
+    if (btn) btn.disabled = approved === 0;
+}
+
+function initBatchDragDrop() {
+    var list = document.getElementById('batch-results-list');
+    list.addEventListener('dragstart', function(e) {
+        var item = e.target.closest('.batch-item');
+        if (!item) return;
+        prepDragItem = item;
+        item.style.opacity = '0.5';
+        e.dataTransfer.effectAllowed = 'move';
+    });
+    list.addEventListener('dragend', function(e) {
+        if (prepDragItem) { prepDragItem.style.opacity = '1'; prepDragItem = null; }
+    });
+    list.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        var target = e.target.closest('.batch-item');
+        if (target && target !== prepDragItem) {
+            var rect = target.getBoundingClientRect();
+            var mid = rect.top + rect.height / 2;
+            if (e.clientY < mid) {
+                list.insertBefore(prepDragItem, target);
+            } else {
+                list.insertBefore(prepDragItem, target.nextSibling);
+            }
+        }
+    });
+}
+
+function renderCombinedPreview() {
+    var uc = USE_CASES.find(function(u) { return u.key === prepChannel; });
+    document.getElementById('step4-title').textContent = (uc ? uc.name : prepChannel) + ' - Combined Preview';
+
+    var items = [];
+    var list = document.getElementById('batch-results-list');
+    var orderedItems = list.querySelectorAll('.batch-item');
+    orderedItems.forEach(function(el) {
+        var idx = parseInt(el.getAttribute('data-idx'));
+        if (!prepBatchApproved[idx]) return;
+        var ta = document.getElementById('batch-ta-' + idx);
+        items.push({
+            feature_title: prepBatchResults[idx].feature_title || '',
+            content: ta ? ta.value : (prepBatchResults[idx].content || '')
+        });
+    });
+
+    if (items.length === 0) {
+        document.getElementById('combined-preview').innerHTML = '<p style="color:#8899aa;">No approved items to preview. Go back and approve some features.</p>';
+        return;
+    }
+
+    document.getElementById('combined-preview').innerHTML = '<div class="content-loading"><div class="spinner"></div><span>Combining content...</span></div>';
+
+    fetch('/api/content/combine', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ channel: prepChannel, items: items })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { document.getElementById('combined-preview').textContent = 'Error: ' + data.error; return; }
+        var content = data.combined_content || '';
+        if (data.format === 'markdown') {
+            document.getElementById('combined-preview').innerHTML = simpleMarkdown(content);
+        } else {
+            document.getElementById('combined-preview').textContent = content;
+        }
+    })
+    .catch(function(err) {
+        document.getElementById('combined-preview').textContent = 'Error: ' + err.message;
+    });
+}
+
+function copyAllCombined() {
+    var preview = document.getElementById('combined-preview');
+    var text = preview.innerText || preview.textContent || '';
+    navigator.clipboard.writeText(text).then(function() {
+        showToast('Copied to clipboard!');
+    }).catch(function() {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('Copied to clipboard!');
+    });
 }
 
 function escHtml(str) {

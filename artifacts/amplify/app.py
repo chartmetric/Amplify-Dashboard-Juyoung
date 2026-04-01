@@ -1571,6 +1571,182 @@ def generate_batch_endpoint():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/generate/batch-single-channel", methods=["POST"])
+def generate_batch_single_channel_endpoint():
+    """Generate content for multiple features on a single channel.
+
+    Category: Content Generation
+
+    Request Body:
+    {
+        "features": [{"id": "...", "title": "...", "description": "..."}, ...],
+        "channel": "notion_monthly",
+        "custom_instructions": ""
+    }
+
+    Response:
+    {
+        "channel": "notion_monthly",
+        "channel_display_name": "...",
+        "results": [{"feature_id": "...", "feature_title": "...", "content": "...", "char_count": N, "success": true}],
+        "total": 8,
+        "succeeded": 8,
+        "failed": 0
+    }
+    """
+    data = request.get_json() or {}
+    features = data.get("features")
+    channel = data.get("channel")
+    custom_instructions = data.get("custom_instructions", "")
+
+    if not features or not isinstance(features, list):
+        return jsonify({"error": "features is required and must be a list"}), 400
+    if not channel or not isinstance(channel, str):
+        return jsonify({"error": "channel is required and must be a string"}), 400
+
+    from ai.channel_configs import CHANNEL_CONFIGS
+    if channel not in CHANNEL_CONFIGS:
+        return jsonify({"error": f"Unknown channel: {channel}"}), 400
+
+    try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        config = CHANNEL_CONFIGS[channel]
+        print(f"[generate/batch-single] Generating {channel} for {len(features)} features", flush=True)
+
+        def gen_one(feature):
+            result = generate_for_channel(feature, channel, custom_instructions=custom_instructions or None)
+            result["feature_id"] = feature.get("id", "")
+            result["feature_title"] = feature.get("title", "")
+            return result
+
+        results = []
+        succeeded = 0
+        failed = 0
+
+        with ThreadPoolExecutor(max_workers=min(len(features), 5)) as executor:
+            future_map = {executor.submit(gen_one, f): i for i, f in enumerate(features)}
+            result_by_idx = {}
+            for future in as_completed(future_map):
+                idx = future_map[future]
+                try:
+                    r = future.result()
+                    result_by_idx[idx] = r
+                    if r.get("success"):
+                        succeeded += 1
+                    else:
+                        failed += 1
+                except Exception as e:
+                    logger.error(f"[batch-single] Feature {idx} error: {e}")
+                    result_by_idx[idx] = {
+                        "feature_id": features[idx].get("id", ""),
+                        "feature_title": features[idx].get("title", ""),
+                        "channel": channel,
+                        "content": "",
+                        "char_count": 0,
+                        "success": False,
+                        "error": str(e),
+                    }
+                    failed += 1
+
+            for i in range(len(features)):
+                results.append(result_by_idx.get(i, {"success": False, "error": "Missing"}))
+
+        return jsonify({
+            "channel": channel,
+            "channel_display_name": config["display_name"],
+            "results": results,
+            "total": len(features),
+            "succeeded": succeeded,
+            "failed": failed,
+        })
+    except Exception as e:
+        logger.error(f"Generate batch-single-channel error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/content/combine", methods=["POST"])
+def combine_content_endpoint():
+    """Combine multiple content items into one formatted document for a channel.
+
+    Category: Content Generation
+
+    Request Body:
+    {
+        "channel": "notion_monthly",
+        "items": [{"feature_title": "...", "content": "..."}, ...]
+    }
+
+    Response:
+    {
+        "combined_content": "...",
+        "format": "markdown"
+    }
+    """
+    data = request.get_json() or {}
+    channel = data.get("channel", "")
+    items = data.get("items", [])
+
+    if not items or not isinstance(items, list):
+        return jsonify({"error": "items is required and must be a list"}), 400
+
+    combined_parts = []
+    fmt = "markdown"
+
+    if channel == "notion_monthly":
+        combined_parts.append("# Product Updates - Monthly Meeting\n")
+        for item in items:
+            combined_parts.append(item.get("content", ""))
+            combined_parts.append("\n---\n")
+    elif channel == "email_newsletter":
+        for i, item in enumerate(items):
+            if i > 0:
+                combined_parts.append("\n---\n")
+            combined_parts.append(item.get("content", ""))
+    elif channel == "email_standalone":
+        for item in items:
+            combined_parts.append(item.get("content", ""))
+            combined_parts.append("\n\n")
+        fmt = "plaintext"
+    elif channel == "twitter":
+        for i, item in enumerate(items):
+            combined_parts.append(f"**Tweet {i+1}: {item.get('feature_title', '')}**\n")
+            combined_parts.append(item.get("content", ""))
+            combined_parts.append("\n\n")
+    elif channel == "linkedin":
+        for item in items:
+            combined_parts.append(item.get("content", ""))
+            combined_parts.append("\n\n---\n\n")
+    elif channel == "inapp":
+        for i, item in enumerate(items):
+            combined_parts.append(f"**Announcement {i+1}**\n")
+            combined_parts.append(item.get("content", ""))
+            combined_parts.append("\n\n")
+    elif channel == "slack_internal":
+        for item in items:
+            title = item.get("feature_title", "")
+            combined_parts.append(f":rocket: *{title}*\n")
+            combined_parts.append(item.get("content", ""))
+            combined_parts.append("\n\n")
+        fmt = "plaintext"
+    elif channel == "article_hmc":
+        for item in items:
+            combined_parts.append(item.get("content", ""))
+            combined_parts.append("\n\n---\n\n")
+    else:
+        for item in items:
+            combined_parts.append(f"## {item.get('feature_title', '')}\n")
+            combined_parts.append(item.get("content", ""))
+            combined_parts.append("\n\n")
+
+    combined = "".join(combined_parts).rstrip("\n- ")
+
+    return jsonify({
+        "combined_content": combined,
+        "format": fmt,
+    })
+
+
 @app.route("/api/channels")
 @app.route("/api/test/channels")
 def test_channels():
