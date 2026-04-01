@@ -1,0 +1,50 @@
+Replace the current Manual Input modal with a minimal quick-paste input. The marketer should be able to paste a URL (Slack thread, Asana task, or GitHub PR) and have the feature auto-populated.
+
+1. REMOVE the current Manual Input modal with its Title, Description, Category fields.
+
+2. REPLACE with a compact inline input bar at the top of the feature list (not a modal):
+   - A single text input field, full width, with placeholder: "Paste Slack thread, Asana task, or GitHub PR URL..."
+   - A "Add +" button next to it (teal, compact)
+   - The input should also accept plain text (for quick manual entry without a URL)
+   - Pressing Enter or clicking "Add +" submits
+
+3. URL AUTO-DETECTION AND EXTRACTION:
+
+   Create a new backend endpoint: POST /api/features/from-url
+   - Body: {"url": "https://..."}
+   - Detects the URL type and extracts feature data:
+
+   SLACK THREAD URL (e.g., https://chartmetric.slack.com/archives/CXXXXXX/pXXXXXXXXXX):
+   - Use the Slack API to fetch the message and thread replies
+   - Parse the message for feature name (strip "PE:", "Devin:" prefixes)
+   - Look for linked Asana task URLs or GitHub PR URLs in the message or replies
+   - If an Asana URL is found, also fetch that Asana task for description
+   - Build feature object with all extracted data
+   - Return: {"source": "slack", "feature": {...}, "linked_asana": true/false, "linked_github": true/false}
+
+   ASANA TASK URL (e.g., https://app.asana.com/0/PROJECT_ID/TASK_ID):
+   - Extract the task ID from the URL
+   - Fetch the full task from Asana API (title, description, custom fields, assignee, etc.)
+   - Build feature object
+   - Return: {"source": "asana", "feature": {...}}
+
+   GITHUB PR URL (e.g., https://github.com/ORG/REPO/pull/NUMBER):
+   - If you have GitHub API access: fetch PR title, description, labels
+   - If not: parse the URL to extract org/repo/number and use the PR title as feature name
+   - Return: {"source": "github", "feature": {...}}
+
+   PLAIN TEXT (no URL detected):
+   - Treat as manual entry: use the text as the feature title
+   - Return: {"source": "manual", "feature": {"title": text, "description": "", ...}}
+
+4. FRONTEND FLOW after submission:
+   - Show a brief loading state on the input bar ("Fetching from Slack..." / "Loading Asana task..." / "Parsing PR...")
+   - When the feature object comes back, immediately add it to the TOP of the feature list as a new card
+   - The card should be highlighted briefly (teal glow animation) so the user sees where it appeared
+   - The card starts as unclassified — the user can click "Classify" on it or wait for background classification
+   - Clear the input field after successful add
+   - If extraction fails, show an inline error below the input: "Couldn't extract feature from that URL. Try pasting the feature title instead."
+
+5. ALSO keep the "Manual Input" button in the top bar, but change it to just focus/scroll to the paste input bar (not open a modal). Or remove the top bar button entirely since the input bar is always visible.
+
+6. The input should accept MULTIPLE URLs pasted at once (one per line or comma-separated). Process each one and add all results to the feature list.

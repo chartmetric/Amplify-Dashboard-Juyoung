@@ -312,15 +312,35 @@
         .empty-state h3, .error-state h3 { color: #ffffff; font-size: 16px; margin-bottom: 8px; }
         .empty-state p { color: #8899aa; font-size: 13px; }
         .error-state p { color: #ff6b6b; font-size: 13px; }
-        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; align-items: center; justify-content: center; }
-        .modal-overlay.open { display: flex; }
-        .modal { background: #1a2733; border: 1px solid #2a3a4a; border-radius: 14px; padding: 28px; width: 90%; max-width: 540px; max-height: 85vh; overflow-y: auto; }
-        .modal h2 { color: #ffffff; font-size: 18px; margin-bottom: 20px; }
-        .modal label { display: block; font-size: 13px; color: #8899aa; margin-bottom: 6px; margin-top: 14px; }
-        .modal input, .modal textarea, .modal select { width: 100%; background: #0f1923; color: #e0e0e0; border: 1px solid #2a3a4a; border-radius: 8px; padding: 10px 12px; font-size: 13px; font-family: inherit; outline: none; }
-        .modal input:focus, .modal textarea:focus { border-color: #00C9A7; }
-        .modal textarea { resize: vertical; min-height: 80px; }
-        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .paste-bar {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+            background: #0f1923; border: 1px solid #2a3a4a; border-radius: 10px;
+            padding: 6px 6px 6px 14px; transition: border-color 0.2s;
+        }
+        .paste-bar:focus-within { border-color: #00C9A7; }
+        .paste-input {
+            flex: 1; background: transparent; color: #e0e0e0; border: none;
+            font-size: 13px; font-family: inherit; outline: none; padding: 8px 0;
+        }
+        .paste-input::placeholder { color: #4a5a6a; }
+        .paste-btn {
+            background: #00C9A7; color: #0f1923; border: none; padding: 8px 16px;
+            border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;
+            white-space: nowrap; transition: background 0.15s;
+        }
+        .paste-btn:hover { background: #00e0bb; }
+        .paste-btn:disabled { opacity: 0.5; cursor: default; }
+        .paste-status {
+            font-size: 12px; margin: -6px 0 10px 0; padding: 0 4px;
+        }
+        .paste-status.loading { color: #8899aa; }
+        .paste-status.error { color: #ef4444; }
+        .paste-status.success { color: #00C9A7; }
+        @keyframes cardHighlight {
+            0% { box-shadow: 0 0 0 2px rgba(0,201,167,0.6), 0 0 20px rgba(0,201,167,0.3); }
+            100% { box-shadow: none; }
+        }
+        .feature-card.just-added { animation: cardHighlight 2s ease-out; }
         .toast {
             position: fixed; bottom: 24px; right: 24px; background: #1a2733; border: 1px solid #00C9A7;
             color: #e0e0e0; padding: 12px 20px; border-radius: 10px; font-size: 13px; z-index: 300;
@@ -337,7 +357,7 @@
             <span class="subtitle">Product Marketing Autopilot</span>
         </div>
         <div class="topbar-right">
-            <button class="btn-outline" onclick="openManualInput()">Manual Input</button>
+            <button class="btn-outline" onclick="focusPasteBar()">+ Add Feature</button>
             <div style="display:flex;align-items:center;gap:6px;">
                 <span class="health-dot" id="health-dot"></span>
                 <span class="health-label" id="health-label">Checking...</span>
@@ -409,6 +429,12 @@
         </div>
         <div class="stats-row" id="stats-row" style="display:none;"></div>
 
+        <div class="paste-bar" id="paste-bar">
+            <input type="text" id="paste-input" class="paste-input" placeholder="Paste Slack thread, Asana task, or GitHub PR URL... (or type a feature title)">
+            <button class="paste-btn" id="paste-btn" onclick="submitPasteBar()">Add +</button>
+        </div>
+        <div class="paste-status" id="paste-status" style="display:none;"></div>
+
         <div id="feature-list" class="feature-list"></div>
         <div id="loading" class="loading-container" style="display:none;">
             <div class="spinner"></div>
@@ -416,26 +442,6 @@
         </div>
         <div id="empty-state" class="empty-state" style="display:none;"></div>
         <div id="error-state" class="error-state" style="display:none;"></div>
-    </div>
-    <div class="modal-overlay" id="manual-modal">
-        <div class="modal">
-            <h2>Manual Feature Input</h2>
-            <label>Title</label>
-            <input type="text" id="manual-title" placeholder="e.g. New Artist Discovery Page">
-            <label>Description</label>
-            <textarea id="manual-desc" placeholder="Describe the feature and its user impact..."></textarea>
-            <label>Category</label>
-            <select id="manual-category">
-                <option value="new_feature">New Feature</option>
-                <option value="improvement">Improvement</option>
-                <option value="mobile">Mobile</option>
-                <option value="deprecation">Deprecation</option>
-            </select>
-            <div class="modal-actions">
-                <button class="btn-outline" onclick="closeManualInput()">Cancel</button>
-                <button class="btn-primary" onclick="submitManualInput()">Add Feature</button>
-            </div>
-        </div>
     </div>
     <div class="toast" id="toast"></div>
 
@@ -866,9 +872,10 @@ function getFilteredFeatures() {
         var f = allFeatures[i];
         var cl = f.classification;
         var isAsanaOnly = f.source === 'asana_only';
+        var isReallyUnclassified = !cl || cl.unclassified;
 
-        if (!cl) {
-            if (classifiedOnly) continue;
+        if (isReallyUnclassified) {
+            if (classifiedOnly && !f._justAdded) continue;
             if (catFilter !== 'all' && catFilter !== 'unclassified') continue;
             if (isAsanaOnly) { asanaOnly.push(f); }
             else { unclassified.push(f); }
@@ -883,9 +890,17 @@ function getFilteredFeatures() {
     }
 
     classified.sort(function(a, b) {
+        var aAdded = a._justAdded ? 1 : 0;
+        var bAdded = b._justAdded ? 1 : 0;
+        if (aAdded !== bAdded) return bAdded - aAdded;
         return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
     });
-    unclassified.sort(function(a, b) { return (a.title || '').localeCompare(b.title || ''); });
+    unclassified.sort(function(a, b) {
+        var aAdded = a._justAdded ? 1 : 0;
+        var bAdded = b._justAdded ? 1 : 0;
+        if (aAdded !== bAdded) return bAdded - aAdded;
+        return (a.title || '').localeCompare(b.title || '');
+    });
     asanaOnly.sort(function(a, b) { return (a.title || '').localeCompare(b.title || ''); });
 
     return { classified: classified, unclassified: unclassified, asanaOnly: asanaOnly };
@@ -956,7 +971,7 @@ function buildCard(f, isUnclassified) {
     var fid = f.id || '';
 
     var card = document.createElement('div');
-    card.className = 'feature-card' + (isUnclassified ? ' unclassified-card' : '');
+    card.className = 'feature-card' + (isUnclassified ? ' unclassified-card' : '') + (f._justAdded ? ' just-added' : '');
     card.dataset.fid = fid;
 
     var scoreBadgeClass, scoreBadgeContent;
@@ -1466,33 +1481,93 @@ function showToast(msg, isWarning) {
     t._timer = setTimeout(function() { t.className = 'toast'; }, 3000);
 }
 
-function openManualInput() { document.getElementById('manual-modal').classList.add('open'); }
-function closeManualInput() { document.getElementById('manual-modal').classList.remove('open'); }
+function focusPasteBar() {
+    var input = document.getElementById('paste-input');
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(function() { input.focus(); }, 300);
+}
 
-function submitManualInput() {
-    var title = document.getElementById('manual-title').value.trim();
-    var desc = document.getElementById('manual-desc').value.trim();
-    var cat = document.getElementById('manual-category').value;
-    if (!title) { alert('Please enter a title'); return; }
-    var btn = document.querySelector('.modal-actions .btn-primary');
-    btn.textContent = 'Adding...';
+document.getElementById('paste-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitPasteBar(); }
+});
+
+function submitPasteBar() {
+    var input = document.getElementById('paste-input');
+    var btn = document.getElementById('paste-btn');
+    var status = document.getElementById('paste-status');
+    var val = input.value.trim();
+    if (!val) return;
+
+    var isSlack = /slack\.com/.test(val);
+    var isAsana = /asana\.com/.test(val);
+    var isGithub = /github\.com/.test(val);
+    var loadingMsg = 'Adding feature...';
+    if (isSlack) loadingMsg = 'Fetching from Slack...';
+    else if (isAsana) loadingMsg = 'Loading Asana task...';
+    else if (isGithub) loadingMsg = 'Parsing PR...';
+
+    status.textContent = loadingMsg;
+    status.className = 'paste-status loading';
+    status.style.display = 'block';
     btn.disabled = true;
+    btn.textContent = '...';
 
-    fetch('/api/sources/manual/feature', {
+    fetch('/api/features/from-url', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ title: title, description: desc, category: cat })
+        body: JSON.stringify({ url: val })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        btn.textContent = 'Add Feature'; btn.disabled = false;
-        if (data.error) { alert('Error: ' + data.error); return; }
-        closeManualInput();
-        document.getElementById('manual-title').value = '';
-        document.getElementById('manual-desc').value = '';
-        loadFeatures();
+        btn.disabled = false;
+        btn.textContent = 'Add +';
+
+        var features = [];
+        if (data.results) {
+            for (var i = 0; i < data.results.length; i++) {
+                if (data.results[i].feature) features.push(data.results[i].feature);
+            }
+        } else if (data.feature) {
+            features.push(data.feature);
+        }
+
+        if (features.length === 0) {
+            status.textContent = data.error || "Couldn't extract feature from that URL. Try pasting the feature title instead.";
+            status.className = 'paste-status error';
+            return;
+        }
+
+        for (var j = 0; j < features.length; j++) {
+            var f = features[j];
+            if (!f.classification) {
+                f.classification = { importance_score: 0, category: 'unknown', categories: ['unknown'], unclassified: true };
+            }
+            f._justAdded = true;
+            allFeatures.unshift(f);
+        }
+
+        input.value = '';
+        status.textContent = features.length === 1
+            ? 'Added: ' + features[0].title
+            : 'Added ' + features.length + ' features';
+        status.className = 'paste-status success';
+        setTimeout(function() { status.style.display = 'none'; }, 3000);
+
+        renderAll();
+
+        var firstCard = document.querySelector('.feature-card.just-added');
+        if (firstCard) firstCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        setTimeout(function() {
+            for (var k = 0; k < features.length; k++) { delete features[k]._justAdded; }
+        }, 2500);
     })
-    .catch(function(err) { btn.textContent = 'Add Feature'; btn.disabled = false; alert('Error: ' + err.message); });
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'Add +';
+        status.textContent = 'Error: ' + err.message;
+        status.className = 'paste-status error';
+    });
 }
 
 checkHealth();

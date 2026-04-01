@@ -3,6 +3,7 @@ import sys
 import signal
 import logging
 import html
+import re as re_module
 import threading
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -193,6 +194,233 @@ def manual_create():
     source = SOURCE_REGISTRY["manual"]
     ctx = source.get_feature_context(title=title, description=description)
     return jsonify(ctx.to_dict())
+
+
+@app.route("/api/features/from-url", methods=["POST"])
+def feature_from_url():
+    """Extract a feature from a pasted URL (Slack, Asana, GitHub) or plain text.
+
+    Category: Sources
+
+    Request Body: {"url": "https://..."} or {"url": "plain text title"}
+    Response: {"source": "slack"|"asana"|"github"|"manual", "feature": {...}}
+    """
+    data = request.get_json() or {}
+    raw_input = (data.get("url") or "").strip()
+    if not raw_input:
+        return jsonify({"error": "url or text is required"}), 400
+
+    inputs = [line.strip() for line in raw_input.replace(",", "\n").split("\n") if line.strip()]
+    results = []
+
+    for item in inputs:
+        try:
+            result = _extract_feature_from_input(item)
+            results.append(result)
+        except Exception as e:
+            logger.error(f"from-url extraction error for '{item[:80]}': {e}")
+            results.append({"source": "error", "error": str(e), "input": item[:200]})
+
+    if len(results) == 1:
+        return jsonify(results[0])
+    return jsonify({"results": results, "total": len(results)})
+
+
+def _extract_feature_from_input(item: str) -> dict:
+
+    slack_match = re_module.search(r"(?:https?://)?[\w-]+\.slack\.com/archives/(C[\w]+)/p(\d+)", item)
+    if slack_match:
+        channel_id = slack_match.group(1)
+        raw_ts = slack_match.group(2)
+        msg_ts = raw_ts[:10] + "." + raw_ts[10:]
+        return _fetch_feature_from_slack(channel_id, msg_ts)
+
+    asana_match = re_module.search(r"app\.asana\.com/\d+/(\d+)/(\d+)", item)
+    if not asana_match:
+        asana_match = re_module.search(r"app\.asana\.com/[^/]+/task/(\d+)", item)
+    if asana_match:
+        task_gid = asana_match.group(asana_match.lastindex)
+        return _fetch_feature_from_asana(task_gid)
+
+    github_match = re_module.search(r"github\.com/([\w.-]+)/([\w.-]+)/pull/(\d+)", item)
+    if github_match:
+        org, repo, pr_num = github_match.group(1), github_match.group(2), github_match.group(3)
+        return _fetch_feature_from_github(org, repo, pr_num, item)
+
+    if re_module.match(r"https?://", item):
+        return {
+            "source": "manual",
+            "feature": {
+                "id": f"manual-{int(__import__('time').time())}",
+                "title": item,
+                "description": "",
+                "source": "manual",
+                "released": False,
+                "asana_linked": False,
+            },
+        }
+
+    return {
+        "source": "manual",
+        "feature": {
+            "id": f"manual-{int(__import__('time').time())}",
+            "title": item,
+            "description": "",
+            "source": "manual",
+            "released": False,
+            "asana_linked": False,
+        },
+    }
+
+
+def _fetch_feature_from_slack(channel_id: str, msg_ts: str) -> dict:
+    slack_source = SOURCE_REGISTRY["slack"]
+    client = slack_source._get_client()
+
+    result = client.conversations_history(
+        channel=channel_id,
+        oldest=msg_ts,
+        latest=msg_ts,
+        inclusive=True,
+        limit=1,
+    )
+    messages = result.get("messages", [])
+    if not messages:
+        raise ValueError("Slack message not found")
+
+    msg = messages[0]
+    from sources.slack_source import _clean_slack_text, _extract_reactions, _extract_asana_task_ids, _extract_github_urls
+
+    raw_text = msg.get("text", "")
+    text = _clean_slack_text(raw_text)
+    total_reactions, reactions = _extract_reactions(msg)
+    asana_ids = _extract_asana_task_ids(raw_text)
+    github_urls = _extract_github_urls(raw_text)
+
+    thread_text = ""
+    thread_asana_ids = []
+    thread_github_urls = []
+    if msg.get("reply_count", 0) > 0:
+        try:
+            thread = client.conversations_replies(channel=channel_id, ts=msg_ts)
+            for reply in thread.get("messages", [])[1:]:
+                reply_text = reply.get("text", "")
+                thread_text += "\n" + _clean_slack_text(reply_text)
+                thread_asana_ids.extend(_extract_asana_task_ids(reply_text))
+                thread_github_urls.extend(_extract_github_urls(reply_text))
+        except Exception:
+            pass
+
+    all_asana_ids = list(dict.fromkeys(asana_ids + thread_asana_ids))
+    all_github = list(dict.fromkeys(github_urls + thread_github_urls))
+
+    title_lines = [l.strip() for l in text.split("\n") if l.strip()]
+    title = title_lines[0][:200] if title_lines else "Slack message"
+    for line in title_lines:
+        if line.startswith(("\u2022", "-", "*")) or re_module.match(r"(PE|Devin|FE|BE):", line):
+            title = re_module.sub(r"^[\u2022\-\*]\s*", "", line)
+            title = re_module.sub(r"^(PE|Devin|FE|BE):\s*", "", title).strip()
+            break
+
+    feature = {
+        "id": f"manual-slack-{msg_ts.replace('.', '')}",
+        "title": title[:300],
+        "description": text,
+        "source": "slack_only",
+        "released": True,
+        "slack_url": f"https://chartmetric.slack.com/archives/{channel_id}/p{msg_ts.replace('.', '')}",
+        "asana_url": None,
+        "github_url": all_github[0] if all_github else None,
+        "asana_linked": False,
+        "total_reactions": total_reactions,
+        "reactions_breakdown": reactions,
+        "release_date": msg.get("ts", ""),
+        "release_version": {"fe": None, "be": None},
+        "source_prefix": None,
+    }
+
+    if all_asana_ids:
+        asana_source = SOURCE_REGISTRY["asana"]
+        task_data = asana_source._fetch_task_by_id(all_asana_ids[0])
+        if task_data:
+            feature["asana_linked"] = True
+            feature["source"] = "slack+asana"
+            feature["asana_url"] = task_data.get("asana_url")
+            feature["asana_task_id"] = all_asana_ids[0]
+            if task_data.get("description"):
+                feature["description"] = task_data["description"]
+            for field in ["engineer", "assignee", "team", "task_type", "urgency_score", "planner"]:
+                if task_data.get(field):
+                    feature[field] = task_data[field]
+
+    return {"source": "slack", "feature": feature, "linked_asana": feature["asana_linked"], "linked_github": bool(all_github)}
+
+
+def _fetch_feature_from_asana(task_gid: str) -> dict:
+    asana_source = SOURCE_REGISTRY["asana"]
+    task_data = asana_source._fetch_task_by_id(task_gid)
+    if not task_data:
+        raise ValueError(f"Asana task {task_gid} not found")
+
+    import asana as asana_lib
+    client = asana_source._get_client()
+    tasks_api = asana_lib.TasksApi(client)
+    task_raw = tasks_api.get_task(task_gid, {"opt_fields": "name,permalink_url"})
+    t = task_raw.to_dict() if hasattr(task_raw, "to_dict") else task_raw
+
+    feature = {
+        "id": task_gid,
+        "title": t.get("name", "Asana Task"),
+        "description": task_data.get("description", ""),
+        "source": "asana_only",
+        "released": False,
+        "asana_linked": True,
+        "asana_url": task_data.get("asana_url") or t.get("permalink_url"),
+        "slack_url": None,
+        "github_url": None,
+        "asana_task_id": task_gid,
+        "release_version": {"fe": None, "be": None},
+        "release_date": "",
+        "source_prefix": None,
+        "total_reactions": 0,
+        "reactions_breakdown": {},
+    }
+    for field in ["engineer", "assignee", "team", "task_type", "urgency_score", "planner", "subtasks", "comments", "project_info"]:
+        if task_data.get(field):
+            feature[field] = task_data[field]
+
+    return {"source": "asana", "feature": feature}
+
+
+def _fetch_feature_from_github(org: str, repo: str, pr_num: str, url: str) -> dict:
+    feature = {
+        "id": f"github-{org}-{repo}-{pr_num}",
+        "title": f"{repo} PR #{pr_num}",
+        "description": f"GitHub Pull Request: {url}",
+        "source": "manual",
+        "released": False,
+        "asana_linked": False,
+        "github_url": url,
+        "slack_url": None,
+        "asana_url": None,
+        "release_version": {"fe": None, "be": None},
+        "release_date": "",
+        "source_prefix": f"#{pr_num}",
+        "total_reactions": 0,
+        "reactions_breakdown": {},
+    }
+    try:
+        import requests as req_lib
+        resp = req_lib.get(f"https://api.github.com/repos/{org}/{repo}/pulls/{pr_num}",
+                          headers={"Accept": "application/vnd.github.v3+json"}, timeout=10)
+        if resp.status_code == 200:
+            pr_data = resp.json()
+            feature["title"] = pr_data.get("title", feature["title"])
+            feature["description"] = pr_data.get("body", "") or ""
+    except Exception as e:
+        logger.warning(f"GitHub API fetch failed for {org}/{repo}#{pr_num}: {e}")
+
+    return {"source": "github", "feature": feature}
 
 
 @app.route("/api/features/<source_type>")

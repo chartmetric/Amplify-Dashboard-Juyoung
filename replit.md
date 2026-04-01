@@ -80,6 +80,7 @@ Product marketing autopilot that ingests feature data from multiple sources and 
   - `POST /api/generate` — generate marketing content for a feature
   - `POST /api/generate/batch` — batch content generation
   - `POST /api/generate/single` — single channel content generation
+  - `POST /api/features/from-url` — extract feature from pasted URL (Slack/Asana/GitHub) or plain text; supports multi-URL input
   - `POST /api/classification/override` — save classification override
   - `GET /api/classification/overrides` — list override history
 - **Architecture (Slack-first pipeline)**:
