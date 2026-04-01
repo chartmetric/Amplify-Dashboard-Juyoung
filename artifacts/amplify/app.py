@@ -253,7 +253,7 @@ def _extract_feature_from_input(item: str) -> dict:
         return {
             "source": "manual",
             "feature": {
-                "id": f"manual-{int(__import__('time').time())}",
+                "id": f"manual-{__import__('uuid').uuid4().hex[:12]}",
                 "title": item,
                 "description": "",
                 "source": "manual",
@@ -265,7 +265,7 @@ def _extract_feature_from_input(item: str) -> dict:
     return {
         "source": "manual",
         "feature": {
-            "id": f"manual-{int(__import__('time').time())}",
+            "id": f"manual-{__import__('uuid').uuid4().hex[:12]}",
             "title": item,
             "description": "",
             "source": "manual",
@@ -720,7 +720,6 @@ def all_features_unclassified():
     Response: {"features": [...], "total": N}
     """
     days = request.args.get("days", default=30, type=int)
-    limit = request.args.get("limit", default=100, type=int)
     force_refresh = request.args.get("refresh", default="false").lower() == "true"
     try:
         result = _get_slack_first_features(days=days, force_refresh=force_refresh)
@@ -728,9 +727,6 @@ def all_features_unclassified():
     except Exception as e:
         logger.error(f"All features endpoint error: {e}")
         return jsonify({"error": f"Feature pipeline failed: {e}"}), 500
-
-    if limit and limit < len(features):
-        features = features[:limit]
 
     cache = get_all_cached_classifications()
     overrides = get_manual_overrides()

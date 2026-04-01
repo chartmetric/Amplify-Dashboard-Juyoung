@@ -233,6 +233,26 @@
         .link-row a:hover { text-decoration: underline; }
         .no-asana-note { font-size: 11px; color: #6b7280; font-style: italic; margin-top: 6px; }
         .auto-class-note { font-size: 11px; color: #eab308; background: rgba(234,179,8,0.08); padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid rgba(234,179,8,0.3); }
+        .pagination-controls { margin-top: 20px; }
+        .pagination-row {
+            display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap;
+            padding: 16px 0;
+        }
+        .pagination-info { font-size: 13px; color: #8899aa; }
+        .pg-buttons { display: flex; align-items: center; gap: 4px; }
+        .pg-btn {
+            background: #1a2733; color: #c0c8d0; border: 1px solid #2a3a4a; padding: 6px 10px;
+            border-radius: 6px; font-size: 13px; cursor: pointer; transition: background 0.15s, color 0.15s;
+            min-width: 34px; text-align: center;
+        }
+        .pg-btn:hover:not(.disabled) { background: #243040; color: #ffffff; }
+        .pg-btn.pg-active { background: #00C9A7; color: #0f1923; border-color: #00C9A7; font-weight: 700; }
+        .pg-btn.disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+        .pg-ellipsis { color: #556677; font-size: 14px; padding: 0 4px; }
+        .pagination-perpage select {
+            background: #1a2733; color: #c0c8d0; border: 1px solid #2a3a4a; border-radius: 6px;
+            padding: 6px 10px; font-size: 12px; cursor: pointer;
+        }
         .cat-popover {
             position: absolute; top: 100%; left: 0; margin-top: 6px;
             background: #1a2733; border: 1px solid #2a3a4a; border-radius: 10px;
@@ -472,6 +492,8 @@ var classificationTotal = 0;
 var classificationDone = 0;
 var activePopover = null;
 var currentRequest = null;
+var currentPage = 1;
+var perPage = 25;
 var ALL_CATS = ['new_feature','improvement','bug_fix','infrastructure','mobile','deprecation'];
 var CAT_LABELS = {new_feature:'New Feature',improvement:'Improvement',bug_fix:'Bug Fix',infrastructure:'Infrastructure',mobile:'Mobile',deprecation:'Deprecation'};
 var CAT_COLORS = {new_feature:'#00C9A7',improvement:'#3b82f6',bug_fix:'#ef4444',infrastructure:'#6b7280',mobile:'#a855f7',deprecation:'#f97316'};
@@ -677,7 +699,8 @@ function loadFeaturesSentToClaude() {
     if (currentRequest) { currentRequest.abort(); }
     var controller = new AbortController();
     currentRequest = controller;
-    fetch('/api/features/classified?limit=40&min_importance=1', { signal: controller.signal })
+    currentPage = 1;
+    fetch('/api/features/classified?limit=500&min_importance=1', { signal: controller.signal })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             currentRequest = null;
@@ -726,7 +749,8 @@ function loadFeatures() {
     stopPolling();
     hideProgressBar();
 
-    fetch('/api/features/all?limit=40')
+    currentPage = 1;
+    fetch('/api/features/all')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             loading.style.display = 'none';
@@ -883,6 +907,7 @@ function updateStats() {
 
 function setCategoryFilter(cat, btn) {
     categoryFilter = cat;
+    currentPage = 1;
     var pills = document.querySelectorAll('.cat-filter-pill');
     for (var i = 0; i < pills.length; i++) {
         pills[i].classList.remove('active', 'active-unclassified');
@@ -901,7 +926,7 @@ function setCategoryFilter(cat, btn) {
     }
 }
 
-function applyFilters() { renderAll(); }
+function applyFilters() { currentPage = 1; renderAll(); }
 
 function getFilteredFeatures() {
     var minImp = parseInt(document.getElementById('importance-filter').value);
@@ -962,46 +987,130 @@ function renderAll() {
     var asanaOnly = result.asanaOnly;
     var prevExpanded = expandedId;
 
+    var allFiltered = classified.concat(unclassified).concat(asanaOnly);
+    var totalFiltered = allFiltered.length;
+
     list.innerHTML = '';
 
-    if (classified.length === 0 && unclassified.length === 0 && asanaOnly.length === 0) {
+    if (totalFiltered === 0) {
         list.innerHTML = '<div class="empty-state" style="display:block;"><h3>No features match current filters</h3><p>Try adjusting the category or importance filter.</p></div>';
+        renderPagination(0, 0, 0);
         return;
     }
 
-    for (var i = 0; i < classified.length; i++) {
-        var card = buildCard(classified[i], false);
-        if (classified[i].id === prevExpanded) card.classList.add('expanded');
+    var totalPages = perPage === 0 ? 1 : Math.ceil(totalFiltered / perPage);
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    var startIdx = perPage === 0 ? 0 : (currentPage - 1) * perPage;
+    var endIdx = perPage === 0 ? totalFiltered : Math.min(startIdx + perPage, totalFiltered);
+
+    var classifiedEnd = classified.length;
+    var unclassifiedEnd = classifiedEnd + unclassified.length;
+    var addedUnclDivider = false;
+    var addedAoDivider = false;
+
+    for (var idx = startIdx; idx < endIdx; idx++) {
+        if (!addedUnclDivider && unclassified.length > 0 && idx >= classifiedEnd && idx < unclassifiedEnd) {
+            addedUnclDivider = true;
+            var divider = document.createElement('div');
+            divider.className = 'section-divider';
+            divider.innerHTML = '<span class="section-divider-label">Needs Classification (' + unclassified.length + ')</span><div class="section-divider-line"></div>';
+            list.appendChild(divider);
+        }
+        if (!addedAoDivider && asanaOnly.length > 0 && idx >= unclassifiedEnd) {
+            addedAoDivider = true;
+            var aoDivider = document.createElement('div');
+            aoDivider.className = 'section-divider';
+            aoDivider.innerHTML = '<span class="section-divider-label">Not Yet Announced (' + asanaOnly.length + ')</span><div class="section-divider-line"></div>';
+            list.appendChild(aoDivider);
+        }
+
+        var f = allFiltered[idx];
+        var isUncl = idx >= classifiedEnd && idx < unclassifiedEnd;
+        var isAo = idx >= unclassifiedEnd;
+        var card = buildCard(f, isUncl || (isAo && !f.classification));
+        if (f.id === prevExpanded) card.classList.add('expanded');
         list.appendChild(card);
     }
 
-    if (unclassified.length > 0) {
-        var divider = document.createElement('div');
-        divider.className = 'section-divider';
-        divider.innerHTML = '<span class="section-divider-label">Needs Classification (' + unclassified.length + ')</span><div class="section-divider-line"></div>';
-        list.appendChild(divider);
-
-        for (var j = 0; j < unclassified.length; j++) {
-            var ucard = buildCard(unclassified[j], true);
-            if (unclassified[j].id === prevExpanded) ucard.classList.add('expanded');
-            list.appendChild(ucard);
-        }
-    }
-
-    if (asanaOnly.length > 0) {
-        var aoDivider = document.createElement('div');
-        aoDivider.className = 'section-divider';
-        aoDivider.innerHTML = '<span class="section-divider-label">Not Yet Announced (' + asanaOnly.length + ')</span><div class="section-divider-line"></div>';
-        list.appendChild(aoDivider);
-
-        for (var k = 0; k < asanaOnly.length; k++) {
-            var aoCard = buildCard(asanaOnly[k], !asanaOnly[k].classification);
-            if (asanaOnly[k].id === prevExpanded) aoCard.classList.add('expanded');
-            list.appendChild(aoCard);
-        }
-    }
-
+    renderPagination(totalFiltered, startIdx + 1, endIdx);
     attachShowMore();
+}
+
+function renderPagination(total, startNum, endNum) {
+    var existing = document.getElementById('pagination-controls');
+    if (existing) existing.remove();
+
+    if (total <= 0) return;
+
+    var totalPages = perPage === 0 ? 1 : Math.ceil(total / perPage);
+    var wrap = document.createElement('div');
+    wrap.id = 'pagination-controls';
+    wrap.className = 'pagination-controls';
+
+    var info = '<span class="pagination-info">Showing ' + startNum + '-' + endNum + ' of ' + total + ' features</span>';
+
+    var perPageSelect = '<span class="pagination-perpage"><select id="perpage-select" onchange="changePerPage(this.value)">' +
+        '<option value="25"' + (perPage === 25 ? ' selected' : '') + '>25 per page</option>' +
+        '<option value="50"' + (perPage === 50 ? ' selected' : '') + '>50 per page</option>' +
+        '<option value="100"' + (perPage === 100 ? ' selected' : '') + '>100 per page</option>' +
+        '<option value="0"' + (perPage === 0 ? ' selected' : '') + '>All</option>' +
+        '</select></span>';
+
+    if (totalPages <= 1) {
+        wrap.innerHTML = '<div class="pagination-row">' + info + perPageSelect + '</div>';
+        document.getElementById('feature-list').after(wrap);
+        return;
+    }
+
+    var buttons = '';
+    buttons += '<button class="pg-btn' + (currentPage === 1 ? ' disabled' : '') + '" onclick="goToPage(1)">&laquo;</button>';
+    buttons += '<button class="pg-btn' + (currentPage === 1 ? ' disabled' : '') + '" onclick="goToPage(' + (currentPage - 1) + ')">&lsaquo;</button>';
+
+    var startPage = Math.max(1, currentPage - 2);
+    var endPage = Math.min(totalPages, currentPage + 2);
+    if (startPage > 1) buttons += '<span class="pg-ellipsis">...</span>';
+    for (var p = startPage; p <= endPage; p++) {
+        buttons += '<button class="pg-btn pg-num' + (p === currentPage ? ' pg-active' : '') + '" onclick="goToPage(' + p + ')">' + p + '</button>';
+    }
+    if (endPage < totalPages) buttons += '<span class="pg-ellipsis">...</span>';
+
+    buttons += '<button class="pg-btn' + (currentPage === totalPages ? ' disabled' : '') + '" onclick="goToPage(' + (currentPage + 1) + ')">&rsaquo;</button>';
+    buttons += '<button class="pg-btn' + (currentPage === totalPages ? ' disabled' : '') + '" onclick="goToPage(' + totalPages + ')">&raquo;</button>';
+
+    wrap.innerHTML = '<div class="pagination-row">' + info + '<div class="pg-buttons">' + buttons + '</div>' + perPageSelect + '</div>';
+    document.getElementById('feature-list').after(wrap);
+}
+
+function goToPage(page) {
+    var result = getFilteredFeatures();
+    var total = result.classified.length + result.unclassified.length + result.asanaOnly.length;
+    var totalPages = perPage === 0 ? 1 : Math.ceil(total / perPage);
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    renderAll();
+    var listEl = document.getElementById('feature-list');
+    listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function changePerPage(val) {
+    var v = parseInt(val);
+    if (v === 0) {
+        var result = getFilteredFeatures();
+        var total = result.classified.length + result.unclassified.length + result.asanaOnly.length;
+        if (total > 100) {
+            if (!confirm('Loading all ' + total + ' features on one page may be slow. Continue?')) {
+                document.getElementById('perpage-select').value = perPage.toString();
+                return;
+            }
+        }
+    }
+    perPage = v;
+    currentPage = 1;
+    renderAll();
+    var listEl = document.getElementById('feature-list');
+    listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function buildCard(f, isUnclassified) {

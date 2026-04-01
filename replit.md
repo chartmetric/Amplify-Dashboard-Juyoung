@@ -115,6 +115,8 @@ Product marketing autopilot that ingests feature data from multiple sources and 
   - `GET /api/classifier/keywords` — list all keywords with match/override counts
   - `POST /api/classifier/keywords` — add/remove keywords
   - `GET /api/classifier/tier-stats` — get auto-skipped/AI-classified/total counts
+- **Pagination**: Client-side pagination with `currentPage`/`perPage` (default 25); `renderAll()` slices filtered features; `renderPagination()` appends controls after feature list; per-page dropdown (25/50/100/All); page resets on filter/category changes; section dividers render within paginated view
+- **Feature IDs (manual)**: UUID-based (`manual-{uuid4.hex[:12]}`) to prevent collision when multiple features are added in rapid succession
 - **Multi-category**: classifier returns `categories` array (1-3) alongside primary `category`; category filter matches any; dashboard renders multiple category pills per card
 - **JSON parsing**: classifier strips markdown code blocks from Claude responses before parsing
 
