@@ -369,13 +369,7 @@
             font-size: 13px; font-family: inherit; outline: none; padding: 8px 0;
         }
         .paste-input::placeholder { color: #4a5a6a; }
-        .paste-btn {
-            background: #00C9A7; color: #0f1923; border: none; padding: 8px 16px;
-            border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;
-            white-space: nowrap; transition: background 0.15s;
-        }
-        .paste-btn:hover { background: #00e0bb; }
-        .paste-btn:disabled { opacity: 0.5; cursor: default; }
+
         .paste-status {
             font-size: 12px; margin: -6px 0 10px 0; padding: 0 4px;
         }
@@ -480,7 +474,6 @@
 
         <div class="paste-bar" id="paste-bar">
             <input type="text" id="paste-input" class="paste-input" placeholder="Paste Slack thread, Asana task, or GitHub PR URL... (or type a feature title)">
-            <button class="paste-btn" id="paste-btn" onclick="submitPasteBar()">Add +</button>
         </div>
         <div class="paste-status" id="paste-status" style="display:none;"></div>
 
@@ -1841,7 +1834,6 @@ document.getElementById('paste-input').addEventListener('keydown', function(e) {
 
 function submitPasteBar() {
     var input = document.getElementById('paste-input');
-    var btn = document.getElementById('paste-btn');
     var status = document.getElementById('paste-status');
     var val = input.value.trim();
     if (!val) return;
@@ -1854,11 +1846,10 @@ function submitPasteBar() {
     else if (isAsana) loadingMsg = 'Loading Asana task...';
     else if (isGithub) loadingMsg = 'Parsing PR...';
 
+    input.disabled = true;
     status.textContent = loadingMsg;
     status.className = 'paste-status loading';
     status.style.display = 'block';
-    btn.disabled = true;
-    btn.textContent = '...';
 
     fetch('/api/features/from-url', {
         method: 'POST',
@@ -1867,8 +1858,7 @@ function submitPasteBar() {
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        btn.disabled = false;
-        btn.textContent = 'Add +';
+        input.disabled = false;
 
         var features = [];
         if (data.results) {
@@ -1911,8 +1901,7 @@ function submitPasteBar() {
         }, 2500);
     })
     .catch(function(err) {
-        btn.disabled = false;
-        btn.textContent = 'Add +';
+        input.disabled = false;
         status.textContent = 'Error: ' + err.message;
         status.className = 'paste-status error';
     });
