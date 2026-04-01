@@ -1,0 +1,95 @@
+The current architecture starts from Asana and tries to match to Slack. This causes tasks to be missed due to project config, section filtering, and completion status filtering. We need to FLIP the data flow: Slack is the source of truth, Asana enriches it.
+
+REWRITE the feature ingestion pipeline with this new flow:
+
+1. PRIMARY SOURCE: SLACK #product-updates (last 30 days)
+
+   Step 1: Pull ALL messages from #product-updates from the last 30 days
+   Step 2: Parse each release message. Format is typically:
+     "Chartmetric Production Release - FE - v20260330-6 / BE - v20260330-3"
+     • PE: Feature Name Here
+     • Devin: Another Feature Name
+     • #10808 feat: some feature description
+   
+   Step 3: Extract each bullet point as a separate feature:
+   - title: the feature name (strip "PE: ", "Devin: ", "#NNNNN feat: " prefixes)
+   - source_prefix: "PE" or "Devin" or PR number (keep as metadata)
+   - release_version: FE and BE version from parent message
+   - release_date: timestamp of the Slack message
+   - slack_message_url: permalink to the message
+   - released: true (if it's in #product-updates, it shipped)
+   
+   Step 4: For each bullet, also scan the Slack message AND its thread replies for:
+   - Asana task URLs (https://app.asana.com/...)
+   - GitHub PR URLs (https://github.com/...)
+   - Any emoji reactions on the parent message (keep as reactions_breakdown)
+
+2. ENRICHMENT: ASANA (secondary, not primary)
+
+   For each Slack-extracted feature, try to find the matching Asana task:
+   
+   Method 1 — URL match: If an Asana URL was found in the Slack message/thread, fetch that task directly by ID. This is the most reliable match.
+   
+   Method 2 — Search: If no Asana URL, use the Asana search API (GET /workspaces/{workspace}/tasks/search?text=...) to search across ALL projects (not just configured ones) for the feature title. Use fuzzy matching — normalize both sides (lowercase, strip prefixes, strip punctuation).
+   
+   Method 3 — No match: If no Asana task found, that's OK. The feature still shows up from Slack data alone. Mark as asana_linked: false.
+   
+   If Asana task IS found, pull and attach:
+   - Full description (notes field)
+   - Custom fields (engineer, assignee, team, urgency_score — whatever exists)
+   - Subtasks list
+   - Comments (for additional context)
+   - Project and section info
+   - Completion status
+   
+   This means we NO LONGER need the PROJECTS config or section filtering for the main pipeline. Any Asana task can be found via search, regardless of which project it's in.
+
+3. REMOVE THE OLD PRE-FILTER:
+
+   The current code has a keyword pre-filter that auto-skips tasks with words like "fix", "bug", "refactor", "cleanup", "minor" and classifies them as low-value without sending to Claude. REMOVE this entirely. 
+   
+   Reason: "PE: Bring Genius Charts" might contain the word pattern of a minor task but it's actually a major new feature. The AI classifier should make that judgment, not keyword matching. Let Claude classify everything.
+   
+   If we need to save Claude API calls, the ONLY acceptable pre-filter is: skip Slack messages that are bot messages, thread replies that are just emoji reactions, or messages that are clearly not release announcements (no bullet points, no version numbers).
+
+4. UPDATE /api/features/all:
+   - Call the new Slack-first pipeline
+   - Return ALL features from #product-updates (last 30 days)
+   - Each feature should have:
+   {
+       "id": "slack-{message_ts}-{index}",
+       "title": "Bring Genius Charts",
+       "description": "{asana description if found, otherwise slack message text}",
+       "source": "slack+asana" or "slack_only",
+       "source_prefix": "PE",
+       "release_date": "2026-03-30",
+       "release_version": {"fe": "v20260330-6", "be": "v20260330-3"},
+       "released": true,
+       "slack_url": "https://chartmetric.slack.com/...",
+       "asana_url": "https://app.asana.com/..." or null,
+       "github_url": "https://github.com/..." or null,
+       "asana_linked": true/false,
+       "reactions_breakdown": {"rocket": 5, "fire": 3},
+       "total_reactions": 8,
+       "engineer": "from asana custom field if available",
+       "assignee": "from asana custom field if available",
+       "urgency_score": null
+   }
+   - Add ?days=30 query parameter (default 30, configurable)
+
+5. UPDATE THE DASHBOARD CARDS to show the new source metadata:
+   - Show a source pill on each card: "Slack + Asana" (teal) or "Slack only" (yellow)
+   - Show the release version as a small badge (e.g., "FE v20260330-6")
+   - Show source_prefix as a subtle label (e.g., "PE" or "Devin")
+   - If asana_linked is false, show a subtle "No Asana task linked" note in the expanded view
+   - Slack URL and Asana URL should be clickable links in the expanded card view
+
+6. UPDATE /api/features/debug to show the new pipeline:
+   - Total Slack messages in #product-updates (last 30 days)
+   - Total individual features extracted from bullets
+   - Asana matches found (with match method: url/search/none)
+   - Features with no Asana match (slack_only)
+   - Any parsing errors or skipped messages
+
+7. KEEP ASANA-ONLY AS SECONDARY:
+   After the Slack-first pipeline runs, also check: are there Asana tasks from the last 30 days (across all configured projects) that were NOT mentioned in #product-updates? If yes, include them with source: "asana_only" — these might be features in progress or released through a different channel. Show them in a separate "Not yet announced" section at the bottom of the feature list.
