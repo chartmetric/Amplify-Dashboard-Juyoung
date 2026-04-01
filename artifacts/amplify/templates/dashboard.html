@@ -169,10 +169,10 @@
             display: flex; align-items: center; justify-content: center; border: 1px solid #2a3a4a;
         }
         .score-popover {
-            position: absolute; top: 0; left: 52px; background: #1a2733;
-            border: 1px solid #4a6a8a; border-radius: 10px; padding: 6px;
-            display: flex; flex-direction: column; gap: 4px; z-index: 400;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            position: absolute; top: 0; left: 52px; background: #0f1923;
+            border: 1px solid #2a3a4a; border-radius: 10px; padding: 6px;
+            display: flex; flex-direction: column; gap: 4px; z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.2);
         }
         .score-option {
             width: 36px; height: 36px; border-radius: 8px; display: flex;
@@ -1336,25 +1336,35 @@ function showReasonInput(fid, f, c) {
         });
     }
 
-    function doSaveAndRemove() {
-        doSave();
+    function cleanup() {
         document.removeEventListener('click', outsideClickHandler);
+    }
+
+    function dismissWithoutReason() {
+        cleanup();
+        commitOverride(f, c, '', function() {
+            row.remove();
+            var confirm = document.createElement('div');
+            confirm.className = 'override-confirm';
+            confirm.textContent = '\u2713 AI will learn from this';
+            cardBody.appendChild(confirm);
+        });
     }
 
     function outsideClickHandler(e) {
         if (row.contains(e.target)) return;
         if (input.value.trim() === '') {
-            doSaveAndRemove();
+            dismissWithoutReason();
         }
     }
 
-    saveBtn.addEventListener('click', function(e) { e.stopPropagation(); document.removeEventListener('click', outsideClickHandler); doSave(); });
+    saveBtn.addEventListener('click', function(e) { e.stopPropagation(); cleanup(); doSave(); });
     input.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { e.stopPropagation(); document.removeEventListener('click', outsideClickHandler); doSave(); return; }
+        if (e.key === 'Enter') { e.stopPropagation(); cleanup(); doSave(); return; }
         if (e.key === 'Escape') {
             e.stopPropagation();
             if (input.value.trim() === '') {
-                doSaveAndRemove();
+                dismissWithoutReason();
             } else {
                 input.value = '';
             }

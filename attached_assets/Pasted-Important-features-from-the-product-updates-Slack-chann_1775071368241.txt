@@ -1,0 +1,64 @@
+Important features from the #product-updates Slack channel are NOT showing up in the dashboard. Here's what I found manually scrolling through the last month of #product-updates — none of these appeared:
+
+- Devin: Redesign chart summary section for compact layout
+- PE: Bring Genius Charts
+- Devin: Expand Shortlist Pages to Include Track Shortlists
+- Devin: Show More IQ Data (verified, avg. reels plays, recent posts/sponsored posts, etc.) on Artist Page Instagram Tab
+- PE: Artist Stats & Trends Redesign
+- #10808 feat: migrate influencers table to CMTable and add preview modal
+- Devin: UI Improvements for Charts Page
+- PE: Bring "AI Artist" Tag onto Artist List filter
+- PE: Create Estimated Social Audience and Streaming Audience for Artist
+- PE: Add Current State Playlist Comparison Option to Playlist Overlap Component
+
+The issue is likely in how the Slack adapter and Asana adapter find and match tasks. Fix the following:
+
+1. SLACK ADAPTER — improve message parsing from #product-updates:
+
+   The release messages in #product-updates follow this format:
+   "Chartmetric Production Release - FE - v20260330-6 / BE - v20260330-3"
+   followed by bullet points like:
+   • PE: Bring Genius Charts
+   • Devin: Redesign chart summary section for compact layout
+
+   Update the Slack adapter to:
+   - Parse EACH bullet point as a separate feature/task (not just the parent message)
+   - Extract the task name by stripping prefixes like "PE: ", "Devin: ", "#NNNNN feat: " — keep these as metadata (source: "PE" or "Devin" or PR number)
+   - Extract the version numbers from the parent message (FE version, BE version) and attach to each bullet as release_version metadata
+   - Extract the release date from the message timestamp
+   - Look for Asana task URLs, GitHub PR URLs, or any other links in the message or thread replies — attach as metadata
+
+2. ASANA MATCHING — improve cross-referencing:
+
+   Current matching between Slack messages and Asana tasks is probably too strict (exact title match?). Improve it:
+   - Try fuzzy matching: normalize both titles (lowercase, strip prefixes like "PE:", "Devin:", strip punctuation) and check if one contains the other
+   - Also try matching by Asana task URL if present in the Slack message or thread
+   - Also try matching by keywords: split the Slack task name into significant words (3+ chars, skip stop words) and find Asana tasks that contain most of those words
+   - If a Slack feature has NO Asana match, still include it as a feature card — use the Slack message as the description. Mark it with source: "slack_only" so the UI can show a "Slack only — no Asana task linked" indicator
+
+3. ADD 30-DAY FILTER:
+
+   - Only pull Slack messages from the last 30 days from #product-updates
+   - For Asana tasks: pull tasks modified in the last 30 days (use modified_since parameter in the Asana API)
+   - Add a configurable query parameter: ?days=30 (default 30) on /api/features/all and /api/features/classified
+   - Show the date range in the dashboard status bar: "Showing features from Mar 1 - Apr 1, 2026"
+
+4. FEATURE DEDUPLICATION:
+
+   After combining Slack-sourced and Asana-sourced features, deduplicate:
+   - If a feature appears in both Slack and Asana (matched), merge them into one entry with data from both
+   - If a feature appears in Slack only, include it with source: "slack"
+   - If a feature appears in Asana only (not announced in #product-updates), include it with source: "asana"
+   - In the dashboard, show a source indicator on each card: small "Asana" pill, "Slack" pill, or "Asana + Slack" pill
+
+5. ADD DIAGNOSTIC LOGGING:
+
+   When /api/features/all is called, log:
+   - Total Slack messages parsed from #product-updates (last 30 days)
+   - Individual features extracted from Slack bullets
+   - Total Asana tasks pulled (last 30 days)
+   - Matches found (Slack ↔ Asana)
+   - Unmatched Slack features (slack_only)
+   - Unmatched Asana features (asana_only)
+   
+   Add endpoint GET /api/features/debug that returns this full breakdown as JSON so I can see exactly what's being found and missed.
