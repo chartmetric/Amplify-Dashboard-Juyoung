@@ -23,202 +23,88 @@
             top: 0;
             z-index: 100;
         }
-        .topbar-left {
-            display: flex;
-            align-items: baseline;
-            gap: 12px;
-        }
-        .logo {
-            font-size: 22px;
-            font-weight: 700;
-            color: #ffffff;
-            letter-spacing: -0.5px;
-        }
+        .topbar-left { display: flex; align-items: baseline; gap: 12px; }
+        .logo { font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px; }
         .logo-emoji { margin-right: 4px; }
-        .subtitle {
-            font-size: 13px;
-            color: #8899aa;
-            font-weight: 400;
-        }
-        .topbar-right {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
+        .subtitle { font-size: 13px; color: #8899aa; font-weight: 400; }
+        .topbar-right { display: flex; align-items: center; gap: 16px; }
         .btn-primary {
-            background: #00C9A7;
-            color: #0f1923;
-            border: none;
-            padding: 8px 18px;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
+            background: #00C9A7; color: #0f1923; border: none; padding: 8px 18px;
+            border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
             transition: background 0.2s, transform 0.1s;
         }
         .btn-primary:hover { background: #00e0bb; transform: translateY(-1px); }
-        .btn-primary:active { transform: translateY(0); }
         .btn-outline {
-            background: transparent;
-            color: #00C9A7;
-            border: 1px solid #00C9A7;
-            padding: 8px 18px;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s, border-color 0.2s;
+            background: transparent; color: #00C9A7; border: 1px solid #00C9A7;
+            padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+            cursor: pointer; transition: background 0.2s;
         }
         .btn-outline:hover { background: rgba(0,201,167,0.1); }
-        .health-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #555;
-            display: inline-block;
-            transition: background 0.3s;
-        }
+        .health-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; display: inline-block; }
         .health-dot.ok { background: #00C9A7; box-shadow: 0 0 6px rgba(0,201,167,0.5); }
-        .health-dot.err { background: #ff4d4d; box-shadow: 0 0 6px rgba(255,77,77,0.4); }
-        .health-label {
-            font-size: 12px;
-            color: #8899aa;
-        }
-        .main {
-            max-width: 960px;
-            margin: 0 auto;
-            padding: 32px 24px;
-        }
-        .section-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-        .section-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: #ffffff;
-        }
-        .filter-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .filter-label {
-            font-size: 13px;
-            color: #8899aa;
-        }
-        select {
-            background: #1a2733;
-            color: #e0e0e0;
-            border: 1px solid #2a3a4a;
-            border-radius: 6px;
-            padding: 6px 12px;
-            font-size: 13px;
-            cursor: pointer;
-            outline: none;
-        }
+        .health-dot.err { background: #ff4d4d; }
+        .health-label { font-size: 12px; color: #8899aa; }
+        .main { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .section-title { font-size: 20px; font-weight: 700; color: #ffffff; }
+        .filter-row { display: flex; align-items: center; gap: 10px; }
+        .filter-label { font-size: 13px; color: #8899aa; }
+        select { background: #1a2733; color: #e0e0e0; border: 1px solid #2a3a4a; border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; outline: none; }
         select:focus { border-color: #00C9A7; }
-        .stats-row {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 20px;
-            font-size: 12px;
-            color: #8899aa;
-            flex-wrap: wrap;
-        }
-        .stats-row span {
-            background: #1a2733;
-            padding: 4px 10px;
-            border-radius: 6px;
-            border: 1px solid #2a3a4a;
-        }
-        .feature-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
+        .stats-row { display: flex; gap: 8px; margin-bottom: 20px; font-size: 12px; color: #8899aa; flex-wrap: wrap; }
+        .stats-row span { background: #1a2733; padding: 4px 10px; border-radius: 6px; border: 1px solid #2a3a4a; }
+        .feature-list { display: flex; flex-direction: column; gap: 12px; }
         .feature-card {
-            background: #1a2733;
-            border: 1px solid #2a3a4a;
-            border-radius: 12px;
-            padding: 20px;
-            transition: border-color 0.2s, box-shadow 0.2s;
-            cursor: pointer;
+            background: #1a2733; border: 1px solid #2a3a4a; border-radius: 12px;
+            padding: 20px; transition: border-color 0.2s, box-shadow 0.2s; cursor: pointer;
         }
-        .feature-card:hover {
-            border-color: #3a4a5a;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        }
-        .feature-card.expanded {
-            border-color: #00C9A7;
-            box-shadow: 0 4px 24px rgba(0,201,167,0.1);
-        }
-        .card-top {
-            display: flex;
-            align-items: flex-start;
-            gap: 16px;
-        }
+        .feature-card:hover { border-color: #3a4a5a; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        .feature-card.expanded { border-color: #00C9A7; box-shadow: 0 4px 24px rgba(0,201,167,0.1); }
+        .card-top { display: flex; align-items: flex-start; gap: 16px; }
         .score-badge {
-            min-width: 44px;
-            height: 44px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            font-weight: 800;
-            flex-shrink: 0;
+            min-width: 44px; height: 44px; border-radius: 10px; display: flex;
+            align-items: center; justify-content: center; font-size: 20px; font-weight: 800;
+            flex-shrink: 0; cursor: pointer; position: relative; transition: transform 0.1s;
         }
+        .score-badge:hover { transform: scale(1.08); }
         .score-5 { background: rgba(0,201,167,0.15); color: #00C9A7; }
         .score-4 { background: rgba(59,130,246,0.15); color: #3b82f6; }
         .score-3 { background: rgba(234,179,8,0.15); color: #eab308; }
         .score-2 { background: rgba(249,115,22,0.15); color: #f97316; }
         .score-1 { background: rgba(107,114,128,0.15); color: #6b7280; }
         .score-0 { background: rgba(107,114,128,0.1); color: #4b5563; }
-        .card-body {
-            flex: 1;
-            min-width: 0;
+        .override-indicator {
+            position: absolute; top: -4px; right: -4px; font-size: 10px;
+            background: #1a2733; border-radius: 50%; width: 16px; height: 16px;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid #2a3a4a;
         }
-        .card-title-row {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 6px;
+        .score-popover {
+            position: absolute; top: 0; left: 52px; background: #1a2733;
+            border: 1px solid #2a3a4a; border-radius: 10px; padding: 6px;
+            display: flex; flex-direction: column; gap: 4px; z-index: 50;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
         }
-        .card-title {
-            font-size: 15px;
-            font-weight: 600;
-            color: #ffffff;
-            line-height: 1.3;
+        .score-option {
+            width: 36px; height: 36px; border-radius: 8px; display: flex;
+            align-items: center; justify-content: center; font-size: 16px;
+            font-weight: 800; cursor: pointer; border: 2px solid transparent;
+            transition: transform 0.1s, border-color 0.15s;
         }
-        .chevron {
-            font-size: 12px;
-            color: #8899aa;
-            transition: transform 0.2s;
-            flex-shrink: 0;
-            margin-top: 3px;
-        }
-        .feature-card.expanded .chevron {
-            transform: rotate(180deg);
-        }
-        .card-meta {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-            flex-wrap: wrap;
-        }
+        .score-option:hover { transform: scale(1.1); }
+        .score-option.active { border-color: #ffffff; }
+        .card-body { flex: 1; min-width: 0; }
+        .card-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+        .card-title { font-size: 15px; font-weight: 600; color: #ffffff; line-height: 1.3; }
+        .chevron { font-size: 12px; color: #8899aa; transition: transform 0.2s; flex-shrink: 0; margin-top: 3px; }
+        .feature-card.expanded .chevron { transform: rotate(180deg); }
+        .card-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; position: relative; }
         .category-pill {
-            font-size: 11px;
-            font-weight: 600;
-            padding: 2px 10px;
-            border-radius: 99px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 99px;
+            text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
+            transition: opacity 0.15s;
         }
+        .category-pill:hover { opacity: 0.8; }
         .cat-new_feature { background: rgba(0,201,167,0.15); color: #00C9A7; }
         .cat-improvement { background: rgba(59,130,246,0.15); color: #3b82f6; }
         .cat-bug_fix { background: rgba(239,68,68,0.15); color: #ef4444; }
@@ -226,310 +112,115 @@
         .cat-mobile { background: rgba(168,85,247,0.15); color: #a855f7; }
         .cat-deprecation { background: rgba(249,115,22,0.15); color: #f97316; }
         .cat-default { background: rgba(107,114,128,0.15); color: #8899aa; }
-        .pre-filter-badge {
-            font-size: 10px;
-            padding: 2px 8px;
-            border-radius: 99px;
-            background: rgba(107,114,128,0.15);
-            color: #6b7280;
+        .pre-filter-badge { font-size: 10px; padding: 2px 8px; border-radius: 99px; background: rgba(107,114,128,0.15); color: #6b7280; }
+        .cat-popover {
+            position: absolute; top: 100%; left: 0; margin-top: 6px;
+            background: #1a2733; border: 1px solid #2a3a4a; border-radius: 10px;
+            padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 50;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4); min-width: 280px;
         }
-        .card-summary {
-            font-size: 13px;
-            color: #8899aa;
-            line-height: 1.4;
-            margin-bottom: 10px;
+        .cat-toggle {
+            font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 99px;
+            text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
+            border: 1px solid #2a3a4a; background: transparent; color: #8899aa;
+            transition: all 0.15s; display: flex; align-items: center; gap: 4px;
         }
-        .card-bottom-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-        }
-        .channel-pills {
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-            flex: 1;
-        }
-        .channel-pill {
-            font-size: 11px;
-            padding: 2px 8px;
-            border-radius: 99px;
-            border: 1px solid #2a3a4a;
-            color: #8899aa;
-        }
+        .cat-toggle:hover { border-color: #3a4a5a; color: #e0e0e0; }
+        .cat-toggle.selected { border-color: transparent; }
+        .cat-toggle.selected.sel-new_feature { background: rgba(0,201,167,0.25); color: #00C9A7; border-color: #00C9A7; }
+        .cat-toggle.selected.sel-improvement { background: rgba(59,130,246,0.25); color: #3b82f6; border-color: #3b82f6; }
+        .cat-toggle.selected.sel-bug_fix { background: rgba(239,68,68,0.25); color: #ef4444; border-color: #ef4444; }
+        .cat-toggle.selected.sel-infrastructure { background: rgba(107,114,128,0.25); color: #6b7280; border-color: #6b7280; }
+        .cat-toggle.selected.sel-mobile { background: rgba(168,85,247,0.25); color: #a855f7; border-color: #a855f7; }
+        .cat-toggle.selected.sel-deprecation { background: rgba(249,115,22,0.25); color: #f97316; border-color: #f97316; }
+        .cat-check { font-size: 10px; }
+        .card-summary { font-size: 13px; color: #8899aa; line-height: 1.4; margin-bottom: 10px; }
+        .card-bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .channel-pills { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+        .channel-pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid #2a3a4a; color: #8899aa; }
         .btn-generate {
-            background: #00C9A7;
-            color: #0f1923;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
-            flex-shrink: 0;
+            background: #00C9A7; color: #0f1923; border: none; padding: 10px 20px;
+            border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;
+            white-space: nowrap; transition: background 0.2s, transform 0.1s, box-shadow 0.2s; flex-shrink: 0;
         }
-        .btn-generate:hover {
-            background: #00e0bb;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,201,167,0.3);
-        }
-        .btn-generate:active { transform: translateY(0); box-shadow: none; }
+        .btn-generate:hover { background: #00e0bb; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,201,167,0.3); }
         .card-expanded-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.25s ease-out, opacity 0.2s ease-out;
-            opacity: 0;
+            max-height: 0; overflow: hidden;
+            transition: max-height 0.25s ease-out, opacity 0.2s ease-out; opacity: 0;
         }
         .feature-card.expanded .card-expanded-content {
-            max-height: 600px;
-            opacity: 1;
+            max-height: 800px; opacity: 1;
             transition: max-height 0.3s ease-in, opacity 0.25s ease-in;
         }
         .desc-block {
-            margin-top: 14px;
-            padding: 12px 16px;
-            border-left: 3px solid #00C9A7;
-            background: rgba(0,201,167,0.03);
-            border-radius: 0 8px 8px 0;
-            font-size: 14px;
-            color: #e0e0e0;
-            line-height: 1.5;
-            white-space: pre-wrap;
-            word-wrap: break-word;
+            margin-top: 14px; padding: 12px 16px; border-left: 3px solid #00C9A7;
+            background: rgba(0,201,167,0.03); border-radius: 0 8px 8px 0;
+            font-size: 14px; color: #e0e0e0; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word;
         }
-        .show-more-link {
-            color: #00C9A7;
-            cursor: pointer;
-            font-size: 13px;
-            margin-top: 6px;
-            display: inline-block;
-        }
+        .show-more-link { color: #00C9A7; cursor: pointer; font-size: 13px; margin-top: 6px; display: inline-block; }
         .show-more-link:hover { text-decoration: underline; }
-        .meta-pills {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 12px;
-        }
-        .meta-pill {
-            font-size: 11px;
-            padding: 3px 10px;
-            border-radius: 99px;
-            background: #0f1923;
-            border: 1px solid #2a3a4a;
-            color: #8899aa;
-        }
+        .meta-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+        .meta-pill { font-size: 11px; padding: 3px 10px; border-radius: 99px; background: #0f1923; border: 1px solid #2a3a4a; color: #8899aa; }
         .meta-pill.released { border-color: rgba(0,201,167,0.3); color: #00C9A7; }
         .meta-pill.in-progress { border-color: rgba(234,179,8,0.3); color: #eab308; }
-        .override-link {
-            font-size: 12px;
-            color: #8899aa;
-            cursor: pointer;
-            margin-top: 12px;
-            display: inline-block;
-            transition: color 0.15s;
+        .override-reason-row {
+            display: flex; align-items: center; gap: 8px; margin-top: 10px;
+            animation: slideIn 0.2s ease-out;
         }
-        .override-link:hover { color: #00C9A7; }
-        .override-form {
-            margin-top: 12px;
-            padding: 14px;
-            background: #0f1923;
-            border: 1px solid #2a3a4a;
-            border-radius: 10px;
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+        .override-reason-input {
+            flex: 1; background: #0f1923; color: #e0e0e0; border: 1px solid #2a3a4a;
+            border-radius: 6px; padding: 6px 10px; font-size: 12px; outline: none; font-family: inherit;
         }
-        .override-form .form-row {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 10px;
-            align-items: center;
-            flex-wrap: wrap;
+        .override-reason-input:focus { border-color: #00C9A7; }
+        .btn-save-reason {
+            background: #00C9A7; color: #0f1923; border: none; padding: 6px 14px;
+            border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
         }
-        .override-form label {
-            font-size: 12px;
-            color: #8899aa;
-            min-width: 70px;
+        .btn-save-reason:hover { background: #00e0bb; }
+        .override-confirm { font-size: 11px; color: #00C9A7; margin-top: 6px; animation: fadeOut 2s ease-out forwards; }
+        @keyframes fadeOut { 0%,60% { opacity: 1; } 100% { opacity: 0; } }
+        .tooltip {
+            position: absolute; background: #0f1923; border: 1px solid #2a3a4a; color: #8899aa;
+            font-size: 11px; padding: 4px 8px; border-radius: 6px; white-space: nowrap;
+            pointer-events: none; z-index: 60; bottom: 100%; left: 50%; transform: translateX(-50%);
+            margin-bottom: 4px;
         }
-        .override-form select, .override-form input {
-            background: #1a2733;
-            color: #e0e0e0;
-            border: 1px solid #2a3a4a;
-            border-radius: 6px;
-            padding: 6px 10px;
-            font-size: 13px;
-            outline: none;
-        }
-        .override-form select:focus, .override-form input:focus { border-color: #00C9A7; }
-        .override-form input { flex: 1; min-width: 180px; }
-        .override-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 10px;
-        }
-        .btn-save-override {
-            background: #00C9A7;
-            color: #0f1923;
-            border: none;
-            padding: 6px 16px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .btn-save-override:hover { background: #00e0bb; }
-        .btn-cancel-override {
-            background: transparent;
-            color: #8899aa;
-            border: 1px solid #2a3a4a;
-            padding: 6px 16px;
-            border-radius: 6px;
-            font-size: 12px;
-            cursor: pointer;
-        }
-        .btn-cancel-override:hover { background: rgba(255,255,255,0.05); }
-        .toast {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            background: #1a2733;
-            border: 1px solid #00C9A7;
-            color: #e0e0e0;
-            padding: 12px 20px;
-            border-radius: 10px;
-            font-size: 13px;
-            z-index: 300;
-            opacity: 0;
-            transform: translateY(10px);
-            transition: opacity 0.2s, transform 0.2s;
-            pointer-events: none;
-        }
-        .toast.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-        .toast.warning { border-color: #eab308; }
-        .loading-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 80px 0;
-            gap: 16px;
-        }
-        .spinner {
-            width: 36px;
-            height: 36px;
-            border: 3px solid #2a3a4a;
-            border-top-color: #00C9A7;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
+        .loading-container { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 0; gap: 16px; }
+        .spinner { width: 36px; height: 36px; border: 3px solid #2a3a4a; border-top-color: #00C9A7; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .loading-text {
-            font-size: 14px;
-            color: #8899aa;
-        }
-        .empty-state, .error-state {
-            text-align: center;
-            padding: 60px 20px;
-        }
-        .empty-state h3, .error-state h3 {
-            color: #ffffff;
-            font-size: 16px;
-            margin-bottom: 8px;
-        }
-        .empty-state p, .error-state p {
-            color: #8899aa;
-            font-size: 13px;
-        }
-        .error-state p { color: #ff6b6b; }
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.6);
-            z-index: 200;
-            align-items: center;
-            justify-content: center;
-        }
+        .loading-text { font-size: 14px; color: #8899aa; }
+        .empty-state, .error-state { text-align: center; padding: 60px 20px; }
+        .empty-state h3, .error-state h3 { color: #ffffff; font-size: 16px; margin-bottom: 8px; }
+        .empty-state p { color: #8899aa; font-size: 13px; }
+        .error-state p { color: #ff6b6b; font-size: 13px; }
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; align-items: center; justify-content: center; }
         .modal-overlay.open { display: flex; }
-        .modal {
-            background: #1a2733;
-            border: 1px solid #2a3a4a;
-            border-radius: 14px;
-            padding: 28px;
-            width: 90%;
-            max-width: 540px;
-            max-height: 85vh;
-            overflow-y: auto;
-        }
-        .modal h2 {
-            color: #ffffff;
-            font-size: 18px;
-            margin-bottom: 20px;
-        }
-        .modal label {
-            display: block;
-            font-size: 13px;
-            color: #8899aa;
-            margin-bottom: 6px;
-            margin-top: 14px;
-        }
-        .modal input, .modal textarea, .modal select {
-            width: 100%;
-            background: #0f1923;
-            color: #e0e0e0;
-            border: 1px solid #2a3a4a;
-            border-radius: 8px;
-            padding: 10px 12px;
-            font-size: 13px;
-            font-family: inherit;
-            outline: none;
-        }
+        .modal { background: #1a2733; border: 1px solid #2a3a4a; border-radius: 14px; padding: 28px; width: 90%; max-width: 540px; max-height: 85vh; overflow-y: auto; }
+        .modal h2 { color: #ffffff; font-size: 18px; margin-bottom: 20px; }
+        .modal label { display: block; font-size: 13px; color: #8899aa; margin-bottom: 6px; margin-top: 14px; }
+        .modal input, .modal textarea, .modal select { width: 100%; background: #0f1923; color: #e0e0e0; border: 1px solid #2a3a4a; border-radius: 8px; padding: 10px 12px; font-size: 13px; font-family: inherit; outline: none; }
         .modal input:focus, .modal textarea:focus { border-color: #00C9A7; }
         .modal textarea { resize: vertical; min-height: 80px; }
-        .modal-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 20px;
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .toast {
+            position: fixed; bottom: 24px; right: 24px; background: #1a2733;
+            border: 1px solid #00C9A7; color: #e0e0e0; padding: 12px 20px;
+            border-radius: 10px; font-size: 13px; z-index: 300;
+            opacity: 0; transform: translateY(10px); transition: opacity 0.2s, transform 0.2s; pointer-events: none;
         }
-        .category-filter-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-bottom: 16px;
-        }
+        .toast.visible { opacity: 1; transform: translateY(0); }
+        .toast.warning { border-color: #eab308; }
+        .category-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
         .cat-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            border-radius: 20px;
-            padding: 6px 14px;
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-            border: 1px solid #2a3a4a;
-            background: transparent;
-            color: #8899aa;
-            transition: background 0.15s, color 0.15s, border-color 0.15s;
-            white-space: nowrap;
+            display: inline-flex; align-items: center; gap: 6px; border-radius: 20px;
+            padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
+            border: 1px solid #2a3a4a; background: transparent; color: #8899aa;
+            transition: background 0.15s, color 0.15s, border-color 0.15s; white-space: nowrap;
         }
         .cat-pill:hover { border-color: #3a4a5a; color: #e0e0e0; }
-        .cat-pill-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-        .cat-pill.active-all {
-            background: #2a3a4a;
-            color: #ffffff;
-            border-color: #3a4a5a;
-        }
+        .cat-pill-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .cat-pill.active-all { background: #2a3a4a; color: #ffffff; border-color: #3a4a5a; }
         .cat-pill.active-new_feature { background: #00C9A7; color: #ffffff; border-color: #00C9A7; }
         .cat-pill.active-improvement { background: #3b82f6; color: #ffffff; border-color: #3b82f6; }
         .cat-pill.active-bug_fix { background: #ef4444; color: #ffffff; border-color: #ef4444; }
@@ -552,7 +243,6 @@
             </div>
         </div>
     </div>
-
     <div class="main">
         <div class="section-header">
             <span class="section-title">Features</span>
@@ -567,9 +257,7 @@
                 </select>
             </div>
         </div>
-
         <div class="stats-row" id="stats-row" style="display:none;"></div>
-
         <div class="category-filter-row" id="category-filter-row" style="display:none;">
             <button class="cat-pill active-all" data-cat="all" onclick="filterByCategory('all')">
                 <span class="cat-pill-dot" style="background:#8899aa;"></span>
@@ -600,18 +288,14 @@
                 <span class="cat-pill-label">Deprecation</span>
             </button>
         </div>
-
         <div id="feature-list" class="feature-list"></div>
-
         <div id="loading" class="loading-container" style="display:none;">
             <div class="spinner"></div>
             <span class="loading-text">Classifying features with AI...</span>
         </div>
-
         <div id="empty-state" class="empty-state" style="display:none;"></div>
         <div id="error-state" class="error-state" style="display:none;"></div>
     </div>
-
     <div class="modal-overlay" id="manual-modal">
         <div class="modal">
             <h2>Manual Feature Input</h2>
@@ -632,24 +316,56 @@
             </div>
         </div>
     </div>
+    <div class="toast" id="toast"></div>
 
 <script>
 var allFeatures = [];
 var currentRequest = null;
 var expandedIdx = -1;
 var selectedCategory = 'all';
+var activePopover = null;
+var ALL_CATS = ['new_feature','improvement','bug_fix','infrastructure','mobile','deprecation'];
+var CAT_LABELS = {new_feature:'New Feature',improvement:'Improvement',bug_fix:'Bug Fix',infrastructure:'Infrastructure',mobile:'Mobile',deprecation:'Deprecation'};
+var CAT_COLORS = {new_feature:'#00C9A7',improvement:'#3b82f6',bug_fix:'#ef4444',infrastructure:'#6b7280',mobile:'#a855f7',deprecation:'#f97316'};
+var SCORE_COLORS = {5:'#00C9A7',4:'#3b82f6',3:'#eab308',2:'#f97316',1:'#6b7280',0:'#4b5563'};
+
+function getCategories(f) {
+    var c = f.classification || {};
+    if (c.categories && c.categories.length > 0) return c.categories.slice();
+    if (c.category) return [c.category];
+    return ['unknown'];
+}
+
+function featureMatchesCategory(f, cat) {
+    if (cat === 'all') return true;
+    return getCategories(f).indexOf(cat) !== -1;
+}
+
+function closeActivePopover() {
+    if (activePopover) {
+        if (activePopover._commitOnClose) activePopover._commitOnClose();
+        activePopover.remove();
+        activePopover = null;
+    }
+}
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.score-popover') && !e.target.closest('.score-badge') &&
+        !e.target.closest('.cat-popover') && !e.target.closest('.category-pill') &&
+        !e.target.closest('.card-meta')) {
+        closeActivePopover();
+    }
+});
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeActivePopover(); });
 
 function checkHealth() {
-    fetch('/api/health')
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            document.getElementById('health-dot').className = 'health-dot ok';
-            document.getElementById('health-label').textContent = 'Healthy';
-        })
-        .catch(function() {
-            document.getElementById('health-dot').className = 'health-dot err';
-            document.getElementById('health-label').textContent = 'Error';
-        });
+    fetch('/api/health').then(function(r){return r.json();}).then(function(){
+        document.getElementById('health-dot').className='health-dot ok';
+        document.getElementById('health-label').textContent='Healthy';
+    }).catch(function(){
+        document.getElementById('health-dot').className='health-dot err';
+        document.getElementById('health-label').textContent='Error';
+    });
 }
 
 function loadFeatures() {
@@ -659,7 +375,6 @@ function loadFeatures() {
     var empty = document.getElementById('empty-state');
     var errEl = document.getElementById('error-state');
     var stats = document.getElementById('stats-row');
-
     list.innerHTML = '';
     empty.style.display = 'none';
     errEl.style.display = 'none';
@@ -668,11 +383,9 @@ function loadFeatures() {
     loading.style.display = 'flex';
     expandedIdx = -1;
     selectedCategory = 'all';
-
     if (currentRequest) { currentRequest.abort(); }
     var controller = new AbortController();
     currentRequest = controller;
-
     fetch('/api/features/classified?limit=40&min_importance=' + minImp, { signal: controller.signal })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -680,14 +393,12 @@ function loadFeatures() {
             loading.style.display = 'none';
             if (data.error) throw new Error(data.error);
             allFeatures = data.classified_features || [];
-
             stats.innerHTML =
                 '<span>Total enriched: ' + (data.total_enriched || 0) + '</span>' +
                 '<span>Sent to Claude: ' + (data.sent_to_claude || '?') + '</span>' +
                 '<span>Pre-filtered: ' + (data.pre_filtered_skipped || 0) + '</span>' +
                 '<span>Showing: ' + allFeatures.length + '</span>';
             stats.style.display = 'flex';
-
             if (allFeatures.length === 0) {
                 empty.innerHTML = '<h3>No features found above importance level ' + minImp + '</h3><p>Try lowering the minimum importance filter.</p>';
                 empty.style.display = 'block';
@@ -706,18 +417,18 @@ function loadFeatures() {
         });
 }
 
-function toggleCard(idx) {
+function toggleCard(renderIdx) {
     var cards = document.querySelectorAll('.feature-card');
-    if (expandedIdx === idx) {
-        cards[idx].classList.remove('expanded');
+    if (expandedIdx === renderIdx) {
+        cards[renderIdx].classList.remove('expanded');
         expandedIdx = -1;
         return;
     }
     if (expandedIdx >= 0 && expandedIdx < cards.length) {
         cards[expandedIdx].classList.remove('expanded');
     }
-    cards[idx].classList.add('expanded');
-    expandedIdx = idx;
+    cards[renderIdx].classList.add('expanded');
+    expandedIdx = renderIdx;
 }
 
 function buildDescBlock(f) {
@@ -725,60 +436,43 @@ function buildDescBlock(f) {
     if (!desc) return '';
     var truncated = desc.length > 500;
     var displayDesc = truncated ? desc.substring(0, 500) + '...' : desc;
-    var html = '<div class="desc-block">' +
-        '<span class="desc-text">' + escHtml(displayDesc) + '</span>';
-    if (truncated) {
-        html += '<br><span class="show-more-link" data-full="' + escAttr(desc) + '">Show more...</span>';
-    }
+    var html = '<div class="desc-block"><span class="desc-text">' + escHtml(displayDesc) + '</span>';
+    if (truncated) html += '<br><span class="show-more-link" data-full="' + escAttr(desc) + '">Show more...</span>';
     html += '</div>';
     return html;
 }
 
 function buildMetaPills(f) {
     var pills = [];
-    var releaseStatus = f.release_status;
-    if (releaseStatus) {
-        if (releaseStatus === 'released' || releaseStatus === 'completed') {
-            pills.push('<span class="meta-pill released">Released &#10003;</span>');
-        } else {
-            pills.push('<span class="meta-pill in-progress">In Progress</span>');
-        }
+    var rs = f.release_status;
+    if (rs) {
+        if (rs === 'released' || rs === 'completed') pills.push('<span class="meta-pill released">Released &#10003;</span>');
+        else pills.push('<span class="meta-pill in-progress">In Progress</span>');
     }
-    if (f.release_date) {
-        pills.push('<span class="meta-pill">' + escHtml(f.release_date) + '</span>');
-    }
-    var reactions = f.total_reactions || 0;
-    if (reactions > 0) {
-        pills.push('<span class="meta-pill">&#128640; ' + reactions + ' reactions</span>');
-    }
-    if (f.engineer) {
-        pills.push('<span class="meta-pill">Eng: ' + escHtml(f.engineer) + '</span>');
-    }
-    if (f.assignee) {
-        pills.push('<span class="meta-pill">Assignee: ' + escHtml(f.assignee) + '</span>');
-    }
-    if (f.urgency_score) {
-        pills.push('<span class="meta-pill">Urgency: ' + f.urgency_score + '</span>');
-    }
+    if (f.release_date) pills.push('<span class="meta-pill">' + escHtml(f.release_date) + '</span>');
+    if ((f.total_reactions || 0) > 0) pills.push('<span class="meta-pill">&#128640; ' + f.total_reactions + ' reactions</span>');
+    if (f.engineer) pills.push('<span class="meta-pill">Eng: ' + escHtml(f.engineer) + '</span>');
+    if (f.assignee) pills.push('<span class="meta-pill">Assignee: ' + escHtml(f.assignee) + '</span>');
     if (pills.length === 0) return '';
     return '<div class="meta-pills">' + pills.join('') + '</div>';
 }
 
 var CAT_DEFINITIONS = [
-    { key: 'all',            label: 'All',            color: '#8899aa' },
-    { key: 'new_feature',    label: 'New Feature',    color: '#00C9A7' },
-    { key: 'improvement',    label: 'Improvement',    color: '#3b82f6' },
-    { key: 'bug_fix',        label: 'Bug Fix',        color: '#ef4444' },
+    { key: 'all', label: 'All', color: '#8899aa' },
+    { key: 'new_feature', label: 'New Feature', color: '#00C9A7' },
+    { key: 'improvement', label: 'Improvement', color: '#3b82f6' },
+    { key: 'bug_fix', label: 'Bug Fix', color: '#ef4444' },
     { key: 'infrastructure', label: 'Infrastructure', color: '#6b7280' },
-    { key: 'mobile',         label: 'Mobile',         color: '#a855f7' },
-    { key: 'deprecation',    label: 'Deprecation',    color: '#f97316' }
+    { key: 'mobile', label: 'Mobile', color: '#a855f7' },
+    { key: 'deprecation', label: 'Deprecation', color: '#f97316' }
 ];
 
 function updateCategoryPills() {
     var counts = {};
     allFeatures.forEach(function(f) {
-        var cat = (f.classification && f.classification.category) || 'unknown';
-        counts[cat] = (counts[cat] || 0) + 1;
+        getCategories(f).forEach(function(cat) {
+            counts[cat] = (counts[cat] || 0) + 1;
+        });
     });
     var pills = document.querySelectorAll('#category-filter-row .cat-pill');
     pills.forEach(function(pill) {
@@ -802,65 +496,80 @@ function filterByCategory(cat) {
 function renderFeatures() {
     var list = document.getElementById('feature-list');
     list.innerHTML = '';
-    var features = selectedCategory === 'all'
-        ? allFeatures
-        : allFeatures.filter(function(f) {
-            return (f.classification && f.classification.category) === selectedCategory;
-        });
+    var features = selectedCategory === 'all' ? allFeatures : allFeatures.filter(function(f) { return featureMatchesCategory(f, selectedCategory); });
     features.forEach(function(f, renderIdx) {
-        var dataIdx = allFeatures.indexOf(f);
         var c = f.classification || {};
         var score = c.importance_score || 0;
-        var cat = c.category || 'unknown';
+        var cats = getCategories(f);
         var summary = c.marketing_summary || '';
         var channels = c.recommended_channels || [];
         var preFiltered = c.pre_filtered || false;
+        var isOverridden = c.manual_override || false;
+        var origScore = c._original_score;
+        var origCats = c._original_categories;
 
-        var catClass = 'cat-' + cat;
-        if (['new_feature','improvement','bug_fix','infrastructure','mobile','deprecation'].indexOf(cat) === -1) {
-            catClass = 'cat-default';
-        }
+        var catBadgesHtml = cats.map(function(cat) {
+            var catClass = ALL_CATS.indexOf(cat) !== -1 ? 'cat-' + cat : 'cat-default';
+            return '<span class="category-pill ' + catClass + '">' + (CAT_LABELS[cat] || cat).replace(/_/g, ' ') + '</span>';
+        }).join('');
+        if (isOverridden) catBadgesHtml += '<span class="override-indicator" title="Manually changed from ' + (origCats || []).join(', ') + '">&#9998;</span>';
 
         var channelHtml = '';
-        channels.forEach(function(ch) {
-            channelHtml += '<span class="channel-pill">' + ch + '</span>';
-        });
+        channels.forEach(function(ch) { channelHtml += '<span class="channel-pill">' + ch + '</span>'; });
+
+        var scoreOverrideHtml = isOverridden && origScore !== undefined && origScore !== score
+            ? '<span class="override-indicator" title="Changed from ' + origScore + '">&#9998;</span>' : '';
 
         var card = document.createElement('div');
         card.className = 'feature-card';
+        var featureId = f.id || f.feature_id || '';
+        card.setAttribute('data-fid', featureId);
+        card.setAttribute('data-fidx', allFeatures.indexOf(f));
         card.innerHTML =
             '<div class="card-top">' +
-                '<div class="score-badge score-' + Math.min(score, 5) + '">' + score + '</div>' +
+                '<div class="score-badge score-' + Math.min(score, 5) + '" data-fidx="' + allFeatures.indexOf(f) + '">' +
+                    score + scoreOverrideHtml +
+                '</div>' +
                 '<div class="card-body">' +
                     '<div class="card-title-row">' +
                         '<span class="card-title">' + escHtml(f.title || 'Untitled') + '</span>' +
                         '<span class="chevron">&#9660;</span>' +
                     '</div>' +
                     '<div class="card-meta">' +
-                        '<span class="category-pill ' + catClass + '">' + cat.replace(/_/g, ' ') + '</span>' +
+                        catBadgesHtml +
                         (preFiltered ? '<span class="pre-filter-badge">pre-filtered</span>' : '') +
                     '</div>' +
                     (summary ? '<div class="card-summary">' + escHtml(summary) + '</div>' : '') +
                     '<div class="card-bottom-row">' +
                         '<div class="channel-pills">' + channelHtml + '</div>' +
-                        '<button class="btn-generate" data-idx="' + renderIdx + '">Generate Content &rarr;</button>' +
+                        '<button class="btn-generate">Generate Content &rarr;</button>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
             '<div class="card-expanded-content">' +
                 buildDescBlock(f) +
                 buildMetaPills(f) +
-                '<span class="override-link" data-idx="' + dataIdx + '">&#9998; Edit Classification</span>' +
             '</div>';
 
-        card.addEventListener('click', function(e) {
-            if (e.target.closest('.btn-generate') || e.target.closest('.show-more-link') || e.target.closest('.override-link') || e.target.closest('.override-form')) return;
-            toggleCard(renderIdx);
+        card.querySelector('.score-badge').addEventListener('click', function(e) {
+            e.stopPropagation();
+            showScorePopover(allFeatures.indexOf(f), this);
         });
 
-        card.querySelector('.override-link').addEventListener('click', function(e) {
-            e.stopPropagation();
-            showOverrideForm(dataIdx);
+        var metaEl = card.querySelector('.card-meta');
+        metaEl.addEventListener('click', function(e) {
+            if (e.target.closest('.category-pill') || e.target.closest('.override-indicator')) {
+                e.stopPropagation();
+                showCatPopover(allFeatures.indexOf(f), metaEl);
+            }
+        });
+
+        card.addEventListener('click', function(e) {
+            if (e.target.closest('.btn-generate') || e.target.closest('.show-more-link') ||
+                e.target.closest('.score-badge') || e.target.closest('.score-popover') ||
+                e.target.closest('.cat-popover') || e.target.closest('.override-reason-row')) return;
+            if (e.target.closest('.card-meta')) return;
+            toggleCard(renderIdx);
         });
 
         card.querySelector('.btn-generate').addEventListener('click', function(e) {
@@ -874,13 +583,8 @@ function renderFeatures() {
                 e.stopPropagation();
                 var fullText = this.getAttribute('data-full');
                 var descText = this.parentElement.querySelector('.desc-text');
-                if (this.textContent === 'Show more...') {
-                    descText.textContent = fullText;
-                    this.textContent = 'Show less';
-                } else {
-                    descText.textContent = fullText.substring(0, 500) + '...';
-                    this.textContent = 'Show more...';
-                }
+                if (this.textContent === 'Show more...') { descText.textContent = fullText; this.textContent = 'Show less'; }
+                else { descText.textContent = fullText.substring(0, 500) + '...'; this.textContent = 'Show more...'; }
             });
         }
 
@@ -888,16 +592,202 @@ function renderFeatures() {
     });
 }
 
+function showScorePopover(fidx, badgeEl) {
+    closeActivePopover();
+    var f = allFeatures[fidx];
+    var c = f.classification || {};
+    var currentScore = c.importance_score || 0;
+
+    var pop = document.createElement('div');
+    pop.className = 'score-popover';
+    [5,4,3,2,1].forEach(function(s) {
+        var opt = document.createElement('div');
+        opt.className = 'score-option score-' + s + (s === currentScore ? ' active' : '');
+        opt.textContent = s;
+        opt.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (s === currentScore) { closeActivePopover(); return; }
+            applyOverride(fidx, s, null);
+            closeActivePopover();
+        });
+        pop.appendChild(opt);
+    });
+
+    badgeEl.style.position = 'relative';
+    badgeEl.appendChild(pop);
+    activePopover = pop;
+}
+
+function showCatPopover(fidx, metaEl) {
+    closeActivePopover();
+    var f = allFeatures[fidx];
+    var currentCats = getCategories(f);
+
+    var pop = document.createElement('div');
+    pop.className = 'cat-popover';
+
+    function refreshCatButtons() {
+        pop.innerHTML = '';
+        ALL_CATS.forEach(function(cat) {
+            var isSelected = currentCats.indexOf(cat) !== -1;
+            var btn = document.createElement('button');
+            btn.className = 'cat-toggle' + (isSelected ? ' selected sel-' + cat : '');
+            btn.innerHTML = (isSelected ? '<span class="cat-check">&#10003;</span> ' : '') + (CAT_LABELS[cat] || cat);
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var idx = currentCats.indexOf(cat);
+                if (idx !== -1) {
+                    if (currentCats.length <= 1) {
+                        showToast('At least one category required', true);
+                        return;
+                    }
+                    currentCats.splice(idx, 1);
+                } else {
+                    currentCats.push(cat);
+                }
+                refreshCatButtons();
+            });
+            pop.appendChild(btn);
+        });
+    }
+    refreshCatButtons();
+
+    pop._commitOnClose = function() {
+        var origCats = getCategories(f);
+        var changed = origCats.length !== currentCats.length || origCats.some(function(c) { return currentCats.indexOf(c) === -1; });
+        if (changed) applyOverride(fidx, null, currentCats.slice());
+    };
+
+    metaEl.appendChild(pop);
+    activePopover = pop;
+}
+
+var pendingOverride = null;
+
+function applyOverride(fidx, newScore, newCats) {
+    var f = allFeatures[fidx];
+    var c = f.classification || {};
+    var featureId = f.id || f.feature_id || '';
+
+    if (pendingOverride && pendingOverride.featureId !== featureId) {
+        commitOverride(pendingOverride.fidx, pendingOverride.f, pendingOverride.c, '', null);
+        pendingOverride = null;
+    }
+
+    if (!c._original_score && c._original_score !== 0) {
+        c._original_score = c.importance_score;
+        c._original_categories = getCategories(f).slice();
+    }
+
+    if (newScore !== null) c.importance_score = newScore;
+    if (newCats !== null) {
+        c.categories = newCats;
+        c.category = newCats[0];
+    }
+    c.manual_override = true;
+    f.classification = c;
+
+    allFeatures.sort(function(a, b) {
+        return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
+    });
+    expandedIdx = -1;
+    updateCategoryPills();
+    renderFeatures();
+
+    var newFidx = allFeatures.indexOf(f);
+    pendingOverride = { featureId: featureId, fidx: newFidx, f: f, c: c };
+    showReasonInput(featureId, f, c);
+}
+
+function showReasonInput(featureId, f, c) {
+    var card = document.querySelector('.feature-card[data-fid="' + featureId + '"]');
+    if (!card) return;
+    var existing = card.querySelector('.override-reason-row');
+    if (existing) existing.remove();
+
+    var row = document.createElement('div');
+    row.className = 'override-reason-row';
+    row.innerHTML =
+        '<input type="text" class="override-reason-input" placeholder="Why this change? (optional, helps AI learn)">' +
+        '<button class="btn-save-reason">Save</button>';
+
+    var metaEl = card.querySelector('.card-meta');
+    metaEl.parentElement.insertBefore(row, metaEl.nextSibling);
+
+    var input = row.querySelector('.override-reason-input');
+    var saveBtn = row.querySelector('.btn-save-reason');
+    input.focus();
+
+    function doSave() {
+        var reason = input.value.trim();
+        saveBtn.textContent = 'Saving...';
+        saveBtn.disabled = true;
+        pendingOverride = null;
+        var fidx = allFeatures.indexOf(f);
+        commitOverride(fidx, f, c, reason, function() {
+            row.remove();
+            var confirm = document.createElement('div');
+            confirm.className = 'override-confirm';
+            confirm.textContent = '\u2713 AI will learn from this';
+            if (metaEl.parentElement) metaEl.parentElement.insertBefore(confirm, metaEl.nextSibling);
+        });
+    }
+
+    saveBtn.addEventListener('click', function(e) { e.stopPropagation(); doSave(); });
+    input.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.stopPropagation(); doSave(); } });
+    row.addEventListener('click', function(e) { e.stopPropagation(); });
+}
+
+function commitOverride(fidx, f, c, reason, onDone) {
+    var payload = {
+        feature_id: f.id || f.feature_id || '',
+        feature_title: f.title || '',
+        original_classification: {
+            category: (c._original_categories || [])[0] || c.category,
+            categories: c._original_categories || [c.category],
+            importance_score: c._original_score !== undefined ? c._original_score : c.importance_score,
+            recommended_channels: c.recommended_channels,
+            marketing_summary: c.marketing_summary
+        },
+        override_classification: {
+            category: c.category,
+            categories: c.categories || [c.category],
+            importance_score: c.importance_score
+        },
+        reason: reason
+    };
+
+    fetch('/api/classification/override', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { showToast('Error: ' + data.error, true); return; }
+        c.recommended_channels = data.recommended_channels || c.recommended_channels;
+        f.classification = c;
+
+        var minImp = parseInt(document.getElementById('importance-filter').value);
+        if (c.importance_score < minImp) {
+            showToast('Feature moved out of current filter view', true);
+        } else {
+            showToast('Classification updated - AI will learn from this');
+        }
+        updateCategoryPills();
+        renderFeatures();
+        if (onDone) onDone();
+    })
+    .catch(function(err) { showToast('Error: ' + err.message, true); });
+}
+
 function generateContentForFeature(renderIdx, feature) {
     var channels = (feature.classification || {}).recommended_channels || [];
-    if (channels.length === 0) {
-        channels = ['twitter', 'linkedin', 'inapp'];
-    }
+    if (channels.length === 0) channels = ['twitter', 'linkedin', 'inapp'];
     var btn = document.querySelectorAll('.btn-generate')[renderIdx];
     var origText = btn.innerHTML;
     btn.innerHTML = 'Generating...';
     btn.disabled = true;
-
     fetch('/api/generate', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -905,194 +795,51 @@ function generateContentForFeature(renderIdx, feature) {
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        btn.innerHTML = origText;
-        btn.disabled = false;
-        if (data.error) {
-            alert('Generation failed: ' + data.error);
-            return;
-        }
+        btn.innerHTML = origText; btn.disabled = false;
+        if (data.error) { alert('Generation failed: ' + data.error); return; }
         alert('Content generated for ' + channels.join(', ') + '! Check /test/review for full editing.');
     })
-    .catch(function(err) {
-        btn.innerHTML = origText;
-        btn.disabled = false;
-        alert('Error: ' + err.message);
-    });
+    .catch(function(err) { btn.innerHTML = origText; btn.disabled = false; alert('Error: ' + err.message); });
 }
 
-function generateContent(idx) {
-    generateContentForFeature(idx, allFeatures[idx]);
+function generateContent(idx) { generateContentForFeature(idx, allFeatures[idx]); }
+
+function escHtml(str) { var d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+function escAttr(str) { return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function showToast(msg, isWarning) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.className = 'toast visible' + (isWarning ? ' warning' : '');
+    clearTimeout(t._timer); t._timer = setTimeout(function() { t.className = 'toast'; }, 3000);
 }
 
-function escHtml(str) {
-    var d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
-}
-
-function escAttr(str) {
-    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function openManualInput() {
-    document.getElementById('manual-modal').classList.add('open');
-}
-function closeManualInput() {
-    document.getElementById('manual-modal').classList.remove('open');
-}
+function openManualInput() { document.getElementById('manual-modal').classList.add('open'); }
+function closeManualInput() { document.getElementById('manual-modal').classList.remove('open'); }
 function submitManualInput() {
     var title = document.getElementById('manual-title').value.trim();
     var desc = document.getElementById('manual-desc').value.trim();
     var cat = document.getElementById('manual-category').value;
     if (!title) { alert('Please enter a title'); return; }
-
     var btn = document.querySelector('.modal-actions .btn-primary');
-    btn.textContent = 'Adding...';
-    btn.disabled = true;
-
+    btn.textContent = 'Adding...'; btn.disabled = true;
     fetch('/api/sources/manual/add', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ title: title, description: desc, category: cat })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        btn.textContent = 'Add Feature';
-        btn.disabled = false;
+        btn.textContent = 'Add Feature'; btn.disabled = false;
         if (data.error) { alert('Error: ' + data.error); return; }
         closeManualInput();
         document.getElementById('manual-title').value = '';
         document.getElementById('manual-desc').value = '';
         loadFeatures();
     })
-    .catch(function(err) {
-        btn.textContent = 'Add Feature';
-        btn.disabled = false;
-        alert('Error: ' + err.message);
-    });
-}
-
-function showToast(msg, isWarning) {
-    var t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className = 'toast visible' + (isWarning ? ' warning' : '');
-    clearTimeout(t._timer);
-    t._timer = setTimeout(function() { t.className = 'toast'; }, 3000);
-}
-
-function showOverrideForm(idx) {
-    var card = document.querySelectorAll('.feature-card')[idx];
-    var existing = card.querySelector('.override-form');
-    if (existing) { existing.remove(); return; }
-
-    var f = allFeatures[idx];
-    var c = f.classification || {};
-    var cats = ['new_feature','improvement','bug_fix','infrastructure','mobile','deprecation'];
-
-    var catOptions = cats.map(function(ct) {
-        return '<option value="' + ct + '"' + (ct === c.category ? ' selected' : '') + '>' + ct.replace(/_/g, ' ') + '</option>';
-    }).join('');
-    var scoreOptions = [1,2,3,4,5].map(function(s) {
-        return '<option value="' + s + '"' + (s === c.importance_score ? ' selected' : '') + '>' + s + '</option>';
-    }).join('');
-
-    var formDiv = document.createElement('div');
-    formDiv.className = 'override-form';
-    formDiv.innerHTML =
-        '<div class="form-row">' +
-            '<label>Score</label>' +
-            '<select class="ovr-score">' + scoreOptions + '</select>' +
-            '<label>Category</label>' +
-            '<select class="ovr-cat">' + catOptions + '</select>' +
-        '</div>' +
-        '<div class="form-row">' +
-            '<label>Reason</label>' +
-            '<input type="text" class="ovr-reason" placeholder="Why this change? (optional, helps AI learn)">' +
-        '</div>' +
-        '<div class="override-actions">' +
-            '<button class="btn-save-override">Save Override</button>' +
-            '<button class="btn-cancel-override">Cancel</button>' +
-        '</div>';
-
-    var expandedContent = card.querySelector('.card-expanded-content');
-    expandedContent.appendChild(formDiv);
-
-    formDiv.querySelector('.btn-cancel-override').addEventListener('click', function(e) {
-        e.stopPropagation();
-        formDiv.remove();
-    });
-
-    formDiv.querySelector('.btn-save-override').addEventListener('click', function(e) {
-        e.stopPropagation();
-        var newScore = parseInt(formDiv.querySelector('.ovr-score').value);
-        var newCat = formDiv.querySelector('.ovr-cat').value;
-        var reason = formDiv.querySelector('.ovr-reason').value.trim();
-
-        var btn = formDiv.querySelector('.btn-save-override');
-        btn.textContent = 'Saving...';
-        btn.disabled = true;
-
-        var payload = {
-            feature_id: f.id || f.feature_id || '',
-            feature_title: f.title || '',
-            original_classification: {
-                category: c.category,
-                importance_score: c.importance_score,
-                is_user_facing: c.is_user_facing,
-                target_audience: c.target_audience,
-                recommended_channels: c.recommended_channels,
-                marketing_summary: c.marketing_summary
-            },
-            override_classification: {
-                category: newCat,
-                importance_score: newScore
-            },
-            reason: reason
-        };
-
-        fetch('/api/classification/override', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.error) { alert('Error: ' + data.error); btn.textContent = 'Save Override'; btn.disabled = false; return; }
-
-            c.importance_score = newScore;
-            c.category = newCat;
-            c.recommended_channels = data.recommended_channels || [];
-            c.manual_override = true;
-            f.classification = c;
-
-            formDiv.remove();
-
-            var minImp = parseInt(document.getElementById('importance-filter').value);
-            if (newScore < minImp) {
-                showToast('Feature moved out of current filter view', true);
-            } else {
-                showToast('Classification updated \u2014 AI will learn from this');
-            }
-
-            allFeatures.sort(function(a, b) {
-                return (b.classification || {}).importance_score - (a.classification || {}).importance_score;
-            });
-            expandedIdx = -1;
-            renderFeatures();
-        })
-        .catch(function(err) {
-            btn.textContent = 'Save Override';
-            btn.disabled = false;
-            alert('Error: ' + err.message);
-        });
-    });
-
-    formDiv.addEventListener('click', function(e) { e.stopPropagation(); });
+    .catch(function(err) { btn.textContent = 'Add Feature'; btn.disabled = false; alert('Error: ' + err.message); });
 }
 
 checkHealth();
 loadFeatures();
 </script>
-<div class="toast" id="toast"></div>
 </body>
 </html>

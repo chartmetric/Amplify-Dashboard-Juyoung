@@ -459,8 +459,10 @@ def add_classification_override():
 
     entry = save_classification_override(feature_id, feature_title, original, override, reason)
 
+    override_cats = override.get("categories", [override.get("category", original.get("category"))])
     set_manual_override(feature_id, {
         "category": override.get("category", original.get("category")),
+        "categories": override_cats,
         "importance_score": override.get("importance_score", original.get("importance_score")),
         "recommended_channels": entry["override_classification"]["recommended_channels"],
         "manual_override": True,

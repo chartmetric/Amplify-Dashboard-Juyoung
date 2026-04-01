@@ -73,10 +73,13 @@ Description: {description}
 Release Status: {release_status}
 Urgency Score: {urgency_score}
 
+A feature can belong to multiple categories. For example, a mobile bug fix should be ["bug_fix", "mobile"]. An improvement that adds a new sub-feature could be ["improvement", "new_feature"]. Return 1-3 categories ordered by relevance.
+
 Return a JSON object with these fields:
 - feature_id (string)
 - title (string)
-- category (string: new_feature|improvement|bug_fix|infrastructure|mobile|deprecation)
+- category (string: the PRIMARY category - new_feature|improvement|bug_fix|infrastructure|mobile|deprecation)
+- categories (array of strings: ALL applicable categories, 1-3, ordered by relevance)
 - importance_score (integer 1-5)
 - importance_score_reason (string: 1-2 sentence explanation of why you assigned that importance score)
 - is_user_facing (boolean)
@@ -150,9 +153,18 @@ def classify_feature(feature_data: dict) -> dict:
         }
 
     try:
-        classification = json.loads(result["content"])
+        content = result["content"].strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:-3].strip()
+        classification = json.loads(content)
         classification["feature_id"] = feature_id
         classification["title"] = title
+        if "categories" not in classification or not classification["categories"]:
+            classification["categories"] = [classification.get("category", "unknown")]
+        if "category" not in classification and classification.get("categories"):
+            classification["category"] = classification["categories"][0]
         _enforce_classification_rules(classification)
         return classification
     except json.JSONDecodeError:
@@ -171,7 +183,7 @@ def classify_feature(feature_data: dict) -> dict:
         }
 
 
-def classify_features_batch(features: list[dict], max_workers: int = 3) -> list[dict]:
+def classify_features_batch(features: list[dict], max_workers: int = 2) -> list[dict]:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     classified = [None] * len(features)

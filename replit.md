@@ -80,6 +80,18 @@ Product marketing autopilot that ingests feature data from multiple sources and 
   - `ai/generator.py` — empty placeholder for future content generation
 - **Placeholders**: "YOUR_PROJECT_GID_HERE" (Asana), "YOUR_CHANNEL_ID_HERE" (Slack)
 - **Run**: `python app.py` (from artifacts/amplify directory)
+- **Classification overrides**: Inline editing on dashboard cards
+  - Score badge: clickable, shows popover with 1-5 options
+  - Category badges: clickable, multi-select toggle popover, supports 1-3 categories per feature
+  - Override reason: inline text input appears after change, optional
+  - Auto-save: pending override commits on card switch or navigation
+  - Visual indicators: pencil icon on overridden scores/categories with tooltip
+  - Learning: last 3 overrides injected into Claude classifier system prompt
+  - `POST /api/classification/override` — save override + recalculate channels + teach AI
+  - `GET /api/classification/overrides` — list all override history
+  - `ai/classification_overrides.py` — in-memory override store + learning context builder
+- **Multi-category**: classifier returns `categories` array (1-3) alongside primary `category`; category filter matches any; dashboard renders multiple category pills per card
+- **JSON parsing**: classifier strips markdown code blocks from Claude responses before parsing
 
 ## TypeScript & Composite Projects
 

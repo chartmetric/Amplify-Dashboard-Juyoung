@@ -50,8 +50,10 @@ def get_override_learning_context(limit=3):
         ovr = e["override_classification"]
         lines.append("---")
         lines.append(f"Feature: {e['feature_title']}")
-        lines.append(f"AI classified as: {orig.get('category', '?')}, importance {orig.get('importance_score', '?')}")
-        lines.append(f"Marketer corrected to: {ovr.get('category', '?')}, importance {ovr.get('importance_score', '?')}")
+        orig_cats = orig.get('categories', [orig.get('category', '?')])
+        ovr_cats = ovr.get('categories', [ovr.get('category', '?')])
+        lines.append(f"AI classified as: {', '.join(str(c) for c in orig_cats)}, importance {orig.get('importance_score', '?')}")
+        lines.append(f"Marketer corrected to: {', '.join(str(c) for c in ovr_cats)}, importance {ovr.get('importance_score', '?')}")
         lines.append(f"Reason: {e.get('reason') or 'No reason given'}")
     lines.append("---")
     return "\n".join(lines)

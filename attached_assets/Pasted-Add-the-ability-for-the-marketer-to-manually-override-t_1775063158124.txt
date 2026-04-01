@@ -1,0 +1,107 @@
+Add the ability for the marketer to manually override the AI classification (importance score and category) on any feature card in the dashboard. Make the editing experience feel instant and inline — no modal, no separate edit mode. Overrides should feed back into the classifier to improve future accuracy.
+
+1. INLINE IMPORTANCE SCORE EDITING:
+
+   The large importance score number on each card should be directly clickable:
+   - On click, it transforms into a compact vertical dropdown/popover showing numbers 1-5, each with its color (5=green, 4=blue, 3=yellow, 2=orange, 1=gray)
+   - The current score is highlighted
+   - Click a different number → score updates instantly on the card, recolors, and the popover closes
+   - If the score changed from the AI original, show a small pencil icon or dot indicator next to the score so the marketer knows it was manually overridden
+   - The popover should appear right next to/over the score number, not in a separate area
+
+2. INLINE CATEGORY TAG EDITING:
+
+   The category badge(s) on each card should be directly clickable:
+   - On click, show a small popover/dropdown with ALL category options as colored pills: New Feature (teal), Improvement (blue), Bug Fix (red), Infrastructure (gray), Mobile (purple), Deprecation (orange)
+   - MULTIPLE categories can be selected (checkmark toggle on each pill) — a feature can be both "bug_fix" AND "mobile", or "improvement" AND "new_feature", etc.
+   - Currently active categories are shown as filled/checked, inactive ones are outlined/muted
+   - Clicking a category toggles it on/off
+   - At least one category must remain selected — if the user tries to deselect the last one, show a brief tooltip "At least one category required"
+   - Close the popover by clicking outside it or pressing Escape
+   - The card immediately updates to show all selected category badges in a row
+
+3. OPTIONAL REASON INPUT:
+
+   When either the score OR category is changed from the AI original:
+   - A small inline text input slides in below the category badges, with placeholder: "Why this change? (optional, helps AI learn)"
+   - A small "Save" pill button next to it (teal, compact)
+   - The override is already visually applied on the card, but clicking "Save" (or pressing Enter) commits it to the backend and triggers the learning
+   - If the user doesn't type a reason and clicks Save, that's fine — reason is optional
+   - If the user navigates away or clicks another card without saving, auto-save the override with no reason
+   - After saving, the input disappears and a small "✓ AI will learn from this" text flashes briefly
+
+4. VISUAL INDICATORS FOR OVERRIDES:
+
+   - Overridden scores: small pencil icon (✏️) next to the number
+   - Overridden categories: small pencil icon next to the badge row
+   - On hover over the pencil icon, show a tooltip: "Manually changed from [original] by marketer"
+   - This helps distinguish AI classifications from human overrides at a glance
+
+5. BACKEND — add a new endpoint:
+
+   POST /api/classification/override
+   - Body:
+   {
+       "feature_id": "...",
+       "feature_title": "...",
+       "original_classification": {
+           "category": "infrastructure",
+           "categories": ["infrastructure"],
+           "importance_score": 2,
+           "is_user_facing": false,
+           "target_audience": ["all"],
+           "recommended_channels": ["notion_monthly"],
+           "marketing_summary": "..."
+       },
+       "override_classification": {
+           "category": "improvement",
+           "categories": ["improvement", "mobile"],
+           "importance_score": 4,
+           "is_user_facing": true,
+           "target_audience": ["artists", "managers"],
+           "recommended_channels": ["twitter", "email_newsletter", "inapp", "slack_internal", "notion_monthly"]
+       },
+       "reason": "This impacts artist-facing search UX significantly, not just infra"
+   }
+   - Saves this override to an in-memory store (create a new file `ai/classification_overrides.py` with a CLASSIFICATION_OVERRIDES list)
+   - Recalculate recommended_channels based on the new importance score:
+     - Score 5: all external channels + slack_internal + notion_monthly
+     - Score 4: 2-3 most relevant external + slack_internal + notion_monthly + inapp
+     - Score 3: email_newsletter + slack_internal + notion_monthly
+     - Score 2: slack_internal + notion_monthly
+     - Score 1: notion_monthly only
+   - Return the updated classification including new recommended_channels so the UI can update the channel pills
+   - Returns {"success": true, "updated_classification": {...}, "message": "Override saved and will improve future classifications"}
+
+   GET /api/classification/overrides
+   - Returns all past overrides, most recent first
+
+6. CLASSIFICATION LEARNING — update `ai/classifier.py`:
+
+   - Import the overrides store from classification_overrides.py
+   - In the classify_feature function, BEFORE calling Claude, check if there are any saved overrides (up to 3 most recent)
+   - If overrides exist, append this section to the classification system prompt:
+
+   LEARNING FROM PAST CORRECTIONS (a human marketer corrected these AI classifications — learn from their judgment):
+   ---
+   Feature: {feature_title}
+   AI classified as: {original_categories}, importance {original_score}
+   Marketer corrected to: {override_categories}, importance {override_score}
+   Reason: {reason or "No reason given"}
+   ---
+
+7. UPDATE THE CLASSIFIER to support multiple categories:
+
+   - Update the classify_feature function's Claude prompt: change the instruction from returning a single "category" string to returning BOTH:
+     - "category": "primary_category" (the main one, for backward compatibility)
+     - "categories": ["primary_category", "secondary_category"] (array, 1-3 categories)
+   - Update the classification rules in the prompt to add: "A feature can belong to multiple categories. For example, a mobile bug fix should be ['bug_fix', 'mobile']. An improvement that adds a new sub-feature could be ['improvement', 'new_feature']. Return 1-3 categories ordered by relevance."
+   - Update the dashboard to render multiple badges per card when categories array has more than one entry
+   - Update the category filter: a feature matches a category filter if ANY of its categories match (not just the primary one)
+
+8. RE-SORTING AND FILTER UPDATES:
+
+   After any override save:
+   - Re-sort the feature list by updated importance scores
+   - Re-count the category filter pills (accounting for multi-category features)
+   - If the feature is now filtered out by current filters, show a toast: "Feature moved out of current filter view"

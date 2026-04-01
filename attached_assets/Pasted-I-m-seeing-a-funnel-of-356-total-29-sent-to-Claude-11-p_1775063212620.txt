@@ -1,0 +1,60 @@
+I'm seeing a funnel of 356 total → 29 sent to Claude → 11 pre-filtered → 8 showing. I need to understand and control each filter step. Fix the following:
+
+1. DIAGNOSE: Add logging to the /api/features/all and /api/features/classified endpoints. At each filtering step, print:
+   - How many features came from Asana raw
+   - What filter criteria reduced them (show the exact condition)
+   - How many passed vs got excluded
+
+2. NEW ENDPOINT for transparency:
+
+   GET /api/features/debug
+   - Returns the full funnel breakdown:
+   {
+       "total_from_asana": 356,
+       "pre_filter_rules": ["has description", "not in section 'Internal'", ...],
+       "after_pre_filter": 29,
+       "reason_excluded": [
+           {"title": "Fix CI pipeline", "reason": "no description"},
+           {"title": "Update deps", "reason": "in excluded section"},
+           ...
+       ],
+       "classified": 11,
+       "classification_filter": "min_importance >= 3",
+       "showing": 8,
+       "ui_filter": "category = improvement"
+   }
+
+3. FIX THE PRE-FILTER — it's too aggressive, cutting 356 down to 29:
+
+   Look at the code that fetches from Asana and find where it's filtering BEFORE sending to Claude. Common culprits:
+   - Only pulling tasks from certain Asana sections or projects
+   - Filtering out tasks without certain custom fields
+   - Filtering out completed tasks
+   - Only pulling recent tasks (date filter)
+   - Pagination limit (only fetching first N tasks from Asana API)
+
+   Whatever the pre-filter logic is:
+   - Make it configurable via query parameters, not hardcoded
+   - Add a query param ?pre_filter=false to /api/features/all that skips pre-filtering and returns ALL 356 tasks
+   - Keep the default pre-filter for the classified endpoint (since Claude API calls cost money), but let the user override it
+
+4. UPDATE THE DASHBOARD STATUS BAR to be clickable/informative:
+
+   Change the stats bar from just numbers to an interactive funnel:
+   - "Total from Asana: 356" — clicking shows a tooltip: "All tasks pulled from your Asana project"
+   - "Sent to Claude: 29 of 356" — clicking shows a tooltip listing the pre-filter rules that excluded the other 327, with a "Show all 356 →" link that loads all tasks unclassified
+   - "Classified: 11 of 29" — shows the importance filter being applied, with the min_importance dropdown right there
+   - "Showing: 8 of 11" — shows which UI category filter is active
+
+   Each number should be a clickable link that adjusts the view:
+   - Click "356" → loads all features unclassified (calls /api/features/all?pre_filter=false), shows everything in the "Unclassified" section
+   - Click "29" → loads all features sent to Claude, classified + unclassified
+   - Click "11" → resets category filter to "All" so all classified features show
+   - Click "8" → current view (no change)
+
+5. ADD A "LOAD ALL FEATURES" BUTTON prominently near the top of the feature list:
+   - Label: "Load All 356 Asana Tasks"
+   - When clicked: calls GET /api/features/all?pre_filter=false
+   - Loads ALL tasks as unclassified cards
+   - The marketer can then browse, expand to read descriptions, and manually bump important ones using the inline score/category editing
+   - Show a warning: "Loading all tasks — only classified features can generate content. Use 'Classify' on individual cards or wait for background classification."
