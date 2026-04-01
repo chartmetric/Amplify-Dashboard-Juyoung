@@ -188,6 +188,11 @@
             font-weight: 800; cursor: pointer; border: 2px solid transparent;
             transition: transform 0.1s, border-color 0.15s;
         }
+        .score-option.score-5 { background: #0d3d33; color: #00C9A7; }
+        .score-option.score-4 { background: #162a4d; color: #3b82f6; }
+        .score-option.score-3 { background: #3a2f0a; color: #eab308; }
+        .score-option.score-2 { background: #3d2008; color: #f97316; }
+        .score-option.score-1 { background: #1e2328; color: #6b7280; }
         .score-option:hover { transform: scale(1.1); }
         .score-option.active { border-color: #ffffff; }
         .card-body { flex: 1; min-width: 0; }
@@ -978,7 +983,11 @@ function pollClassificationStatus() {
                     anyUpdated = true;
                 }
             }
-            if (anyUpdated) { renderAll(); updateStats(); }
+            if (anyUpdated) {
+                var hasActiveOverride = document.querySelector('.override-reason-row');
+                if (!hasActiveOverride) { renderAll(); }
+                updateStats();
+            }
 
             fetch('/api/classifications/status')
                 .then(function(r2) { return r2.json(); })
