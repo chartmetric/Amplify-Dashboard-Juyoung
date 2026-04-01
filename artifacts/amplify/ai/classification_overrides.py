@@ -1,9 +1,13 @@
+import json
 import logging
+import os
+import threading
 from datetime import datetime, timezone
 
 logger = logging.getLogger("amplify.classification_overrides")
 
-CLASSIFICATION_OVERRIDES = []
+_OVERRIDES_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "..", ".override_history.json")
+_history_lock = threading.Lock()
 
 CHANNEL_RULES_BY_SCORE = {
     5: ["twitter", "email_newsletter", "email_standalone", "inapp", "linkedin", "notion_monthly", "article_hmc"],
@@ -12,6 +16,32 @@ CHANNEL_RULES_BY_SCORE = {
     2: ["notion_monthly"],
     1: [],
 }
+
+
+def _load_history_from_disk() -> list:
+    try:
+        if os.path.exists(_OVERRIDES_HISTORY_FILE):
+            with open(_OVERRIDES_HISTORY_FILE, "r") as f:
+                data = json.load(f)
+            logger.info(f"[override] Loaded {len(data)} override history entries from disk")
+            return data
+    except Exception as e:
+        logger.warning(f"[override] Failed to load override history from disk: {e}")
+    return []
+
+
+def _save_history_to_disk():
+    with _history_lock:
+        try:
+            tmp = _OVERRIDES_HISTORY_FILE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(CLASSIFICATION_OVERRIDES, f, separators=(",", ":"))
+            os.replace(tmp, _OVERRIDES_HISTORY_FILE)
+        except Exception as e:
+            logger.warning(f"[override] Failed to save override history to disk: {e}")
+
+
+CLASSIFICATION_OVERRIDES = _load_history_from_disk()
 
 
 def save_override(feature_id, feature_title, original_classification, override_classification, reason=""):
@@ -29,6 +59,7 @@ def save_override(feature_id, feature_title, original_classification, override_c
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     CLASSIFICATION_OVERRIDES.insert(0, entry)
+    _save_history_to_disk()
     logger.info(f"[override] Saved override for '{feature_title}': {original_classification.get('category')}({original_classification.get('importance_score')}) -> {override_classification.get('category')}({override_classification.get('importance_score')})")
     return entry
 

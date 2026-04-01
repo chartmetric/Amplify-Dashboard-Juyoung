@@ -435,11 +435,39 @@ def classify_features_batch(features: list[dict], max_workers: int = 2) -> list[
     return classified
 
 
-_manual_overrides = {}
+_OVERRIDES_FILE = os.path.join(os.path.dirname(__file__), "..", ".manual_overrides.json")
+_overrides_lock = threading.Lock()
+
+
+def _load_overrides_from_disk() -> dict:
+    try:
+        if os.path.exists(_OVERRIDES_FILE):
+            with open(_OVERRIDES_FILE, "r") as f:
+                data = json.load(f)
+            logger.info(f"[overrides] Loaded {len(data)} manual overrides from disk")
+            return data
+    except Exception as e:
+        logger.warning(f"[overrides] Failed to load overrides from disk: {e}")
+    return {}
+
+
+def _save_overrides_to_disk():
+    with _overrides_lock:
+        try:
+            tmp = _OVERRIDES_FILE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(_manual_overrides, f, separators=(",", ":"))
+            os.replace(tmp, _OVERRIDES_FILE)
+        except Exception as e:
+            logger.warning(f"[overrides] Failed to save overrides to disk: {e}")
+
+
+_manual_overrides = _load_overrides_from_disk()
 
 
 def set_manual_override(feature_id: str, override: dict):
     _manual_overrides[feature_id] = override
+    _save_overrides_to_disk()
 
 
 def get_manual_overrides():
@@ -447,7 +475,10 @@ def get_manual_overrides():
 
 
 def remove_manual_override(feature_id: str):
-    return _manual_overrides.pop(feature_id, None)
+    result = _manual_overrides.pop(feature_id, None)
+    if result is not None:
+        _save_overrides_to_disk()
+    return result
 
 
 def apply_manual_overrides(classified_features: list[dict]) -> list[dict]:

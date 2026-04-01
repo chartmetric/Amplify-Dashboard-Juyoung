@@ -1,2 +1,4 @@
 .classification_cache.json
 .features_cache*.json
+.manual_overrides.json
+.override_history.json
