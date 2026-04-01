@@ -1,11 +1,159 @@
 import json
 import logging
+import re
 
 from ai.claude_client import generate_content
 
 logger = logging.getLogger("amplify.classifier")
 
 CLASSIFICATION_CACHE: dict = {}
+
+QUICK_CLASSIFY_KEYWORDS = {
+    "fix": "bug_fix",
+    "bugfix": "bug_fix",
+    "bug fix": "bug_fix",
+    "hotfix": "bug_fix",
+    "patch": "bug_fix",
+    "typo": "bug_fix",
+    "spelling": "bug_fix",
+    "copy fix": "bug_fix",
+    "revert": "bug_fix",
+    "rollback": "bug_fix",
+
+    "BE only": "infrastructure",
+    "backend only": "infrastructure",
+    "server only": "infrastructure",
+    "refactor": "infrastructure",
+    "cleanup": "infrastructure",
+    "clean up": "infrastructure",
+    "housekeeping": "infrastructure",
+    "CI/CD": "infrastructure",
+    "pipeline": "infrastructure",
+    "deploy script": "infrastructure",
+    "build fix": "infrastructure",
+    "dependency": "infrastructure",
+    "dependencies": "infrastructure",
+    "upgrade deps": "infrastructure",
+    "bump version": "infrastructure",
+    "monitoring": "infrastructure",
+    "alerting": "infrastructure",
+    "logging": "infrastructure",
+    "migration": "infrastructure",
+    "migrate": "infrastructure",
+    "investigate": "infrastructure",
+    "investigation": "infrastructure",
+    "debug": "infrastructure",
+    "debugging": "infrastructure",
+    "login": "infrastructure",
+    "auth": "infrastructure",
+    "authentication": "infrastructure",
+    "SSO": "infrastructure",
+    "OAuth": "infrastructure",
+    "API key": "infrastructure",
+    "API token": "infrastructure",
+    "rate limit": "infrastructure",
+    "test": "infrastructure",
+    "tests": "infrastructure",
+    "test fix": "infrastructure",
+    "flaky test": "infrastructure",
+
+    "deprecate": "deprecation",
+    "deprecated": "deprecation",
+    "remove": "deprecation",
+    "removal": "deprecation",
+}
+
+_keyword_stats: dict[str, dict] = {}
+_ADAPTIVE_OVERRIDE_THRESHOLD = 3
+
+
+def _get_keyword_stats(keyword: str) -> dict:
+    if keyword not in _keyword_stats:
+        _keyword_stats[keyword] = {"matched": 0, "overridden": 0}
+    return _keyword_stats[keyword]
+
+
+def record_keyword_override(keyword: str):
+    stats = _get_keyword_stats(keyword)
+    stats["overridden"] += 1
+    if stats["overridden"] >= _ADAPTIVE_OVERRIDE_THRESHOLD:
+        logger.info(f"[quick_classify] Keyword '{keyword}' has been overridden {stats['overridden']} times, disabling auto-skip")
+
+
+def get_keyword_list() -> list[dict]:
+    result = []
+    for keyword, category in QUICK_CLASSIFY_KEYWORDS.items():
+        stats = _keyword_stats.get(keyword, {"matched": 0, "overridden": 0})
+        disabled = stats.get("overridden", 0) >= _ADAPTIVE_OVERRIDE_THRESHOLD
+        result.append({
+            "keyword": keyword,
+            "category": category,
+            "matched_count": stats.get("matched", 0),
+            "overridden_count": stats.get("overridden", 0),
+            "disabled": disabled,
+        })
+    return result
+
+
+def add_keyword(keyword: str, category: str):
+    QUICK_CLASSIFY_KEYWORDS[keyword] = category
+    logger.info(f"[quick_classify] Added keyword '{keyword}' -> '{category}'")
+
+
+def remove_keyword(keyword: str) -> bool:
+    if keyword in QUICK_CLASSIFY_KEYWORDS:
+        del QUICK_CLASSIFY_KEYWORDS[keyword]
+        logger.info(f"[quick_classify] Removed keyword '{keyword}'")
+        return True
+    return False
+
+
+_keyword_pattern_cache: dict[str, re.Pattern] = {}
+
+
+def _get_keyword_pattern(keyword: str) -> re.Pattern:
+    if keyword not in _keyword_pattern_cache:
+        escaped = re.escape(keyword)
+        _keyword_pattern_cache[keyword] = re.compile(
+            r'(?<![a-zA-Z])' + escaped + r'(?![a-zA-Z])',
+            re.IGNORECASE
+        )
+    return _keyword_pattern_cache[keyword]
+
+
+def quick_classify(feature: dict) -> dict | None:
+    title = feature.get("title", "")
+    description = feature.get("description", "")
+    combined = f"{title} {description}"
+
+    for keyword, category in QUICK_CLASSIFY_KEYWORDS.items():
+        pattern = _get_keyword_pattern(keyword)
+        if not pattern.search(combined):
+            continue
+
+        stats = _get_keyword_stats(keyword)
+
+        if stats["overridden"] >= _ADAPTIVE_OVERRIDE_THRESHOLD:
+            continue
+
+        stats["matched"] += 1
+
+        logger.info(f"[quick_classify] Auto-skip '{title[:60]}' matched keyword '{keyword}' -> {category}")
+        return {
+            "category": category,
+            "categories": [category],
+            "importance_score": 1,
+            "importance_score_reason": f"Auto-classified: matched keyword '{keyword}'",
+            "is_user_facing": False,
+            "target_audience": [],
+            "marketing_summary": f"Auto-classified: matched '{keyword}'. Use override to reclassify if needed.",
+            "recommended_channels": [],
+            "classification_method": "quick_keyword",
+            "matched_keyword": keyword,
+        }
+
+    return None
+
 
 CLASSIFICATION_SYSTEM_PROMPT = """You are a product marketing classifier for Chartmetric, a music data analytics platform used by artists, managers, labels, publishers, and playlist curators.
 
@@ -54,11 +202,11 @@ RULES FOR recommended_channels:
 - importance_score 3 (user-facing): twitter, email_standalone, inapp, notion_monthly
 - importance_score 3 (not user-facing): notion_monthly only
 - importance_score 2: notion_monthly only
-- importance_score 1: (none — skip marketing entirely)
+- importance_score 1: (none -- skip marketing entirely)
 - Always include notion_monthly for score >= 2
-- twitter and inapp go together — if a feature is worth tweeting, it's worth an in-app announcement
-- email_newsletter is reserved for the best features (score >= 4) — it's a curated monthly digest, not a catch-all
-- article_hmc is almost never for a single feature — it's for thematic bundles. Only include for score 5 standalone features
+- twitter and inapp go together -- if a feature is worth tweeting, it's worth an in-app announcement
+- email_newsletter is reserved for the best features (score >= 4) -- it's a curated monthly digest, not a catch-all
+- article_hmc is almost never for a single feature -- it's for thematic bundles. Only include for score 5 standalone features
 
 RULES FOR target_audience -- pick the most relevant subset of:
 ["artists", "managers", "labels", "publishers", "curators", "all"]
@@ -129,12 +277,21 @@ def clear_cache():
     CLASSIFICATION_CACHE.clear()
 
 
-def classify_feature(feature_data: dict) -> dict:
+def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
     feature_id = feature_data.get("id", "")
 
-    cached = get_cached_classification(feature_id)
-    if cached is not None:
-        return cached
+    if not force_claude:
+        cached = get_cached_classification(feature_id)
+        if cached is not None:
+            return cached
+
+        qc = quick_classify(feature_data)
+        if qc is not None:
+            qc["feature_id"] = feature_id
+            qc["title"] = feature_data.get("title", "")
+            if feature_id:
+                CLASSIFICATION_CACHE[feature_id] = qc
+            return qc
 
     title = feature_data.get("title", "")
     description = feature_data.get("description", "")
@@ -169,6 +326,7 @@ def classify_feature(feature_data: dict) -> dict:
             "marketing_summary": "",
             "recommended_channels": [],
             "skip_reason": f"Classification failed: {result.get('error', 'unknown error')}",
+            "classification_method": "claude_error",
         }
 
     try:
@@ -180,6 +338,7 @@ def classify_feature(feature_data: dict) -> dict:
         classification = json.loads(content)
         classification["feature_id"] = feature_id
         classification["title"] = title
+        classification["classification_method"] = "claude"
         if "categories" not in classification or not classification["categories"]:
             classification["categories"] = [classification.get("category", "unknown")]
         if "category" not in classification and classification.get("categories"):
@@ -201,6 +360,7 @@ def classify_feature(feature_data: dict) -> dict:
             "marketing_summary": "",
             "recommended_channels": [],
             "skip_reason": "Classification returned invalid JSON",
+            "classification_method": "claude_error",
         }
 
 
@@ -255,3 +415,24 @@ def apply_manual_overrides(classified_features: list[dict]) -> list[dict]:
         reverse=True,
     )
     return classified_features
+
+
+def get_classification_tier_stats() -> dict:
+    quick_count = 0
+    claude_count = 0
+    claude_pending = 0
+
+    for fid, cl in CLASSIFICATION_CACHE.items():
+        method = cl.get("classification_method", "")
+        if method == "quick_keyword":
+            quick_count += 1
+        elif method == "claude":
+            claude_count += 1
+        elif method == "claude_error":
+            claude_count += 1
+
+    return {
+        "auto_skipped": quick_count,
+        "ai_classified": claude_count,
+        "total_cached": len(CLASSIFICATION_CACHE),
+    }

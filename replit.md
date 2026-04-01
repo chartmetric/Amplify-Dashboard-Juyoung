@@ -89,7 +89,7 @@ Product marketing autopilot that ingests feature data from multiple sources and 
   - `sources/asana_source.py` — AsanaSource: enrichment-only via `enrich_feature()` (3-tier: URL match → title search → no match); `list_unannounced_tasks()` for Asana-only features; workspace GID=1198197264916217
   - `sources/manual_source.py` — ManualSource (stateless, returns FeatureContext from kwargs)
   - `ai/generator.py` — Content generation across 7 channels (twitter, email_newsletter, email_standalone, inapp, linkedin, notion_monthly, article_hmc)
-  - `ai/classifier.py` — Claude-powered feature classification with multi-category support
+  - `ai/classifier.py` — Tiered classification: `quick_classify()` (keyword-based, no API call) + Claude API for everything else; adaptive learning disables keywords after 3+ overrides; word-boundary matching to prevent false positives
   - `ai/classification_overrides.py` — In-memory override store + learning context
 - **Pipeline**: `_get_slack_first_features(days)` → Slack extraction → parallel Asana enrichment (ThreadPoolExecutor, 5 workers) → unannounced task scan → 120s TTL cache
 - **Feature IDs**: `slack-{ts}-{bullet_idx}` for Slack features; Asana GID for asana-only
@@ -105,6 +105,16 @@ Product marketing autopilot that ingests feature data from multiple sources and 
   - `POST /api/classification/override` — save override + recalculate channels + teach AI
   - `GET /api/classification/overrides` — list all override history
   - `ai/classification_overrides.py` — in-memory override store + learning context builder
+- **Tiered classification**: 
+  - Tier 1 (quick_classify): 50 keyword patterns with word-boundary regex matching, auto-assigns importance 1, no Claude API call
+  - Tier 2 (Claude): full classification for features that don't match any keyword
+  - Adaptive learning: keyword override tracking; after 3+ marketer overrides on same keyword, that keyword is disabled from auto-skip
+  - Dashboard shows tier breakdown: "X auto-skipped | Y AI-classified | Z pending"
+  - Auto-classified cards show yellow "&#9889; Auto-classified" pill and "Reclassify with AI" button
+  - `POST /api/features/reclassify` — force Claude reclassification for a specific feature
+  - `GET /api/classifier/keywords` — list all keywords with match/override counts
+  - `POST /api/classifier/keywords` — add/remove keywords
+  - `GET /api/classifier/tier-stats` — get auto-skipped/AI-classified/total counts
 - **Multi-category**: classifier returns `categories` array (1-3) alongside primary `category`; category filter matches any; dashboard renders multiple category pills per card
 - **JSON parsing**: classifier strips markdown code blocks from Claude responses before parsing
 

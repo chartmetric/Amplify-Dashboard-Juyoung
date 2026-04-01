@@ -202,6 +202,23 @@
         .cat-default { background: rgba(107,114,128,0.15); color: #8899aa; }
         .cat-unclassified { background: rgba(75,85,99,0.12); color: #6b7280; font-style: italic; }
         .pre-filter-badge { font-size: 10px; padding: 2px 8px; border-radius: 99px; background: rgba(107,114,128,0.15); color: #6b7280; }
+        .auto-classified-pill {
+            font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
+            background: rgba(234,179,8,0.12); color: #eab308; white-space: nowrap; cursor: default;
+        }
+        .btn-reclassify {
+            background: rgba(168,85,247,0.15); color: #a855f7; border: 1px solid rgba(168,85,247,0.3);
+            padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 600;
+            cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; gap: 4px;
+        }
+        .btn-reclassify:hover { background: rgba(168,85,247,0.25); }
+        .btn-reclassify:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-reclassify .btn-spinner { display: none; width: 12px; height: 12px; border: 2px solid rgba(168,85,247,0.3); border-top-color: #a855f7; border-radius: 50%; animation: spin 0.6s linear infinite; }
+        .card-actions { display: flex; align-items: center; gap: 8px; }
+        .tier-stat { font-size: 12px; padding: 2px 8px; border-radius: 6px; }
+        .tier-auto { background: rgba(234,179,8,0.1); color: #eab308; }
+        .tier-ai { background: rgba(0,201,167,0.1); color: #00C9A7; }
+        .tier-pending { background: rgba(107,114,128,0.1); color: #6b7280; }
         .source-pill {
             font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
             text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap;
@@ -215,6 +232,7 @@
         .link-row a { font-size: 12px; color: #58a6ff; text-decoration: none; display: flex; align-items: center; gap: 4px; }
         .link-row a:hover { text-decoration: underline; }
         .no-asana-note { font-size: 11px; color: #6b7280; font-style: italic; margin-top: 6px; }
+        .auto-class-note { font-size: 11px; color: #eab308; background: rgba(234,179,8,0.08); padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid rgba(234,179,8,0.3); }
         .cat-popover {
             position: absolute; top: 100%; left: 0; margin-top: 6px;
             background: #1a2733; border: 1px solid #2a3a4a; border-radius: 10px;
@@ -717,12 +735,15 @@ function loadFeatures() {
             allFeatures = data.features || data.classified_features || [];
             currentFunnelData = data;
             if (stats) {
+                var tierCounts = countTiers();
                 stats.innerHTML =
-                    '<span>Total: ' + allFeatures.length + '</span>' +
-                    '<span id="stat-classified">Classified: ' + countClassified() + '</span>' +
-                    '<span id="stat-unclassified">Unclassified: ' + (allFeatures.length - countClassified()) + '</span>';
+                    '<span>Features: ' + allFeatures.length + ' total</span>' +
+                    '<span id="stat-auto-skipped" class="tier-stat tier-auto">' + tierCounts.autoSkipped + ' auto-skipped</span>' +
+                    '<span id="stat-ai-classified" class="tier-stat tier-ai">' + tierCounts.aiClassified + ' AI-classified</span>' +
+                    '<span id="stat-unclassified" class="tier-stat tier-pending">' + tierCounts.unclassified + ' pending</span>';
                 stats.style.display = 'flex';
             }
+            updateTierStats();
             if (typeof renderFunnelBar === 'function') renderFunnelBar(data, 'showing');
             if (allFeatures.length === 0) {
                 empty.innerHTML = '<h3>No features found</h3><p>Try refreshing or check your data sources.</p>';
@@ -746,6 +767,32 @@ function countClassified() {
         if (allFeatures[i].classification) n++;
     }
     return n;
+}
+
+function countTiers() {
+    var autoSkipped = 0, aiClassified = 0, unclassified = 0;
+    for (var i = 0; i < allFeatures.length; i++) {
+        var cl = allFeatures[i].classification;
+        if (!cl || cl.unclassified) {
+            unclassified++;
+        } else if (cl.classification_method === 'quick_keyword') {
+            autoSkipped++;
+        } else {
+            aiClassified++;
+        }
+    }
+    return { autoSkipped: autoSkipped, aiClassified: aiClassified, unclassified: unclassified };
+}
+
+function updateTierStats() {
+    var stats = document.getElementById('stats-row');
+    if (!stats) return;
+    var tierCounts = countTiers();
+    stats.innerHTML =
+        '<span>Features: ' + allFeatures.length + ' total</span>' +
+        '<span id="stat-auto-skipped" class="tier-stat tier-auto">' + tierCounts.autoSkipped + ' auto-skipped</span>' +
+        '<span id="stat-ai-classified" class="tier-stat tier-ai">' + tierCounts.aiClassified + ' AI-classified</span>' +
+        '<span id="stat-unclassified" class="tier-stat tier-pending">' + tierCounts.unclassified + ' pending</span>';
 }
 
 function startBatchClassification() {
@@ -831,11 +878,7 @@ function fadeOutProgressBar() {
 }
 
 function updateStats() {
-    var cl = countClassified();
-    var statCl = document.getElementById('stat-classified');
-    var statUncl = document.getElementById('stat-unclassified');
-    if (statCl) statCl.textContent = 'Classified: ' + cl;
-    if (statUncl) statUncl.textContent = 'Unclassified: ' + (allFeatures.length - cl);
+    updateTierStats();
 }
 
 function setCategoryFilter(cat, btn) {
@@ -968,6 +1011,8 @@ function buildCard(f, isUnclassified) {
     var channels = c.recommended_channels || [];
     var preFiltered = c.pre_filtered || false;
     var isOverridden = c.manual_override || false;
+    var isAutoClassified = c.classification_method === 'quick_keyword';
+    var matchedKeyword = c.matched_keyword || '';
     var fid = f.id || '';
 
     var card = document.createElement('div');
@@ -992,6 +1037,11 @@ function buildCard(f, isUnclassified) {
             var cls = ALL_CATS.indexOf(cat) !== -1 ? 'cat-' + cat : 'cat-default';
             return '<span class="category-pill ' + cls + '">' + (CAT_LABELS[cat] || cat.replace(/_/g, ' ')) + '</span>';
         }).join('');
+    }
+
+    var autoClassifiedPillHtml = '';
+    if (isAutoClassified && !isOverridden) {
+        autoClassifiedPillHtml = '<span class="auto-classified-pill" title="Auto-skipped: matched \'' + escHtml(matchedKeyword) + '\'">&#9889; Auto-classified</span>';
     }
 
     var sourcePillHtml = '';
@@ -1046,6 +1096,7 @@ function buildCard(f, isUnclassified) {
                 '</div>' +
                 '<div class="card-meta">' +
                     catBadgesHtml +
+                    autoClassifiedPillHtml +
                     sourcePillHtml +
                     prefixHtml +
                     versionHtml +
@@ -1053,7 +1104,10 @@ function buildCard(f, isUnclassified) {
                 summaryHtml +
                 '<div class="card-bottom-row">' +
                     '<div class="channel-pills">' + channelHtml + '</div>' +
-                    actionBtn +
+                    '<div class="card-actions">' +
+                        (isAutoClassified && !isOverridden ? '<button class="btn-reclassify" data-fid="' + escAttr(fid) + '" data-title="' + escAttr(f.title || '') + '" data-desc="' + escAttr((f.description || '').substring(0, 500)) + '"><span class="btn-spinner"></span><span class="btn-label">Reclassify with AI &#10024;</span></button>' : '') +
+                        actionBtn +
+                    '</div>' +
                 '</div>' +
             '</div>' +
         '</div>' +
@@ -1099,7 +1153,55 @@ function buildCard(f, isUnclassified) {
         });
     }
 
+    var reclassifyBtn = card.querySelector('.btn-reclassify');
+    if (reclassifyBtn) {
+        reclassifyBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            reclassifyWithClaude(fid, reclassifyBtn, card);
+        });
+    }
+
     return card;
+}
+
+function reclassifyWithClaude(fid, btn, card) {
+    var label = btn.querySelector('.btn-label');
+    var spinner = btn.querySelector('.btn-spinner');
+    label.textContent = 'Classifying...';
+    spinner.style.display = 'inline-block';
+    btn.disabled = true;
+
+    fetch('/api/features/reclassify', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            feature_id: fid,
+            title: btn.dataset.title || '',
+            description: btn.dataset.desc || ''
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success && data.classification) {
+            for (var i = 0; i < allFeatures.length; i++) {
+                if (allFeatures[i].id === fid) {
+                    allFeatures[i].classification = data.classification;
+                    break;
+                }
+            }
+            renderAll();
+            updateTierStats();
+        } else {
+            label.textContent = 'Reclassify with AI \u2728';
+            spinner.style.display = 'none';
+            btn.disabled = false;
+        }
+    })
+    .catch(function() {
+        label.textContent = 'Reclassify with AI \u2728';
+        spinner.style.display = 'none';
+        btn.disabled = false;
+    });
 }
 
 function attachShowMore() {
@@ -1197,7 +1299,14 @@ function buildMetaPills(f) {
         noAsanaNote = '<div class="no-asana-note">No Asana task linked</div>';
     }
 
+    var autoClassNote = '';
+    var cl = f.classification || {};
+    if (cl.classification_method === 'quick_keyword' && cl.matched_keyword) {
+        autoClassNote = '<div class="auto-class-note">Auto-skipped: matched keyword \'' + escHtml(cl.matched_keyword) + '\'. No Claude API call was used for this feature.</div>';
+    }
+
     var html = '';
+    if (autoClassNote) html += autoClassNote;
     if (pills.length > 0) html += '<div class="meta-pills">' + pills.join('') + '</div>';
     html += linksHtml + noAsanaNote;
     return html;

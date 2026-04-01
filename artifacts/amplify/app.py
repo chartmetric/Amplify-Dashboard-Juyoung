@@ -18,6 +18,8 @@ from ai.classifier import (
     get_manual_overrides, remove_manual_override, apply_manual_overrides,
     get_cached_classification, get_all_cached_classifications, clear_cache,
     CLASSIFICATION_CACHE,
+    quick_classify, get_keyword_list, add_keyword, remove_keyword,
+    record_keyword_override, get_classification_tier_stats,
 )
 from ai.pre_filter import pre_filter_batch  # kept for backward compat, not used in main pipeline
 from ai.generator import generate_for_channel, generate_all_channels
@@ -1010,6 +1012,13 @@ def add_classification_override():
 
     entry = save_classification_override(feature_id, feature_title, original, override, reason)
 
+    cached = get_cached_classification(feature_id) or {}
+    classification_method = original.get("classification_method") or cached.get("classification_method")
+    matched_kw = original.get("matched_keyword") or cached.get("matched_keyword")
+    if classification_method == "quick_keyword" and matched_kw:
+        record_keyword_override(matched_kw)
+        logger.info(f"[tiered] Recorded override for quick_classify keyword '{matched_kw}'")
+
     override_cats = override.get("categories", [override.get("category", original.get("category"))])
     set_manual_override(feature_id, {
         "category": override.get("category", original.get("category")),
@@ -1037,6 +1046,87 @@ def list_classification_overrides():
     """
     overrides = get_classification_overrides()
     return jsonify({"overrides": overrides, "count": len(overrides)})
+
+
+@app.route("/api/classifier/keywords", methods=["GET"])
+def get_classifier_keywords():
+    keywords = get_keyword_list()
+    return jsonify({"keywords": keywords, "count": len(keywords)})
+
+
+@app.route("/api/classifier/keywords", methods=["POST"])
+def manage_classifier_keywords():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    action = data.get("action", "add")
+    keyword = data.get("keyword", "").strip()
+    category = data.get("category", "infrastructure")
+
+    if not keyword:
+        return jsonify({"error": "keyword is required"}), 400
+
+    if action == "add":
+        add_keyword(keyword, category)
+        return jsonify({"success": True, "message": f"Added keyword '{keyword}' -> '{category}'"})
+    elif action == "remove":
+        removed = remove_keyword(keyword)
+        if removed:
+            return jsonify({"success": True, "message": f"Removed keyword '{keyword}'"})
+        return jsonify({"error": f"Keyword '{keyword}' not found"}), 404
+    else:
+        return jsonify({"error": "action must be 'add' or 'remove'"}), 400
+
+
+@app.route("/api/classifier/tier-stats")
+def get_tier_stats():
+    stats = get_classification_tier_stats()
+    return jsonify(stats)
+
+
+@app.route("/api/features/reclassify", methods=["POST"])
+def reclassify_feature_with_claude():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    feature_id = data.get("feature_id")
+    if not feature_id:
+        return jsonify({"error": "feature_id is required"}), 400
+
+    feature_data = None
+    for f in getattr(reclassify_feature_with_claude, '_all_features', []):
+        if f.get("id") == feature_id:
+            feature_data = f
+            break
+
+    if not feature_data:
+        if feature_id in CLASSIFICATION_CACHE:
+            cached = CLASSIFICATION_CACHE[feature_id]
+            feature_data = {
+                "id": feature_id,
+                "title": cached.get("title", ""),
+                "description": data.get("description", ""),
+            }
+        else:
+            feature_data = {
+                "id": feature_id,
+                "title": data.get("title", ""),
+                "description": data.get("description", ""),
+            }
+
+    if feature_id in CLASSIFICATION_CACHE:
+        del CLASSIFICATION_CACHE[feature_id]
+
+    remove_manual_override(feature_id)
+
+    classification = classify_feature(feature_data, force_claude=True)
+    return jsonify({
+        "success": True,
+        "classification": classification,
+        "method": "claude",
+    })
 
 
 @app.route("/api/examples")
