@@ -127,7 +127,13 @@ def classify_feature(feature_data: dict) -> dict:
         urgency_score=urgency_score,
     )
 
-    result = generate_content(CLASSIFICATION_SYSTEM_PROMPT, user_prompt, max_tokens=512)
+    from ai.classification_overrides import get_override_learning_context
+    learning_context = get_override_learning_context(limit=3)
+    system_prompt = CLASSIFICATION_SYSTEM_PROMPT
+    if learning_context:
+        system_prompt = system_prompt + "\n" + learning_context
+
+    result = generate_content(system_prompt, user_prompt, max_tokens=512)
 
     if not result["success"]:
         return {

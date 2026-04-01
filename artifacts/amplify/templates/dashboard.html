@@ -324,6 +324,92 @@
         }
         .meta-pill.released { border-color: rgba(0,201,167,0.3); color: #00C9A7; }
         .meta-pill.in-progress { border-color: rgba(234,179,8,0.3); color: #eab308; }
+        .override-link {
+            font-size: 12px;
+            color: #8899aa;
+            cursor: pointer;
+            margin-top: 12px;
+            display: inline-block;
+            transition: color 0.15s;
+        }
+        .override-link:hover { color: #00C9A7; }
+        .override-form {
+            margin-top: 12px;
+            padding: 14px;
+            background: #0f1923;
+            border: 1px solid #2a3a4a;
+            border-radius: 10px;
+        }
+        .override-form .form-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .override-form label {
+            font-size: 12px;
+            color: #8899aa;
+            min-width: 70px;
+        }
+        .override-form select, .override-form input {
+            background: #1a2733;
+            color: #e0e0e0;
+            border: 1px solid #2a3a4a;
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 13px;
+            outline: none;
+        }
+        .override-form select:focus, .override-form input:focus { border-color: #00C9A7; }
+        .override-form input { flex: 1; min-width: 180px; }
+        .override-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .btn-save-override {
+            background: #00C9A7;
+            color: #0f1923;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-save-override:hover { background: #00e0bb; }
+        .btn-cancel-override {
+            background: transparent;
+            color: #8899aa;
+            border: 1px solid #2a3a4a;
+            padding: 6px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .btn-cancel-override:hover { background: rgba(255,255,255,0.05); }
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #1a2733;
+            border: 1px solid #00C9A7;
+            color: #e0e0e0;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 13px;
+            z-index: 300;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.2s, transform 0.2s;
+            pointer-events: none;
+        }
+        .toast.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast.warning { border-color: #eab308; }
         .loading-container {
             display: flex;
             flex-direction: column;
@@ -647,11 +733,17 @@ function renderFeatures() {
             '<div class="card-expanded-content">' +
                 buildDescBlock(f) +
                 buildMetaPills(f) +
+                '<span class="override-link" data-idx="' + idx + '">&#9998; Edit Classification</span>' +
             '</div>';
 
         card.addEventListener('click', function(e) {
-            if (e.target.closest('.btn-generate') || e.target.closest('.show-more-link')) return;
+            if (e.target.closest('.btn-generate') || e.target.closest('.show-more-link') || e.target.closest('.override-link') || e.target.closest('.override-form')) return;
             toggleCard(idx);
+        });
+
+        card.querySelector('.override-link').addEventListener('click', function(e) {
+            e.stopPropagation();
+            showOverrideForm(idx);
         });
 
         card.querySelector('.btn-generate').addEventListener('click', function(e) {
@@ -760,8 +852,127 @@ function submitManualInput() {
     });
 }
 
+function showToast(msg, isWarning) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast visible' + (isWarning ? ' warning' : '');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function() { t.className = 'toast'; }, 3000);
+}
+
+function showOverrideForm(idx) {
+    var card = document.querySelectorAll('.feature-card')[idx];
+    var existing = card.querySelector('.override-form');
+    if (existing) { existing.remove(); return; }
+
+    var f = allFeatures[idx];
+    var c = f.classification || {};
+    var cats = ['new_feature','improvement','bug_fix','infrastructure','mobile','deprecation'];
+
+    var catOptions = cats.map(function(ct) {
+        return '<option value="' + ct + '"' + (ct === c.category ? ' selected' : '') + '>' + ct.replace(/_/g, ' ') + '</option>';
+    }).join('');
+    var scoreOptions = [1,2,3,4,5].map(function(s) {
+        return '<option value="' + s + '"' + (s === c.importance_score ? ' selected' : '') + '>' + s + '</option>';
+    }).join('');
+
+    var formDiv = document.createElement('div');
+    formDiv.className = 'override-form';
+    formDiv.innerHTML =
+        '<div class="form-row">' +
+            '<label>Score</label>' +
+            '<select class="ovr-score">' + scoreOptions + '</select>' +
+            '<label>Category</label>' +
+            '<select class="ovr-cat">' + catOptions + '</select>' +
+        '</div>' +
+        '<div class="form-row">' +
+            '<label>Reason</label>' +
+            '<input type="text" class="ovr-reason" placeholder="Why this change? (optional, helps AI learn)">' +
+        '</div>' +
+        '<div class="override-actions">' +
+            '<button class="btn-save-override">Save Override</button>' +
+            '<button class="btn-cancel-override">Cancel</button>' +
+        '</div>';
+
+    var expandedContent = card.querySelector('.card-expanded-content');
+    expandedContent.appendChild(formDiv);
+
+    formDiv.querySelector('.btn-cancel-override').addEventListener('click', function(e) {
+        e.stopPropagation();
+        formDiv.remove();
+    });
+
+    formDiv.querySelector('.btn-save-override').addEventListener('click', function(e) {
+        e.stopPropagation();
+        var newScore = parseInt(formDiv.querySelector('.ovr-score').value);
+        var newCat = formDiv.querySelector('.ovr-cat').value;
+        var reason = formDiv.querySelector('.ovr-reason').value.trim();
+
+        var btn = formDiv.querySelector('.btn-save-override');
+        btn.textContent = 'Saving...';
+        btn.disabled = true;
+
+        var payload = {
+            feature_id: f.id || f.feature_id || '',
+            feature_title: f.title || '',
+            original_classification: {
+                category: c.category,
+                importance_score: c.importance_score,
+                is_user_facing: c.is_user_facing,
+                target_audience: c.target_audience,
+                recommended_channels: c.recommended_channels,
+                marketing_summary: c.marketing_summary
+            },
+            override_classification: {
+                category: newCat,
+                importance_score: newScore
+            },
+            reason: reason
+        };
+
+        fetch('/api/classification/override', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { alert('Error: ' + data.error); btn.textContent = 'Save Override'; btn.disabled = false; return; }
+
+            c.importance_score = newScore;
+            c.category = newCat;
+            c.recommended_channels = data.recommended_channels || [];
+            c.manual_override = true;
+            f.classification = c;
+
+            formDiv.remove();
+
+            var minImp = parseInt(document.getElementById('importance-filter').value);
+            if (newScore < minImp) {
+                showToast('Feature moved out of current filter view', true);
+            } else {
+                showToast('Classification updated \u2014 AI will learn from this');
+            }
+
+            allFeatures.sort(function(a, b) {
+                return (b.classification || {}).importance_score - (a.classification || {}).importance_score;
+            });
+            expandedIdx = -1;
+            renderFeatures();
+        })
+        .catch(function(err) {
+            btn.textContent = 'Save Override';
+            btn.disabled = false;
+            alert('Error: ' + err.message);
+        });
+    });
+
+    formDiv.addEventListener('click', function(e) { e.stopPropagation(); });
+}
+
 checkHealth();
 loadFeatures();
 </script>
+<div class="toast" id="toast"></div>
 </body>
 </html>

@@ -1,0 +1,72 @@
+Add the ability for the marketer to manually override the AI classification (importance score and category) on any feature card in the dashboard. Overrides should feed back into the classifier to improve future accuracy.
+
+1. OVERRIDE UI — on each feature card (in the expanded state), add an "Edit Classification" link/button (small, muted, pencil icon or text). When clicked, it transforms the importance score and category badge into editable inline controls:
+
+   - Importance score: becomes a dropdown (1-5) pre-filled with the current AI-assigned score
+   - Category: becomes a dropdown with options: new_feature, improvement, bug_fix, infrastructure, mobile, deprecation — pre-filled with current
+   - Reason (optional): a small text input appears below, placeholder: "Why this change? (optional, helps AI learn)"
+   - Two buttons: "Save Override" (teal, primary) and "Cancel" (muted, returns to display mode)
+
+   When "Save Override" is clicked:
+   - Update the card UI immediately with the new score and category (recolor the score number, swap the badge)
+   - Re-sort the feature list by the updated importance scores
+   - Re-count the category filter pills
+   - Show a toast: "Classification updated — AI will learn from this"
+   - If the feature was filtered out by the current importance or category filter after the change, show a brief toast warning: "Feature moved out of current filter view"
+
+2. BACKEND — add a new endpoint:
+
+   POST /api/classification/override
+   - Body:
+   {
+       "feature_id": "...",
+       "feature_title": "...",
+       "original_classification": {
+           "category": "infrastructure",
+           "importance_score": 2,
+           "is_user_facing": false,
+           "target_audience": ["all"],
+           "recommended_channels": ["notion_monthly"],
+           "marketing_summary": "..."
+       },
+       "override_classification": {
+           "category": "improvement",
+           "importance_score": 4,
+           "is_user_facing": true,
+           "target_audience": ["artists", "managers"],
+           "recommended_channels": ["twitter", "email_newsletter", "inapp", "slack_internal", "notion_monthly"]
+       },
+       "reason": "This impacts artist-facing search UX significantly, not just infra"
+   }
+   - Saves this override to an in-memory store (create a new file `ai/classification_overrides.py` with a CLASSIFICATION_OVERRIDES list)
+   - Returns {"success": true, "message": "Override saved and will improve future classifications"}
+
+3. CLASSIFICATION LEARNING — update `ai/classifier.py` to use past overrides as few-shot context:
+
+   - Import the overrides store from classification_overrides.py
+   - In the classify_feature function, BEFORE calling Claude, check if there are any saved overrides (up to 3 most recent)
+   - If overrides exist, append this section to the classification system prompt:
+
+   LEARNING FROM PAST CORRECTIONS (a human marketer corrected these AI classifications — learn from their judgment):
+   ---
+   Feature: {feature_title}
+   AI classified as: {original_category}, importance {original_score}
+   Marketer corrected to: {override_category}, importance {override_score}
+   Reason: {reason or "No reason given"}
+   ---
+
+   This teaches the classifier over time. For example, if the marketer keeps bumping up "infrastructure" items that affect search performance, the AI will learn that those deserve higher scores.
+
+4. ALSO update the override endpoint to recalculate recommended_channels automatically when importance_score changes:
+   - Use the same channel recommendation rules from the classifier:
+     - Score 5: all external channels + slack_internal + notion_monthly
+     - Score 4: 2-3 most relevant external + slack_internal + notion_monthly + inapp
+     - Score 3: email_newsletter + slack_internal + notion_monthly
+     - Score 2: slack_internal + notion_monthly
+     - Score 1: notion_monthly only
+   - Return the updated recommended_channels in the response so the UI can update the channel pills on the card
+
+5. ADD an endpoint to view overrides history:
+   GET /api/classification/overrides
+   - Returns all past overrides, most recent first
+   - Useful for debugging and seeing how the marketer has been correcting the AI

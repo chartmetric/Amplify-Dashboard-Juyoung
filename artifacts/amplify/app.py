@@ -16,6 +16,7 @@ from ai.pre_filter import pre_filter_batch
 from ai.generator import generate_for_channel, generate_all_channels
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
+from ai.classification_overrides import save_override as save_classification_override, get_overrides as get_classification_overrides
 from datetime import datetime, timezone
 
 app = Flask(__name__, template_folder="templates")
@@ -422,6 +423,67 @@ def list_manual_overrides():
     Response: {"overrides": {"feature_id": {...}, ...}}
     """
     return jsonify({"overrides": get_manual_overrides()})
+
+
+@app.route("/api/classification/override", methods=["POST"])
+def add_classification_override():
+    """Save a classification override and teach the AI from marketer corrections.
+
+    Category: Feedback Loop
+
+    Body:
+    {
+        "feature_id": "abc123",
+        "feature_title": "Track Page Redesign",
+        "original_classification": {"category": "infrastructure", "importance_score": 2, ...},
+        "override_classification": {"category": "improvement", "importance_score": 4},
+        "reason": "This impacts artist-facing search UX significantly"
+    }
+
+    Response: {"success": true, "entry": {...}, "recommended_channels": [...]}
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    feature_id = data.get("feature_id")
+    feature_title = data.get("feature_title", "")
+    original = data.get("original_classification", {})
+    override = data.get("override_classification", {})
+    reason = data.get("reason", "")
+
+    if not feature_id:
+        return jsonify({"error": "feature_id is required"}), 400
+    if not override.get("category") and not override.get("importance_score"):
+        return jsonify({"error": "override_classification must include category or importance_score"}), 400
+
+    entry = save_classification_override(feature_id, feature_title, original, override, reason)
+
+    set_manual_override(feature_id, {
+        "category": override.get("category", original.get("category")),
+        "importance_score": override.get("importance_score", original.get("importance_score")),
+        "recommended_channels": entry["override_classification"]["recommended_channels"],
+        "manual_override": True,
+    })
+
+    return jsonify({
+        "success": True,
+        "message": "Override saved and will improve future classifications",
+        "entry": entry,
+        "recommended_channels": entry["override_classification"]["recommended_channels"],
+    })
+
+
+@app.route("/api/classification/overrides")
+def list_classification_overrides():
+    """List all classification override history, most recent first.
+
+    Category: Feedback Loop
+
+    Response: {"overrides": [...], "count": 5}
+    """
+    overrides = get_classification_overrides()
+    return jsonify({"overrides": overrides, "count": len(overrides)})
 
 
 @app.route("/api/examples")
