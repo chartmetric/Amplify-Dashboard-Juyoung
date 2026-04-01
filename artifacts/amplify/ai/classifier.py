@@ -117,6 +117,19 @@ def _enforce_classification_rules(classification: dict):
         classification["recommended_channels"] = []
 
 
+def _load_cache_from_db():
+    try:
+        from ai.db import load_classifications, is_available
+        if not is_available():
+            return
+        data = load_classifications()
+        CLASSIFICATION_CACHE.update(data)
+        if data:
+            logger.info(f"[classifier] Loaded {len(data)} classifications from database")
+    except Exception as e:
+        logger.error(f"[classifier] Failed to load classifications from db: {e}")
+
+
 def get_cached_classification(feature_id: str) -> dict | None:
     return CLASSIFICATION_CACHE.get(feature_id)
 
@@ -127,6 +140,11 @@ def get_all_cached_classifications() -> dict:
 
 def clear_cache():
     CLASSIFICATION_CACHE.clear()
+    try:
+        from ai.db import delete_all_classifications
+        delete_all_classifications()
+    except Exception as e:
+        logger.error(f"[classifier] Failed to clear classifications in db: {e}")
 
 
 def classify_feature(feature_data: dict) -> dict:
@@ -135,6 +153,16 @@ def classify_feature(feature_data: dict) -> dict:
     cached = get_cached_classification(feature_id)
     if cached is not None:
         return cached
+
+    if feature_id:
+        try:
+            from ai.db import load_classification_by_id
+            db_result = load_classification_by_id(feature_id)
+            if db_result is not None:
+                CLASSIFICATION_CACHE[feature_id] = db_result
+                return db_result
+        except Exception as e:
+            logger.error(f"[classifier] DB cache-miss lookup failed for {feature_id}: {e}")
 
     title = feature_data.get("title", "")
     description = feature_data.get("description", "")
@@ -187,6 +215,11 @@ def classify_feature(feature_data: dict) -> dict:
         _enforce_classification_rules(classification)
         if feature_id:
             CLASSIFICATION_CACHE[feature_id] = classification
+            try:
+                from ai.db import save_classification
+                save_classification(feature_id, classification)
+            except Exception as e:
+                logger.error(f"[classifier] Failed to persist classification for {feature_id}: {e}")
         return classification
     except json.JSONDecodeError:
         logger.error(f"Failed to parse classification JSON for {feature_id}: {result['content'][:200]}")
@@ -229,8 +262,26 @@ def classify_features_batch(features: list[dict], max_workers: int = 2) -> list[
 _manual_overrides = {}
 
 
+def _load_manual_overrides_from_db():
+    try:
+        from ai.db import load_manual_overrides, is_available
+        if not is_available():
+            return
+        data = load_manual_overrides()
+        _manual_overrides.update(data)
+        if data:
+            logger.info(f"[classifier] Loaded {len(data)} manual overrides from database")
+    except Exception as e:
+        logger.error(f"[classifier] Failed to load manual overrides from db: {e}")
+
+
 def set_manual_override(feature_id: str, override: dict):
     _manual_overrides[feature_id] = override
+    try:
+        from ai.db import save_manual_override
+        save_manual_override(feature_id, override)
+    except Exception as e:
+        logger.error(f"[classifier] Failed to persist manual override for {feature_id}: {e}")
 
 
 def get_manual_overrides():
@@ -238,7 +289,13 @@ def get_manual_overrides():
 
 
 def remove_manual_override(feature_id: str):
-    return _manual_overrides.pop(feature_id, None)
+    result = _manual_overrides.pop(feature_id, None)
+    try:
+        from ai.db import delete_manual_override
+        delete_manual_override(feature_id)
+    except Exception as e:
+        logger.error(f"[classifier] Failed to delete manual override for {feature_id} from db: {e}")
+    return result
 
 
 def apply_manual_overrides(classified_features: list[dict]) -> list[dict]:
@@ -255,3 +312,11 @@ def apply_manual_overrides(classified_features: list[dict]) -> list[dict]:
         reverse=True,
     )
     return classified_features
+
+
+def init_from_db():
+    _load_cache_from_db()
+    _load_manual_overrides_from_db()
+
+
+init_from_db()

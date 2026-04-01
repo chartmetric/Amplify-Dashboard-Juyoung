@@ -14,6 +14,20 @@ CHANNEL_RULES_BY_SCORE = {
 }
 
 
+def _load_from_db():
+    try:
+        from ai.db import load_classification_overrides, is_available
+        if not is_available():
+            return
+        data = load_classification_overrides()
+        CLASSIFICATION_OVERRIDES.clear()
+        CLASSIFICATION_OVERRIDES.extend(data)
+        if data:
+            logger.info(f"[classification_overrides] Loaded {len(data)} overrides from database")
+    except Exception as e:
+        logger.error(f"[classification_overrides] Failed to load from db: {e}")
+
+
 def save_override(feature_id, feature_title, original_classification, override_classification, reason=""):
     recommended_channels = CHANNEL_RULES_BY_SCORE.get(
         override_classification.get("importance_score", 1), []
@@ -29,6 +43,11 @@ def save_override(feature_id, feature_title, original_classification, override_c
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     CLASSIFICATION_OVERRIDES.insert(0, entry)
+    try:
+        from ai.db import save_classification_override
+        save_classification_override(entry)
+    except Exception as e:
+        logger.error(f"[classification_overrides] Failed to persist override for '{feature_title}': {e}")
     logger.info(f"[override] Saved override for '{feature_title}': {original_classification.get('category')}({original_classification.get('importance_score')}) -> {override_classification.get('category')}({override_classification.get('importance_score')})")
     return entry
 
@@ -57,3 +76,6 @@ def get_override_learning_context(limit=3):
         lines.append(f"Reason: {e.get('reason') or 'No reason given'}")
     lines.append("---")
     return "\n".join(lines)
+
+
+_load_from_db()
