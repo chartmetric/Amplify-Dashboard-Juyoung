@@ -5,6 +5,7 @@ import logging
 import html
 import re as re_module
 import threading
+import time
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -740,7 +741,15 @@ def all_features_unclassified():
             if fid in overrides:
                 f["classification"]["manual_override"] = True
 
-    return jsonify({"features": features, "total": len(features)})
+    cache_key = f"days_{days}"
+    cached_entry = _pipeline_cache.get(cache_key)
+    last_refreshed = cached_entry["timestamp"] if cached_entry else time.time()
+
+    return jsonify({
+        "features": features,
+        "total": len(features),
+        "last_refreshed": last_refreshed,
+    })
 
 
 @app.route("/api/features/<feature_id>/classify", methods=["POST"])
