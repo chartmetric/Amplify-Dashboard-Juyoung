@@ -1,0 +1,40 @@
+The feature list is currently limited to showing only ~40 features. Remove this hard limit and add pagination so the marketer can see ALL features.
+
+1. BACKEND — update /api/features/all and /api/features/classified:
+   - Remove any hardcoded limit on the number of features returned
+   - Add pagination query parameters: ?page=1&per_page=25 (defaults)
+   - Return pagination metadata in the response:
+   {
+       "features": [...],
+       "pagination": {
+           "page": 1,
+           "per_page": 25,
+           "total": 156,
+           "total_pages": 7,
+           "has_next": true,
+           "has_prev": false
+       }
+   }
+   - Also support ?per_page=all to return everything at once (for export or bulk operations)
+   - The Slack adapter and Asana adapter should fetch ALL results internally (handle their own API pagination), then the /api/features endpoints paginate the combined results
+
+2. FRONTEND — add pagination controls at the bottom of the feature list:
+   - Show: "Showing 1-25 of 156 features"
+   - Pagination buttons: « First | ‹ Prev | 1 2 3 ... 7 | Next › | Last »
+   - Style: dark theme, teal active page number, muted inactive
+   - Per-page dropdown: 25, 50, 100, All
+   - When changing page: fetch the new page, smooth scroll to top of feature list, brief fade transition on the cards
+   - The importance and category filters should work with pagination:
+     - Filtering resets to page 1
+     - Total count updates to reflect filtered results
+   - The status bar counts should reflect the TOTAL across all pages, not just current page
+
+3. ALSO add a "Load All" button next to the per-page dropdown:
+   - Loads all features on one page (calls ?per_page=all)
+   - Show a warning if total > 100: "Loading all 156 features may be slow"
+   - This is for when the marketer wants to scroll through everything or use Ctrl+F to search
+
+4. Make sure background classification still works across pages:
+   - Classification runs on ALL features, not just the currently visible page
+   - When a feature on a non-visible page gets classified, the pagination counts update
+   - When the marketer navigates to that page, the classification is already there
