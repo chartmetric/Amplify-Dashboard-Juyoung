@@ -134,9 +134,9 @@
         }
         .score-popover {
             position: absolute; top: 0; left: 52px; background: #1a2733;
-            border: 1px solid #2a3a4a; border-radius: 10px; padding: 6px;
-            display: flex; flex-direction: column; gap: 4px; z-index: 50;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            border: 1px solid #4a6a8a; border-radius: 10px; padding: 6px;
+            display: flex; flex-direction: column; gap: 4px; z-index: 400;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         }
         .score-option {
             width: 36px; height: 36px; border-radius: 8px; display: flex;
@@ -624,6 +624,11 @@ function getFilteredFeatures() {
 
 function renderAll() {
     var list = document.getElementById('feature-list');
+    list.querySelectorAll('.override-reason-row').forEach(function(row) {
+        if (row._outsideClickHandler) {
+            document.removeEventListener('click', row._outsideClickHandler);
+        }
+    });
     var result = getFilteredFeatures();
     var classified = result.classified;
     var unclassified = result.unclassified;
@@ -955,7 +960,12 @@ function showReasonInput(fid, f, c) {
     var card = document.querySelector('.feature-card[data-fid="' + fid + '"]');
     if (!card) return;
     var existing = card.querySelector('.override-reason-row');
-    if (existing) existing.remove();
+    if (existing) {
+        if (existing._outsideClickHandler) {
+            document.removeEventListener('click', existing._outsideClickHandler);
+        }
+        existing.remove();
+    }
 
     var row = document.createElement('div');
     row.className = 'override-reason-row';
@@ -983,9 +993,36 @@ function showReasonInput(fid, f, c) {
         });
     }
 
-    saveBtn.addEventListener('click', function(e) { e.stopPropagation(); doSave(); });
-    input.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.stopPropagation(); doSave(); } });
+    function doSaveAndRemove() {
+        doSave();
+        document.removeEventListener('click', outsideClickHandler);
+    }
+
+    function outsideClickHandler(e) {
+        if (row.contains(e.target)) return;
+        if (input.value.trim() === '') {
+            doSaveAndRemove();
+        }
+    }
+
+    saveBtn.addEventListener('click', function(e) { e.stopPropagation(); document.removeEventListener('click', outsideClickHandler); doSave(); });
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.stopPropagation(); document.removeEventListener('click', outsideClickHandler); doSave(); return; }
+        if (e.key === 'Escape') {
+            e.stopPropagation();
+            if (input.value.trim() === '') {
+                doSaveAndRemove();
+            } else {
+                input.value = '';
+            }
+        }
+    });
     row.addEventListener('click', function(e) { e.stopPropagation(); });
+
+    row._outsideClickHandler = outsideClickHandler;
+    setTimeout(function() {
+        document.addEventListener('click', outsideClickHandler);
+    }, 0);
 }
 
 function commitOverride(f, c, reason, onDone) {
