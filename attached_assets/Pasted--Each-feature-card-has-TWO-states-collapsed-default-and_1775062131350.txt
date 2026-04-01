@@ -1,0 +1,27 @@
+- Each feature card has TWO states — collapsed (default) and expanded:
+
+   COLLAPSED STATE (default):
+     - Left side: Importance score as a large colored number (5=green, 4=blue, 3=yellow, 2=orange, 1=gray)
+     - Title (bold, white) — clicking the card title or anywhere on the card body (except the Generate button) toggles expanded state
+     - Category badge (colored pill: new_feature=teal, improvement=blue, bug_fix=red, infrastructure=gray, mobile=purple, deprecation=orange)
+     - marketing_summary from classification (one line, muted text)
+     - Row of recommended channel pills (small, outline style)
+     - Right side: "Generate Content →" button (teal, primary style)
+     - Small expand indicator: subtle "▼" chevron or "Show details" link near the bottom-right of the card
+
+   EXPANDED STATE (when card is clicked):
+     - Everything from collapsed state, PLUS:
+     - Full Asana description text below the marketing_summary, in a slightly indented block with a left teal border (like a blockquote). Use #e0e0e0 text, slightly smaller font (14px). If the description is very long (>500 chars), show first 500 chars with a "Show more..." link that reveals the rest.
+     - If the feature has additional context from the API response (like release_status, release_date, reactions_breakdown, total_reactions, urgency_score, engineer, assignee), show these as a row of small metadata pills below the description:
+       - "Released ✓" or "In Progress" (based on release_status)
+       - Release date if available
+       - "🚀 5 reactions" if total_reactions > 0
+       - Engineer name if available
+       - Assignee name if available
+     - The expand/collapse should animate smoothly (CSS max-height transition or similar, ~200ms)
+     - Chevron rotates to "▲" when expanded
+     - Only ONE card can be expanded at a time — clicking a new card collapses the previously expanded one
+
+   - Loading spinner while fetching
+   - Empty state: "No features found above importance level {N}" with suggestion to lower the filter
+   - Error state: friendly message if API fails

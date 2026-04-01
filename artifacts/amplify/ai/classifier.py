@@ -165,7 +165,7 @@ def classify_feature(feature_data: dict) -> dict:
         }
 
 
-def classify_features_batch(features: list[dict], max_workers: int = 8) -> list[dict]:
+def classify_features_batch(features: list[dict], max_workers: int = 3) -> list[dict]:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     classified = [None] * len(features)

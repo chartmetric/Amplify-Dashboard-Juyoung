@@ -4,9 +4,764 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Amplify</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0f1923;
+            color: #e0e0e0;
+            font-family: system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+        }
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 32px;
+            background: #141e2a;
+            border-bottom: 1px solid #2a3a4a;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .topbar-left {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+        }
+        .logo {
+            font-size: 22px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: -0.5px;
+        }
+        .logo-emoji { margin-right: 4px; }
+        .subtitle {
+            font-size: 13px;
+            color: #8899aa;
+            font-weight: 400;
+        }
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .btn-primary {
+            background: #00C9A7;
+            color: #0f1923;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .btn-primary:hover { background: #00e0bb; transform: translateY(-1px); }
+        .btn-primary:active { transform: translateY(0); }
+        .btn-outline {
+            background: transparent;
+            color: #00C9A7;
+            border: 1px solid #00C9A7;
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .btn-outline:hover { background: rgba(0,201,167,0.1); }
+        .health-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #555;
+            display: inline-block;
+            transition: background 0.3s;
+        }
+        .health-dot.ok { background: #00C9A7; box-shadow: 0 0 6px rgba(0,201,167,0.5); }
+        .health-dot.err { background: #ff4d4d; box-shadow: 0 0 6px rgba(255,77,77,0.4); }
+        .health-label {
+            font-size: 12px;
+            color: #8899aa;
+        }
+        .main {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #ffffff;
+        }
+        .filter-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .filter-label {
+            font-size: 13px;
+            color: #8899aa;
+        }
+        select {
+            background: #1a2733;
+            color: #e0e0e0;
+            border: 1px solid #2a3a4a;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            outline: none;
+        }
+        select:focus { border-color: #00C9A7; }
+        .stats-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: #8899aa;
+            flex-wrap: wrap;
+        }
+        .stats-row span {
+            background: #1a2733;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid #2a3a4a;
+        }
+        .feature-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .feature-card {
+            background: #1a2733;
+            border: 1px solid #2a3a4a;
+            border-radius: 12px;
+            padding: 20px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+        .feature-card:hover {
+            border-color: #3a4a5a;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .feature-card.expanded {
+            border-color: #00C9A7;
+            box-shadow: 0 4px 24px rgba(0,201,167,0.1);
+        }
+        .card-top {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        .score-badge {
+            min-width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+        .score-5 { background: rgba(0,201,167,0.15); color: #00C9A7; }
+        .score-4 { background: rgba(59,130,246,0.15); color: #3b82f6; }
+        .score-3 { background: rgba(234,179,8,0.15); color: #eab308; }
+        .score-2 { background: rgba(249,115,22,0.15); color: #f97316; }
+        .score-1 { background: rgba(107,114,128,0.15); color: #6b7280; }
+        .score-0 { background: rgba(107,114,128,0.1); color: #4b5563; }
+        .card-body {
+            flex: 1;
+            min-width: 0;
+        }
+        .card-title-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 6px;
+        }
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #ffffff;
+            line-height: 1.3;
+        }
+        .chevron {
+            font-size: 12px;
+            color: #8899aa;
+            transition: transform 0.2s;
+            flex-shrink: 0;
+            margin-top: 3px;
+        }
+        .feature-card.expanded .chevron {
+            transform: rotate(180deg);
+        }
+        .card-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .category-pill {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 10px;
+            border-radius: 99px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .cat-new_feature { background: rgba(0,201,167,0.15); color: #00C9A7; }
+        .cat-improvement { background: rgba(59,130,246,0.15); color: #3b82f6; }
+        .cat-bug_fix { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .cat-infrastructure { background: rgba(107,114,128,0.15); color: #6b7280; }
+        .cat-mobile { background: rgba(168,85,247,0.15); color: #a855f7; }
+        .cat-deprecation { background: rgba(249,115,22,0.15); color: #f97316; }
+        .cat-default { background: rgba(107,114,128,0.15); color: #8899aa; }
+        .pre-filter-badge {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 99px;
+            background: rgba(107,114,128,0.15);
+            color: #6b7280;
+        }
+        .card-summary {
+            font-size: 13px;
+            color: #8899aa;
+            line-height: 1.4;
+            margin-bottom: 10px;
+        }
+        .card-bottom-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .channel-pills {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            flex: 1;
+        }
+        .channel-pill {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 99px;
+            border: 1px solid #2a3a4a;
+            color: #8899aa;
+        }
+        .btn-generate {
+            background: #00C9A7;
+            color: #0f1923;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+            flex-shrink: 0;
+        }
+        .btn-generate:hover {
+            background: #00e0bb;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,201,167,0.3);
+        }
+        .btn-generate:active { transform: translateY(0); box-shadow: none; }
+        .card-expanded-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.25s ease-out, opacity 0.2s ease-out;
+            opacity: 0;
+        }
+        .feature-card.expanded .card-expanded-content {
+            max-height: 600px;
+            opacity: 1;
+            transition: max-height 0.3s ease-in, opacity 0.25s ease-in;
+        }
+        .desc-block {
+            margin-top: 14px;
+            padding: 12px 16px;
+            border-left: 3px solid #00C9A7;
+            background: rgba(0,201,167,0.03);
+            border-radius: 0 8px 8px 0;
+            font-size: 14px;
+            color: #e0e0e0;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .show-more-link {
+            color: #00C9A7;
+            cursor: pointer;
+            font-size: 13px;
+            margin-top: 6px;
+            display: inline-block;
+        }
+        .show-more-link:hover { text-decoration: underline; }
+        .meta-pills {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        .meta-pill {
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 99px;
+            background: #0f1923;
+            border: 1px solid #2a3a4a;
+            color: #8899aa;
+        }
+        .meta-pill.released { border-color: rgba(0,201,167,0.3); color: #00C9A7; }
+        .meta-pill.in-progress { border-color: rgba(234,179,8,0.3); color: #eab308; }
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 80px 0;
+            gap: 16px;
+        }
+        .spinner {
+            width: 36px;
+            height: 36px;
+            border: 3px solid #2a3a4a;
+            border-top-color: #00C9A7;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text {
+            font-size: 14px;
+            color: #8899aa;
+        }
+        .empty-state, .error-state {
+            text-align: center;
+            padding: 60px 20px;
+        }
+        .empty-state h3, .error-state h3 {
+            color: #ffffff;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        .empty-state p, .error-state p {
+            color: #8899aa;
+            font-size: 13px;
+        }
+        .error-state p { color: #ff6b6b; }
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: #1a2733;
+            border: 1px solid #2a3a4a;
+            border-radius: 14px;
+            padding: 28px;
+            width: 90%;
+            max-width: 540px;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        .modal h2 {
+            color: #ffffff;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+        .modal label {
+            display: block;
+            font-size: 13px;
+            color: #8899aa;
+            margin-bottom: 6px;
+            margin-top: 14px;
+        }
+        .modal input, .modal textarea, .modal select {
+            width: 100%;
+            background: #0f1923;
+            color: #e0e0e0;
+            border: 1px solid #2a3a4a;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+        }
+        .modal input:focus, .modal textarea:focus { border-color: #00C9A7; }
+        .modal textarea { resize: vertical; min-height: 80px; }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Amplify &mdash; Product Marketing Autopilot</h1>
-    <p>Dashboard coming Day 3.</p>
+    <div class="topbar">
+        <div class="topbar-left">
+            <span class="logo"><span class="logo-emoji">&#9889;</span>Amplify</span>
+            <span class="subtitle">Product Marketing Autopilot</span>
+        </div>
+        <div class="topbar-right">
+            <button class="btn-outline" onclick="openManualInput()">Manual Input</button>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span class="health-dot" id="health-dot"></span>
+                <span class="health-label" id="health-label">Checking...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="section-header">
+            <span class="section-title">Features</span>
+            <div class="filter-row">
+                <span class="filter-label">Min importance</span>
+                <select id="importance-filter" onchange="loadFeatures()">
+                    <option value="5">5 only</option>
+                    <option value="4">4+</option>
+                    <option value="3" selected>3+</option>
+                    <option value="2">2+</option>
+                    <option value="1">1+</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="stats-row" id="stats-row" style="display:none;"></div>
+
+        <div id="feature-list" class="feature-list"></div>
+
+        <div id="loading" class="loading-container" style="display:none;">
+            <div class="spinner"></div>
+            <span class="loading-text">Classifying features with AI...</span>
+        </div>
+
+        <div id="empty-state" class="empty-state" style="display:none;"></div>
+        <div id="error-state" class="error-state" style="display:none;"></div>
+    </div>
+
+    <div class="modal-overlay" id="manual-modal">
+        <div class="modal">
+            <h2>Manual Feature Input</h2>
+            <label>Title</label>
+            <input type="text" id="manual-title" placeholder="e.g. New Artist Discovery Page">
+            <label>Description</label>
+            <textarea id="manual-desc" placeholder="Describe the feature and its user impact..."></textarea>
+            <label>Category</label>
+            <select id="manual-category">
+                <option value="new_feature">New Feature</option>
+                <option value="improvement">Improvement</option>
+                <option value="mobile">Mobile</option>
+                <option value="deprecation">Deprecation</option>
+            </select>
+            <div class="modal-actions">
+                <button class="btn-outline" onclick="closeManualInput()">Cancel</button>
+                <button class="btn-primary" onclick="submitManualInput()">Add Feature</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+var allFeatures = [];
+var currentRequest = null;
+var expandedIdx = -1;
+
+function checkHealth() {
+    fetch('/api/health')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            document.getElementById('health-dot').className = 'health-dot ok';
+            document.getElementById('health-label').textContent = 'Healthy';
+        })
+        .catch(function() {
+            document.getElementById('health-dot').className = 'health-dot err';
+            document.getElementById('health-label').textContent = 'Error';
+        });
+}
+
+function loadFeatures() {
+    var minImp = document.getElementById('importance-filter').value;
+    var list = document.getElementById('feature-list');
+    var loading = document.getElementById('loading');
+    var empty = document.getElementById('empty-state');
+    var errEl = document.getElementById('error-state');
+    var stats = document.getElementById('stats-row');
+
+    list.innerHTML = '';
+    empty.style.display = 'none';
+    errEl.style.display = 'none';
+    stats.style.display = 'none';
+    loading.style.display = 'flex';
+    expandedIdx = -1;
+
+    if (currentRequest) { currentRequest.abort(); }
+    var controller = new AbortController();
+    currentRequest = controller;
+
+    fetch('/api/features/classified?limit=40&min_importance=' + minImp, { signal: controller.signal })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            currentRequest = null;
+            loading.style.display = 'none';
+            if (data.error) throw new Error(data.error);
+            allFeatures = data.classified_features || [];
+
+            stats.innerHTML =
+                '<span>Total enriched: ' + (data.total_enriched || 0) + '</span>' +
+                '<span>Sent to Claude: ' + (data.sent_to_claude || '?') + '</span>' +
+                '<span>Pre-filtered: ' + (data.pre_filtered_skipped || 0) + '</span>' +
+                '<span>Showing: ' + allFeatures.length + '</span>';
+            stats.style.display = 'flex';
+
+            if (allFeatures.length === 0) {
+                empty.innerHTML = '<h3>No features found above importance level ' + minImp + '</h3><p>Try lowering the minimum importance filter.</p>';
+                empty.style.display = 'block';
+                return;
+            }
+            renderFeatures();
+        })
+        .catch(function(err) {
+            currentRequest = null;
+            loading.style.display = 'none';
+            if (err.name === 'AbortError') return;
+            errEl.innerHTML = '<h3>Failed to load features</h3><p>' + err.message + '</p>';
+            errEl.style.display = 'block';
+        });
+}
+
+function toggleCard(idx) {
+    var cards = document.querySelectorAll('.feature-card');
+    if (expandedIdx === idx) {
+        cards[idx].classList.remove('expanded');
+        expandedIdx = -1;
+        return;
+    }
+    if (expandedIdx >= 0 && expandedIdx < cards.length) {
+        cards[expandedIdx].classList.remove('expanded');
+    }
+    cards[idx].classList.add('expanded');
+    expandedIdx = idx;
+}
+
+function buildDescBlock(f) {
+    var desc = f.description || '';
+    if (!desc) return '';
+    var truncated = desc.length > 500;
+    var displayDesc = truncated ? desc.substring(0, 500) + '...' : desc;
+    var html = '<div class="desc-block">' +
+        '<span class="desc-text">' + escHtml(displayDesc) + '</span>';
+    if (truncated) {
+        html += '<br><span class="show-more-link" data-full="' + escAttr(desc) + '">Show more...</span>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function buildMetaPills(f) {
+    var pills = [];
+    var releaseStatus = f.release_status;
+    if (releaseStatus) {
+        if (releaseStatus === 'released' || releaseStatus === 'completed') {
+            pills.push('<span class="meta-pill released">Released &#10003;</span>');
+        } else {
+            pills.push('<span class="meta-pill in-progress">In Progress</span>');
+        }
+    }
+    if (f.release_date) {
+        pills.push('<span class="meta-pill">' + escHtml(f.release_date) + '</span>');
+    }
+    var reactions = f.total_reactions || 0;
+    if (reactions > 0) {
+        pills.push('<span class="meta-pill">&#128640; ' + reactions + ' reactions</span>');
+    }
+    if (f.engineer) {
+        pills.push('<span class="meta-pill">Eng: ' + escHtml(f.engineer) + '</span>');
+    }
+    if (f.assignee) {
+        pills.push('<span class="meta-pill">Assignee: ' + escHtml(f.assignee) + '</span>');
+    }
+    if (f.urgency_score) {
+        pills.push('<span class="meta-pill">Urgency: ' + f.urgency_score + '</span>');
+    }
+    if (pills.length === 0) return '';
+    return '<div class="meta-pills">' + pills.join('') + '</div>';
+}
+
+function renderFeatures() {
+    var list = document.getElementById('feature-list');
+    list.innerHTML = '';
+    allFeatures.forEach(function(f, idx) {
+        var c = f.classification || {};
+        var score = c.importance_score || 0;
+        var cat = c.category || 'unknown';
+        var summary = c.marketing_summary || '';
+        var channels = c.recommended_channels || [];
+        var preFiltered = c.pre_filtered || false;
+
+        var catClass = 'cat-' + cat;
+        if (['new_feature','improvement','bug_fix','infrastructure','mobile','deprecation'].indexOf(cat) === -1) {
+            catClass = 'cat-default';
+        }
+
+        var channelHtml = '';
+        channels.forEach(function(ch) {
+            channelHtml += '<span class="channel-pill">' + ch + '</span>';
+        });
+
+        var card = document.createElement('div');
+        card.className = 'feature-card';
+        card.innerHTML =
+            '<div class="card-top">' +
+                '<div class="score-badge score-' + Math.min(score, 5) + '">' + score + '</div>' +
+                '<div class="card-body">' +
+                    '<div class="card-title-row">' +
+                        '<span class="card-title">' + escHtml(f.title || 'Untitled') + '</span>' +
+                        '<span class="chevron">&#9660;</span>' +
+                    '</div>' +
+                    '<div class="card-meta">' +
+                        '<span class="category-pill ' + catClass + '">' + cat.replace(/_/g, ' ') + '</span>' +
+                        (preFiltered ? '<span class="pre-filter-badge">pre-filtered</span>' : '') +
+                    '</div>' +
+                    (summary ? '<div class="card-summary">' + escHtml(summary) + '</div>' : '') +
+                    '<div class="card-bottom-row">' +
+                        '<div class="channel-pills">' + channelHtml + '</div>' +
+                        '<button class="btn-generate" data-idx="' + idx + '">Generate Content &rarr;</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="card-expanded-content">' +
+                buildDescBlock(f) +
+                buildMetaPills(f) +
+            '</div>';
+
+        card.addEventListener('click', function(e) {
+            if (e.target.closest('.btn-generate') || e.target.closest('.show-more-link')) return;
+            toggleCard(idx);
+        });
+
+        card.querySelector('.btn-generate').addEventListener('click', function(e) {
+            e.stopPropagation();
+            generateContent(idx);
+        });
+
+        var showMore = card.querySelector('.show-more-link');
+        if (showMore) {
+            showMore.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var fullText = this.getAttribute('data-full');
+                var descText = this.parentElement.querySelector('.desc-text');
+                if (this.textContent === 'Show more...') {
+                    descText.textContent = fullText;
+                    this.textContent = 'Show less';
+                } else {
+                    descText.textContent = fullText.substring(0, 500) + '...';
+                    this.textContent = 'Show more...';
+                }
+            });
+        }
+
+        list.appendChild(card);
+    });
+}
+
+function generateContent(idx) {
+    var feature = allFeatures[idx];
+    var channels = (feature.classification || {}).recommended_channels || [];
+    if (channels.length === 0) {
+        channels = ['twitter', 'linkedin', 'inapp'];
+    }
+    var btn = document.querySelectorAll('.btn-generate')[idx];
+    var origText = btn.innerHTML;
+    btn.innerHTML = 'Generating...';
+    btn.disabled = true;
+
+    fetch('/api/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ feature: feature, channels: channels })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        if (data.error) {
+            alert('Generation failed: ' + data.error);
+            return;
+        }
+        alert('Content generated for ' + channels.join(', ') + '! Check /test/review for full editing.');
+    })
+    .catch(function(err) {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        alert('Error: ' + err.message);
+    });
+}
+
+function escHtml(str) {
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+function escAttr(str) {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function openManualInput() {
+    document.getElementById('manual-modal').classList.add('open');
+}
+function closeManualInput() {
+    document.getElementById('manual-modal').classList.remove('open');
+}
+function submitManualInput() {
+    var title = document.getElementById('manual-title').value.trim();
+    var desc = document.getElementById('manual-desc').value.trim();
+    var cat = document.getElementById('manual-category').value;
+    if (!title) { alert('Please enter a title'); return; }
+
+    var btn = document.querySelector('.modal-actions .btn-primary');
+    btn.textContent = 'Adding...';
+    btn.disabled = true;
+
+    fetch('/api/sources/manual/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ title: title, description: desc, category: cat })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.textContent = 'Add Feature';
+        btn.disabled = false;
+        if (data.error) { alert('Error: ' + data.error); return; }
+        closeManualInput();
+        document.getElementById('manual-title').value = '';
+        document.getElementById('manual-desc').value = '';
+        loadFeatures();
+    })
+    .catch(function(err) {
+        btn.textContent = 'Add Feature';
+        btn.disabled = false;
+        alert('Error: ' + err.message);
+    });
+}
+
+checkHealth();
+loadFeatures();
+</script>
 </body>
 </html>

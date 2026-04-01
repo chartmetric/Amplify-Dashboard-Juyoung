@@ -1,0 +1,46 @@
+I need to build a web dashboard UI for my Amplify app. This is a product marketing tool that lets a marketer select features, generate AI content for multiple channels, edit/approve it, and publish.
+
+IMPORTANT CONTEXT — existing backend endpoints the UI should call:
+- GET /api/features/classified?min_importance=N → returns {"classified_features": [...]}
+- POST /api/generate → body: {"feature": {...}, "channels": [...]} → returns generated content for all channels
+- POST /api/generate/single → body: {"feature": {...}, "channel": "twitter", "feedback": "..."} → regenerate one channel
+- POST /api/approve → saves feedback for learning
+- GET /api/channels → list of channel configs
+- GET /api/health → system health
+
+BUILD the main dashboard page. Create a `templates/dashboard.html` using Jinja2 that Flask serves at the root route `/`. Use a single-page app approach with vanilla JS (no React/Vue — keep it simple).
+
+DESIGN SYSTEM — use these consistently:
+- Dark theme: background #0f1923, cards #1a2733, borders #2a3a4a
+- Primary accent: teal #00C9A7
+- Text: white #ffffff for headings, #e0e0e0 for body, #8899aa for muted
+- Font: system-ui, -apple-system, sans-serif
+- Cards: rounded corners (12px), subtle border, padding 20px
+- Buttons: teal background with dark text for primary, outlined for secondary
+- Use CSS grid or flexbox for layout. No external CSS frameworks needed.
+
+PAGE STRUCTURE:
+1. TOP BAR:
+   - Left: "⚡ Amplify" logo text (⚡ emoji + bold text), subtitle "Product Marketing Autopilot"
+   - Right: "Manual Input" button (opens a modal/form later), health indicator dot (green if /api/health returns ok)
+
+2. MAIN CONTENT — Feature List:
+   - Section header: "Features" with a filter dropdown for minimum importance (1-5, default 3)
+   - Call GET /api/features/classified?min_importance={selected} on page load and when filter changes
+   - Display features as cards in a vertical list, sorted by importance (highest first)
+   - Each feature card shows:
+     - Left side: Importance score as a large colored number (5=green, 4=blue, 3=yellow, 2=orange, 1=gray)
+     - Title (bold, white)
+     - Category badge (colored pill: new_feature=teal, improvement=blue, bug_fix=red, infrastructure=gray, mobile=purple, deprecation=orange)
+     - marketing_summary from classification (one line, muted text)
+     - Row of recommended channel pills (small, outline style)
+     - Right side: "Generate Content →" button (teal, primary style)
+   - Loading spinner while fetching
+   - Empty state: "No features found above importance level {N}" with suggestion to lower the filter
+   - Error state: friendly message if API fails
+
+3. Add a Flask route: GET / → renders templates/dashboard.html
+
+Put ALL CSS in a <style> tag inside the HTML. Put ALL JS in a <script> tag at the bottom. Keep it in ONE file for now — we'll split later if needed.
+
+Make the feature cards look polished — this is the first thing judges see. Use subtle hover effects on cards (slight border glow or lift). The "Generate Content" button should stand out visually.
