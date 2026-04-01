@@ -189,6 +189,8 @@ class AsanaSource(SourceAdapter):
             feature["comments"] = task_data["comments"]
         if task_data.get("project_info"):
             feature["project_info"] = task_data["project_info"]
+        if task_data.get("github_pr_urls"):
+            feature["github_pr_urls"] = task_data["github_pr_urls"]
 
         return feature
 
@@ -282,6 +284,7 @@ class AsanaSource(SourceAdapter):
 
         subtasks = []
         comments = []
+        github_pr_urls = []
         try:
             client = self._get_client()
             tasks_api = asana.TasksApi(client)
@@ -300,6 +303,17 @@ class AsanaSource(SourceAdapter):
         except Exception:
             pass
 
+        try:
+            attach_api = asana.AttachmentsApi(self._get_client())
+            for att in attach_api.get_attachments_for_object(t.get("gid", ""), {"opt_fields": "name,resource_subtype,host,view_url", "parent": t.get("gid", "")}):
+                a = att.to_dict() if hasattr(att, "to_dict") else att
+                if a.get("host") == "external" and a.get("resource_subtype") == "external":
+                    view_url = a.get("view_url", "")
+                    if "github.com" in view_url and "/pull/" in view_url:
+                        github_pr_urls.append(view_url)
+        except Exception:
+            pass
+
         return {
             "gid": t.get("gid", ""),
             "description": t.get("notes", ""),
@@ -308,6 +322,7 @@ class AsanaSource(SourceAdapter):
             "project_info": project_info,
             "subtasks": subtasks,
             "comments": comments,
+            "github_pr_urls": github_pr_urls,
             **parsed_custom,
         }
 

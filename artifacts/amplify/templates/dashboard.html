@@ -1532,7 +1532,16 @@ function buildMetaPills(f) {
     var links = [];
     if (f.slack_url) links.push('<a href="' + escAttr(f.slack_url) + '" target="_blank" rel="noopener">&#128172; Slack</a>');
     if (f.asana_url) links.push('<a href="' + escAttr(f.asana_url) + '" target="_blank" rel="noopener">&#128203; Asana</a>');
-    if (f.github_url && f.github_url.indexOf('/pull/') !== -1) links.push('<a href="' + escAttr(f.github_url) + '" target="_blank" rel="noopener">&#128187; GitHub PR</a>');
+    var prUrls = f.github_pr_urls || [];
+    if (f.github_url && f.github_url.indexOf('/pull/') !== -1 && prUrls.indexOf(f.github_url) === -1) {
+        prUrls = [f.github_url].concat(prUrls);
+    }
+    for (var pi = 0; pi < prUrls.length; pi++) {
+        var prUrl = prUrls[pi];
+        var prMatch = prUrl.match(/\/pull\/(\d+)/);
+        var prLabel = prMatch ? '&#128187; PR #' + prMatch[1] : '&#128187; GitHub PR';
+        links.push('<a href="' + escAttr(prUrl) + '" target="_blank" rel="noopener">' + prLabel + '</a>');
+    }
     var linksHtml = links.length > 0 ? '<div class="link-row">' + links.join('') + '</div>' : '';
 
     var noAsanaNote = '';
