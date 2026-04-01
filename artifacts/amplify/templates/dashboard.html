@@ -129,7 +129,36 @@
             cursor: pointer; white-space: nowrap; transition: background 0.2s;
         }
         .btn-load-all:hover { background: rgba(0,201,167,0.1); }
-        .feature-list { display: flex; flex-direction: column; gap: 12px; }
+        .feature-list { display: flex; flex-direction: column; gap: 12px; transition: opacity 0.18s ease; }
+        .feature-list.fading { opacity: 0; }
+        .pagination-wrap { display: none; flex-direction: column; gap: 14px; margin-top: 24px; }
+        .pagination-wrap.visible { display: flex; }
+        .pagination-top-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+        .pagination-info { font-size: 12px; color: #8899aa; }
+        .pagination-per-page { display: flex; align-items: center; gap: 8px; }
+        .pagination-per-page label { font-size: 12px; color: #8899aa; }
+        .pagination-per-page select {
+            background: #1a2733; border: 1px solid #2a3a4a; color: #c0d0e0;
+            padding: 4px 8px; border-radius: 6px; font-size: 12px; cursor: pointer;
+        }
+        .pagination-per-page select:focus { outline: none; border-color: #00C9A7; }
+        .btn-load-all-pagination {
+            background: transparent; color: #00C9A7; border: 1px solid #00C9A7;
+            padding: 4px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: background 0.2s;
+        }
+        .btn-load-all-pagination:hover { background: rgba(0,201,167,0.1); }
+        .pagination-controls { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        .pg-btn {
+            background: #1a2733; border: 1px solid #2a3a4a; color: #8899aa;
+            padding: 5px 10px; border-radius: 6px; font-size: 13px; cursor: pointer;
+            transition: border-color 0.15s, color 0.15s, background 0.15s;
+            min-width: 32px; text-align: center; line-height: 1.4;
+        }
+        .pg-btn:hover:not(:disabled) { border-color: #00C9A7; color: #00C9A7; }
+        .pg-btn.active { border-color: #00C9A7; color: #00C9A7; background: rgba(0,201,167,0.1); font-weight: 700; }
+        .pg-btn:disabled { opacity: 0.35; cursor: default; }
+        .pg-ellipsis { color: #8899aa; font-size: 13px; padding: 5px 4px; }
         .section-divider { margin: 20px 0 12px; display: flex; align-items: center; gap: 12px; }
         .section-divider-label {
             font-size: 12px; font-weight: 600; color: #6b7280;
@@ -432,6 +461,22 @@
         <div class="tier-breakdown" id="tier-breakdown" style="display:none;"></div>
 
         <div id="feature-list" class="feature-list"></div>
+        <div id="pagination-wrap" class="pagination-wrap">
+            <div class="pagination-top-row">
+                <span class="pagination-info" id="pagination-info"></span>
+                <div class="pagination-per-page">
+                    <label for="per-page-select">Per page:</label>
+                    <select id="per-page-select" onchange="onPerPageChange(this.value)">
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="all">All</option>
+                    </select>
+                    <button class="btn-load-all-pagination" onclick="onLoadAllClick()">Load All</button>
+                </div>
+            </div>
+            <div class="pagination-controls" id="pagination-controls"></div>
+        </div>
         <div id="loading" class="loading-container" style="display:none;">
             <div class="spinner"></div>
             <span class="loading-text">Loading features...</span>
@@ -475,6 +520,10 @@ var CAT_COLORS = {new_feature:'#00C9A7',improvement:'#3b82f6',bug_fix:'#ef4444',
 var SCORE_COLORS = {5:'#00C9A7',4:'#3b82f6',3:'#eab308',2:'#f97316',1:'#6b7280',0:'#4b5563'};
 var currentFunnelData = null;
 var isAllTasksMode = false;
+var currentPage = 1;
+var currentPerPage = 25;
+var paginationMeta = null;
+var allFeaturesCache = [];
 
 function getCategories(f) {
     var c = f.classification || {};
@@ -611,6 +660,8 @@ function loadAllAsanaTasks() {
     errEl.style.display = 'none';
     document.getElementById('category-filter-row').style.display = 'none';
     document.getElementById('load-all-banner').style.display = 'flex';
+    document.getElementById('pagination-wrap').classList.remove('visible');
+    paginationMeta = null;
     loading.style.display = 'flex';
     document.getElementById('loading').querySelector('.loading-text').textContent = 'Fetching all Asana tasks...';
     expandedId = null;
@@ -618,7 +669,7 @@ function loadAllAsanaTasks() {
     if (currentRequest) { currentRequest.abort(); }
     var controller = new AbortController();
     currentRequest = controller;
-    fetch('/api/features/all?pre_filter=false', { signal: controller.signal })
+    fetch('/api/features/all-classified?pre_filter=false', { signal: controller.signal })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             currentRequest = null;
@@ -664,13 +715,15 @@ function loadFeaturesSentToClaude() {
     empty.style.display = 'none';
     errEl.style.display = 'none';
     document.getElementById('load-all-banner').style.display = 'none';
+    document.getElementById('pagination-wrap').classList.remove('visible');
+    paginationMeta = null;
     loading.style.display = 'flex';
     expandedId = null;
     categoryFilter = 'all';
     if (currentRequest) { currentRequest.abort(); }
     var controller = new AbortController();
     currentRequest = controller;
-    fetch('/api/features/classified?limit=40&min_importance=1', { signal: controller.signal })
+    fetch('/api/features/classified?per_page=all&min_importance=1', { signal: controller.signal })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             currentRequest = null;
@@ -698,37 +751,64 @@ function loadFeaturesSentToClaude() {
         });
 }
 
-function loadFeatures() {
+function loadFeatures(page, perPage) {
+    if (page === undefined) page = currentPage;
+    if (perPage === undefined) perPage = currentPerPage;
+    currentPage = page;
+    currentPerPage = perPage;
+
     var list = document.getElementById('feature-list');
     var loading = document.getElementById('loading');
     var empty = document.getElementById('empty-state');
     var errEl = document.getElementById('error-state');
+    var statsEl = document.getElementById('stats-row');
     isAllTasksMode = false;
     list.innerHTML = '';
     empty.style.display = 'none';
     errEl.style.display = 'none';
-    stats.style.display = 'none';
+    statsEl.style.display = 'none';
     document.getElementById('funnel-bar').style.display = 'none';
     document.getElementById('load-all-banner').style.display = 'none';
+    document.getElementById('pagination-wrap').classList.remove('visible');
     loading.style.display = 'flex';
     expandedId = null;
     allFeatures = [];
     stopPolling();
     hideProgressBar();
 
-    fetch('/api/features/all?limit=40')
+    var perPageParam = perPage === 'all' ? 'all' : perPage;
+    var filterParams = '';
+    var minImpEl = document.getElementById('importance-filter');
+    var classifiedOnlyEl = document.getElementById('classified-only-toggle');
+    if (minImpEl && minImpEl.value && parseInt(minImpEl.value) > 0) {
+        filterParams += '&min_importance=' + minImpEl.value;
+    }
+    if (classifiedOnlyEl && classifiedOnlyEl.checked) {
+        filterParams += '&classified_only=true';
+    }
+    if (categoryFilter && categoryFilter !== 'all') {
+        filterParams += '&category=' + encodeURIComponent(categoryFilter);
+    }
+    fetch('/api/features/all?page=' + page + '&per_page=' + perPageParam + filterParams)
         .then(function(r) { return r.json(); })
         .then(function(data) {
             loading.style.display = 'none';
             if (data.error) throw new Error(data.error);
 
             allFeatures = data.features || data.classified_features || [];
+            allFeaturesCache = allFeatures;
+            paginationMeta = data;
             currentFunnelData = data;
-            stats.innerHTML =
-                '<span>Total: ' + allFeatures.length + '</span>' +
-                '<span id="stat-classified">Classified: ' + countClassified() + '</span>' +
-                '<span id="stat-unclassified">Unclassified: ' + (allFeatures.length - countClassified()) + '</span>';
-            stats.style.display = 'flex';
+
+            var total = data.total || 0;
+            var totalClassified = data.total_classified !== undefined ? data.total_classified : countClassified();
+            var totalUnclassified = data.total_unclassified !== undefined ? data.total_unclassified : (total - totalClassified);
+
+            statsEl.innerHTML =
+                '<span>Total: ' + total + '</span>' +
+                '<span id="stat-classified">Classified: ' + totalClassified + '</span>' +
+                '<span id="stat-unclassified">Unclassified: ' + totalUnclassified + '</span>';
+            statsEl.style.display = 'flex';
             updateStats();
             renderFunnelBar(data, 'showing');
             if (allFeatures.length === 0) {
@@ -738,6 +818,7 @@ function loadFeatures() {
             }
 
             renderAll();
+            renderPagination(data);
             startBatchClassification();
         })
         .catch(function(err) {
@@ -791,13 +872,20 @@ function pollClassificationStatus() {
                     anyUpdated = true;
                 }
             }
-            if (anyUpdated) { renderAll(); updateStats(); }
+            if (anyUpdated) {
+                renderAll();
+            }
 
             fetch('/api/classifications/status')
                 .then(function(r2) { return r2.json(); })
                 .then(function(status) {
-                    classificationTotal = status.total || allFeatures.length;
+                    classificationTotal = status.total || (paginationMeta && paginationMeta.total) || allFeatures.length;
                     classificationDone = status.classified || 0;
+                    if (paginationMeta && status.total !== undefined) {
+                        paginationMeta.total_classified = status.classified || 0;
+                        paginationMeta.total_unclassified = Math.max(0, (paginationMeta.total || 0) - (status.classified || 0));
+                    }
+                    updateStats();
                     if (status.in_progress) {
                         showProgressBar(classificationDone, classificationTotal);
                     } else {
@@ -838,11 +926,19 @@ function fadeOutProgressBar() {
 }
 
 function updateStats() {
-    var cl = countClassified();
     var statCl = document.getElementById('stat-classified');
     var statUncl = document.getElementById('stat-unclassified');
-    if (statCl) statCl.textContent = 'Classified: ' + cl;
-    if (statUncl) statUncl.textContent = 'Unclassified: ' + (allFeatures.length - cl);
+    if (paginationMeta) {
+        var total = paginationMeta.total || 0;
+        var cl = paginationMeta.total_classified !== undefined ? paginationMeta.total_classified : countClassified();
+        var uncl = paginationMeta.total_unclassified !== undefined ? paginationMeta.total_unclassified : (total - cl);
+        if (statCl) statCl.textContent = 'Classified: ' + cl;
+        if (statUncl) statUncl.textContent = 'Unclassified: ' + uncl;
+    } else {
+        var cl2 = countClassified();
+        if (statCl) statCl.textContent = 'Classified: ' + cl2;
+        if (statUncl) statUncl.textContent = 'Unclassified: ' + (allFeatures.length - cl2);
+    }
 
     var autoSkipped = 0;
     var aiClassified = 0;
@@ -865,10 +961,134 @@ function updateStats() {
     }
     var tierEl = document.getElementById('tier-breakdown');
     if (tierEl) {
-        var total = allFeatures.length;
-        tierEl.textContent = 'Features: ' + total + ' total | ' + autoSkipped + ' auto-skipped | ' + aiClassified + ' AI-classified (' + aiDone + ' done, ' + aiPending + ' pending)';
-        tierEl.style.display = total > 0 ? 'block' : 'none';
+        var tierTotal = allFeatures.length;
+        tierEl.textContent = 'Features: ' + tierTotal + ' total | ' + autoSkipped + ' auto-skipped | ' + aiClassified + ' AI-classified (' + aiDone + ' done, ' + aiPending + ' pending)';
+        tierEl.style.display = tierTotal > 0 ? 'block' : 'none';
     }
+}
+
+function renderPagination(data) {
+    var wrap = document.getElementById('pagination-wrap');
+    var infoEl = document.getElementById('pagination-info');
+    var controls = document.getElementById('pagination-controls');
+    var perPageSel = document.getElementById('per-page-select');
+
+    if (!data || data.total === undefined) {
+        wrap.classList.remove('visible');
+        return;
+    }
+
+    var page = data.page || 1;
+    var perPage = data.per_page !== undefined ? data.per_page : currentPerPage;
+    var total = data.total || 0;
+    var totalPages = data.total_pages || 1;
+
+    if (total === 0) {
+        wrap.classList.remove('visible');
+        return;
+    }
+
+    wrap.classList.add('visible');
+
+    var effectivePerPage = (currentPerPage === 'all' || perPage >= total) ? total : perPage;
+    var start = total === 0 ? 0 : (page - 1) * effectivePerPage + 1;
+    var end = currentPerPage === 'all' ? total : Math.min(page * perPage, total);
+    infoEl.textContent = 'Showing ' + start + '\u2013' + end + ' of ' + total + ' features';
+
+    var selVal = (currentPerPage === 'all' || (perPage >= total && total > 0)) ? 'all' : String(perPage);
+    var opts = perPageSel.options;
+    for (var oi = 0; oi < opts.length; oi++) {
+        opts[oi].selected = opts[oi].value === selVal;
+    }
+
+    controls.innerHTML = '';
+
+    function makeBtn(label, targetPage, isActive, isDisabled, title) {
+        var btn = document.createElement('button');
+        btn.className = 'pg-btn' + (isActive ? ' active' : '');
+        btn.textContent = label;
+        btn.disabled = isDisabled;
+        if (title) btn.title = title;
+        if (!isDisabled && !isActive) {
+            btn.onclick = (function(p) { return function() { goToPage(p); }; })(targetPage);
+        }
+        return btn;
+    }
+
+    controls.appendChild(makeBtn('\u00AB', 1, false, page <= 1, 'First'));
+    controls.appendChild(makeBtn('\u2039 Prev', page - 1, false, page <= 1, 'Previous'));
+
+    var pageNums = buildPageNumbers(page, totalPages);
+    for (var i = 0; i < pageNums.length; i++) {
+        var pn = pageNums[i];
+        if (pn === '...') {
+            var ell = document.createElement('span');
+            ell.className = 'pg-ellipsis';
+            ell.textContent = '\u2026';
+            controls.appendChild(ell);
+        } else {
+            controls.appendChild(makeBtn(String(pn), pn, pn === page, false, null));
+        }
+    }
+
+    controls.appendChild(makeBtn('Next \u203A', page + 1, false, page >= totalPages, 'Next'));
+    controls.appendChild(makeBtn('\u00BB', totalPages, false, page >= totalPages, 'Last'));
+}
+
+function buildPageNumbers(current, total) {
+    if (total <= 7) {
+        var pages = [];
+        for (var i = 1; i <= total; i++) pages.push(i);
+        return pages;
+    }
+    var result = [1];
+    if (current > 3) result.push('...');
+    for (var p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) {
+        result.push(p);
+    }
+    if (current < total - 2) result.push('...');
+    result.push(total);
+    return result;
+}
+
+function goToPage(page) {
+    var list = document.getElementById('feature-list');
+    list.classList.add('fading');
+    setTimeout(function() {
+        list.classList.remove('fading');
+        currentPage = page;
+        loadFeatures(page, currentPerPage);
+        scrollToFeatureList();
+    }, 180);
+}
+
+function scrollToFeatureList() {
+    var list = document.getElementById('feature-list');
+    if (list) {
+        list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+function onPerPageChange(val) {
+    currentPage = 1;
+    currentPerPage = val === 'all' ? 'all' : parseInt(val) || 25;
+    loadFeatures(1, currentPerPage);
+}
+
+function onLoadAllClick() {
+    var total = paginationMeta ? (paginationMeta.total || 0) : 0;
+    if (total > 100) {
+        if (!confirm('There are ' + total + ' features. Loading all may be slow. Continue?')) return;
+    }
+    currentPage = 1;
+    currentPerPage = 'all';
+    var sel = document.getElementById('per-page-select');
+    if (sel) {
+        for (var i = 0; i < sel.options.length; i++) {
+            sel.options[i].selected = sel.options[i].value === 'all';
+        }
+    }
+    loadFeatures(1, 'all');
 }
 
 function setCategoryFilter(cat, btn) {
@@ -881,43 +1101,80 @@ function setCategoryFilter(cat, btn) {
         if (cat === 'unclassified') { btn.classList.add('active-unclassified'); }
         else { btn.classList.add('active'); }
     }
-    renderAll();
-    if (currentFunnelData) {
-        var visible = (cat === 'all' || cat === 'unclassified')
-            ? allFeatures
-            : allFeatures.filter(function(f) { return featureMatchesCategory(f, cat); });
-        currentFunnelData.filtered = visible.length;
-        renderFunnelBar(currentFunnelData, 'showing');
+    if (!isAllTasksMode && paginationMeta) {
+        loadFeatures(1, currentPerPage);
+    } else {
+        renderAll();
+        if (currentFunnelData) {
+            var visible = (cat === 'all' || cat === 'unclassified')
+                ? allFeatures
+                : allFeatures.filter(function(f) { return featureMatchesCategory(f, cat); });
+            currentFunnelData.filtered = visible.length;
+            renderFunnelBar(currentFunnelData, 'showing');
+        }
     }
 }
 
-function applyFilters() { renderAll(); }
+function applyFilters() {
+    if (!isAllTasksMode && paginationMeta) {
+        loadFeatures(1, currentPerPage);
+    } else {
+        renderAll();
+    }
+}
 
 function getFilteredFeatures() {
-    var minImp = parseInt(document.getElementById('importance-filter').value);
-    var classifiedOnly = document.getElementById('classified-only-toggle').checked;
-    var catFilter = categoryFilter;
     var classified = [];
     var unclassified = [];
     var asanaOnly = [];
 
-    for (var i = 0; i < allFeatures.length; i++) {
-        var f = allFeatures[i];
-        var cl = f.classification;
-        var isAsanaOnly = f.source === 'asana_only';
+    if (paginationMeta && !isAllTasksMode) {
+        for (var i = 0; i < allFeatures.length; i++) {
+            var f = allFeatures[i];
+            var cl = f.classification;
+            var isAsanaOnly = f.source === 'asana_only';
+            if (!cl) {
+                if (isAsanaOnly) { asanaOnly.push(f); }
+                else { unclassified.push(f); }
+            } else {
+                if (cl.unclassified || cl.pre_filtered) {
+                    if (isAsanaOnly) { asanaOnly.push(f); }
+                    else { unclassified.push(f); }
+                } else {
+                    if (isAsanaOnly) { asanaOnly.push(f); }
+                    else { classified.push(f); }
+                }
+            }
+        }
+        classified.sort(function(a, b) {
+            return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
+        });
+        unclassified.sort(function(a, b) { return (a.title || '').localeCompare(b.title || ''); });
+        asanaOnly.sort(function(a, b) { return (a.title || '').localeCompare(b.title || ''); });
+        return { classified: classified, unclassified: unclassified, asanaOnly: asanaOnly };
+    }
 
-        if (!cl) {
+    var minImp = parseInt(document.getElementById('importance-filter').value);
+    var classifiedOnly = document.getElementById('classified-only-toggle').checked;
+    var catFilter = categoryFilter;
+
+    for (var j = 0; j < allFeatures.length; j++) {
+        var fj = allFeatures[j];
+        var clj = fj.classification;
+        var isAsanaOnlyJ = fj.source === 'asana_only';
+
+        if (!clj) {
             if (classifiedOnly) continue;
             if (catFilter !== 'all' && catFilter !== 'unclassified') continue;
-            if (isAsanaOnly) { asanaOnly.push(f); }
-            else { unclassified.push(f); }
+            if (isAsanaOnlyJ) { asanaOnly.push(fj); }
+            else { unclassified.push(fj); }
         } else {
-            var score = cl.importance_score || 0;
+            var score = clj.importance_score || 0;
             if (catFilter === 'unclassified') continue;
-            if (catFilter !== 'all' && !featureMatchesCategory(f, catFilter)) continue;
+            if (catFilter !== 'all' && !featureMatchesCategory(fj, catFilter)) continue;
             if (score < minImp) continue;
-            if (isAsanaOnly) { asanaOnly.push(f); }
-            else { classified.push(f); }
+            if (isAsanaOnlyJ) { asanaOnly.push(fj); }
+            else { classified.push(fj); }
         }
     }
 

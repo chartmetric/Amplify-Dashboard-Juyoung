@@ -351,9 +351,9 @@ def classify_features_endpoint():
     })
 
 
-@app.route("/api/features/all")
+@app.route("/api/features/all-classified")
 def all_features_endpoint():
-    """Return all Asana features, optionally skipping pre-filter.
+    """Return all Asana features classified via Claude, optionally skipping pre-filter.
 
     Category: Sources
 
@@ -561,19 +561,31 @@ def classified_features():
 
     Category: Sources
 
-    Query Params: ?limit=20&min_importance=N&released_only=true&pre_filter=false
+    Query Params: ?page=1&per_page=25&min_importance=N&released_only=true&pre_filter=false
+                  Use per_page=all to return everything at once.
 
     Response:
     {
         "classified_features": [...],
         "total_enriched": 356,
         "classified_count": 20,
-        "filtered": 15
+        "filtered": 15,
+        "page": 1,
+        "per_page": 25,
+        "total_pages": 7,
+        "has_next": true,
+        "has_prev": false,
+        "total_classified": N,
+        "total_unclassified": N
     }
     """
-    limit = request.args.get("limit", default=20, type=int)
     released_only = request.args.get("released_only", default="false").lower() == "true"
     use_pre_filter = request.args.get("pre_filter", default="true").lower() != "false"
+    per_page_raw = request.args.get("per_page", default="25")
+    page = request.args.get("page", default=1, type=int)
+    if page < 1:
+        page = 1
+    category = request.args.get("category", default=None)
 
     try:
         enriched = _get_enriched_features()
@@ -589,25 +601,21 @@ def classified_features():
         enriched = [f for f in enriched if f.get("release_status")]
         logger.info(f"[classified] Step 2 – released_only filter: {before} → {len(enriched)} (excluded {before - len(enriched)})")
 
-    before_limit = len(enriched)
-    enriched = enriched[:limit]
-    logger.info(f"[classified] Step 3 – limit={limit}: {before_limit} → {len(enriched)}")
-
     if use_pre_filter:
-        logger.info(f"[classified] Step 4 – pre-filter: evaluating {len(enriched)} features")
+        logger.info(f"[classified] Step 3 – pre-filter: evaluating {len(enriched)} features")
         filter_result = pre_filter_batch(enriched)
         to_classify = filter_result["to_classify"]
         skipped = filter_result["skipped"]
-        logger.info(f"[classified] Step 4 result: {len(to_classify)} to classify, {len(skipped)} skipped (condition: skip_classification=True)")
+        logger.info(f"[classified] Step 3 result: {len(to_classify)} to classify, {len(skipped)} skipped (condition: skip_classification=True)")
     else:
-        logger.info(f"[classified] Step 4 – pre-filter BYPASSED (pre_filter=false), sending all {len(enriched)} to classify")
+        logger.info(f"[classified] Step 3 – pre-filter BYPASSED (pre_filter=false), sending all {len(enriched)} to classify")
         to_classify = enriched
         skipped = []
 
     classified = []
     tier_counts = {"quick_keyword": 0, "claude": 0}
     if to_classify:
-        logger.info(f"[classified] Step 5 – Claude classification: sending {len(to_classify)} features")
+        logger.info(f"[classified] Step 4 – Claude classification: sending {len(to_classify)} features")
         try:
             classified, tier_counts = classify_features_batch(to_classify)
             logger.info(f"[classified] Step 5 result: {len(classified)} classified")
@@ -619,7 +627,7 @@ def classified_features():
     all_features = apply_manual_overrides(all_features)
     all_features.sort(key=lambda f: f.get("classification", {}).get("importance_score", 0), reverse=True)
 
-    total = len(all_features)
+    classified_count = len(all_features)
     min_importance = request.args.get("min_importance", type=int)
     if min_importance is not None:
         before_imp = len(all_features)
@@ -627,18 +635,62 @@ def classified_features():
             f for f in all_features
             if f.get("classification", {}).get("importance_score", 0) >= min_importance
         ]
-        logger.info(f"[classified] Step 6 – min_importance={min_importance}: {before_imp} → {len(all_features)} (excluded {before_imp - len(all_features)})")
+        logger.info(f"[classified] Step 5 – min_importance={min_importance}: {before_imp} → {len(all_features)} (excluded {before_imp - len(all_features)})")
 
-    logger.info(f"[classified] Final: showing {len(all_features)} of {total_enriched} total features")
+    if category and category != "all":
+        before_cat = len(all_features)
+        def _feature_matches_cat(f, cat):
+            cl = f.get("classification") or {}
+            cats = cl.get("categories") or ([cl.get("category")] if cl.get("category") else [])
+            return cat in cats
+        all_features = [f for f in all_features if _feature_matches_cat(f, category)]
+        logger.info(f"[classified] Step 6 – category={category}: {before_cat} → {len(all_features)}")
+
+    total = len(all_features)
+    total_classified = sum(1 for f in all_features if f.get("classification") and not f["classification"].get("pre_filtered"))
+    total_unclassified = total - total_classified
+
+    logger.info(f"[classified] Pre-pagination: {total} features after all filters")
+
+    if per_page_raw.lower() == "all":
+        paged = all_features
+        per_page = total
+        total_pages = 1
+        has_next = False
+        has_prev = False
+        page = 1
+    else:
+        try:
+            per_page = int(per_page_raw)
+        except (ValueError, TypeError):
+            per_page = 25
+        if per_page < 1:
+            per_page = 25
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        if page > total_pages:
+            page = total_pages
+        start = (page - 1) * per_page
+        end = start + per_page
+        paged = all_features[start:end]
+        has_next = page < total_pages
+        has_prev = page > 1
+
+    logger.info(f"[classified] Final: page {page}/{total_pages}, showing {len(paged)} of {total} filtered features ({total_enriched} total enriched)")
 
     return jsonify({
-        "classified_features": all_features,
+        "classified_features": paged,
         "total_enriched": total_enriched,
-        "classified_count": total,
-        "filtered": len(all_features),
+        "classified_count": classified_count,
+        "filtered": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "has_next": has_next,
+        "has_prev": has_prev,
+        "total_classified": total_classified,
+        "total_unclassified": total_unclassified,
         "pre_filtered_skipped": len(skipped),
         "sent_to_claude": len(to_classify),
-        "limit_applied": limit,
         "released_only": released_only,
         "pre_filter_applied": use_pre_filter,
         "min_importance_applied": min_importance,
@@ -654,22 +706,37 @@ def all_features_unclassified():
 
     Category: Sources
 
-    Query Params: ?days=30&limit=100&refresh=false
+    Query Params: ?days=30&page=1&per_page=25&refresh=false
+                  Use per_page=all to return everything at once.
 
-    Response: {"features": [...], "total": N}
+    Response: {
+        "features": [...],
+        "total": N,
+        "page": 1,
+        "per_page": 25,
+        "total_pages": 7,
+        "has_next": true,
+        "has_prev": false,
+        "total_classified": N,
+        "total_unclassified": N
+    }
     """
     days = request.args.get("days", default=30, type=int)
-    limit = request.args.get("limit", default=100, type=int)
     force_refresh = request.args.get("refresh", default="false").lower() == "true"
+    per_page_raw = request.args.get("per_page", default="25")
+    page = request.args.get("page", default=1, type=int)
+    min_importance = request.args.get("min_importance", type=int)
+    category = request.args.get("category", default=None)
+    classified_only = request.args.get("classified_only", default="false").lower() == "true"
+    if page < 1:
+        page = 1
+
     try:
         result = _get_slack_first_features(days=days, force_refresh=force_refresh)
         features = result["features"]
     except Exception as e:
         logger.error(f"All features endpoint error: {e}")
         return jsonify({"error": f"Feature pipeline failed: {e}"}), 500
-
-    if limit and limit < len(features):
-        features = features[:limit]
 
     cache = get_all_cached_classifications()
     overrides = get_manual_overrides()
@@ -683,7 +750,67 @@ def all_features_unclassified():
             if fid in overrides:
                 f["classification"]["manual_override"] = True
 
-    return jsonify({"features": features, "total": len(features)})
+    total_all = len(features)
+    total_classified_all = sum(1 for f in features if f.get("classification"))
+    total_unclassified_all = total_all - total_classified_all
+
+    if classified_only:
+        features = [f for f in features if f.get("classification")]
+
+    if min_importance is not None:
+        features = [
+            f for f in features
+            if not f.get("classification") or f.get("classification", {}).get("importance_score", 0) >= min_importance
+        ]
+
+    if category and category != "all":
+        def _matches_cat(f, cat):
+            cl = f.get("classification") or {}
+            cats = cl.get("categories") or ([cl.get("category")] if cl.get("category") else [])
+            return cat in cats
+        if category == "unclassified":
+            features = [f for f in features if not f.get("classification")]
+        else:
+            features = [f for f in features if f.get("classification") and _matches_cat(f, category)]
+
+    total = len(features)
+    total_classified = sum(1 for f in features if f.get("classification"))
+    total_unclassified = total - total_classified
+
+    if per_page_raw.lower() == "all":
+        paged = features
+        per_page = total
+        total_pages = 1
+        has_next = False
+        has_prev = False
+        page = 1
+    else:
+        try:
+            per_page = int(per_page_raw)
+        except (ValueError, TypeError):
+            per_page = 25
+        if per_page < 1:
+            per_page = 25
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        if page > total_pages:
+            page = total_pages
+        start = (page - 1) * per_page
+        end = start + per_page
+        paged = features[start:end]
+        has_next = page < total_pages
+        has_prev = page > 1
+
+    return jsonify({
+        "features": paged,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+        "has_next": has_next,
+        "has_prev": has_prev,
+        "total_classified": total_classified,
+        "total_unclassified": total_unclassified,
+    })
 
 
 @app.route("/api/features/<feature_id>/classify", methods=["POST"])
