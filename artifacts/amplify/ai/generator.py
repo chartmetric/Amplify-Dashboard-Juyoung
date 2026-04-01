@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ai.channel_configs import CHANNEL_CONFIGS
 from ai.claude_client import generate_content
@@ -221,9 +222,26 @@ def generate_all_channels(feature_data: dict, channels: list[str] = None, custom
         channels = [k for k, v in CHANNEL_CONFIGS.items() if v.get("enabled", False)]
 
     results = {}
-    for channel_key in channels:
-        results[channel_key] = generate_for_channel(
-            feature_data, channel_key, custom_instructions=custom_instructions
-        )
+    with ThreadPoolExecutor(max_workers=len(channels)) as executor:
+        future_to_channel = {
+            executor.submit(generate_for_channel, feature_data, ch, custom_instructions=custom_instructions): ch
+            for ch in channels
+        }
+        for future in as_completed(future_to_channel):
+            ch = future_to_channel[future]
+            try:
+                results[ch] = future.result()
+            except Exception as e:
+                logger.error(f"[{ch}] Generation thread error: {e}")
+                results[ch] = {
+                    "channel": ch,
+                    "channel_display_name": CHANNEL_CONFIGS.get(ch, {}).get("display_name", ch),
+                    "max_chars": CHANNEL_CONFIGS.get(ch, {}).get("max_chars", 0),
+                    "content": "",
+                    "char_count": 0,
+                    "was_trimmed": False,
+                    "success": False,
+                    "error": str(e),
+                }
 
     return results

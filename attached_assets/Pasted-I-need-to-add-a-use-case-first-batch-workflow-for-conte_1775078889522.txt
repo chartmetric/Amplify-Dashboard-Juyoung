@@ -1,0 +1,130 @@
+I need to add a use-case-first batch workflow for content generation. This is the primary way a marketer preps content — they think "I need to prep the newsletter" or "All Hands is tomorrow", not "let me generate content for feature #7."
+
+This is a SEPARATE flow from the existing single-feature "Generate Content" button (keep that as-is for ad-hoc one-off generation).
+
+1. NEW "PREP CONTENT" BUTTON — add a prominent button at the top of the dashboard, next to the URL paste input:
+   - Label: "Prep Content for..." or "Start Workflow" (teal, primary, large enough to be noticed)
+   - Clicking it starts the use-case workflow below
+
+2. STEP 1 — PICK THE USE CASE (channel):
+   Show a modal or full-screen overlay with use case cards in a grid:
+
+   Each card represents a channel/use case:
+   - "📋 All Hands / Monthly Meeting" → notion_monthly channel
+   - "📧 Newsletter" → email_newsletter channel
+   - "📨 Standalone Email Blast" → email_standalone channel
+   - "🐦 Twitter / X Thread" → twitter channel
+   - "💼 LinkedIn Post" → linkedin channel
+   - "📱 In-App Announcements" → inapp channel
+   - "💬 Slack Internal Update" → slack_internal channel
+   - "📝 HMC Blog Article" → article_hmc channel
+
+   Each card shows:
+   - Channel icon and name
+   - One-line description (e.g., "Select features for this month's product meeting notes")
+   - "N features available" count (total features from the current list)
+
+   Clicking a card advances to Step 2 with that channel selected.
+
+3. STEP 2 — SELECT FEATURES (multi-select checklist):
+   Show the selected use case at the top as a header: "Prepping: All Hands / Monthly Meeting"
+   Below it, a feature picker:
+
+   - Full list of features with checkboxes on the left of each row
+   - Each row shows: checkbox, importance score (colored), title, category badges, marketing_summary (truncated)
+   - Sorted by importance (highest first)
+   - The existing importance and category filters should work here too
+   - Quick select buttons at the top:
+     - "Select All" / "Deselect All"
+     - "Select Top 5" / "Select Top 10" (by importance)
+     - "Select Score 4+" (auto-checks all features with importance >= 4)
+   - Show running count: "8 features selected"
+   - Search/filter input to quickly find a feature by name
+   - At the bottom: "Generate for 8 features →" button (teal, primary, disabled until at least 1 selected)
+   - "← Back to use cases" link
+
+4. STEP 3 — BATCH GENERATION + REVIEW:
+   Show header: "All Hands / Monthly Meeting — 8 features"
+
+   - Call POST /api/generate/batch-single-channel with the selected features and channel
+   - Show progress: "Generating... 3/8 features done" with a progress bar
+   - As each feature's content is generated, it appears in a scrollable list:
+     - Each item shows: feature title (bold), then the generated content in an editable textarea
+     - Character count per item
+     - "Regenerate" button with feedback input (per item)
+     - "Approve ✓" button (per item)
+     - Drag handle on the left to REORDER items (the marketer may want to arrange the order for the newsletter or All Hands doc)
+   - At the top of the list: "Approve All" button (approves all items at once)
+   - If a specific item needs regeneration, only that one reloads (not the whole batch)
+   - Reuses the same textarea editing, regenerate-with-feedback, and approve UI components from Prompt 2's single-feature flow
+
+5. STEP 4 — COMBINED PREVIEW + PUBLISH:
+   Once at least some items are approved, show:
+
+   - "Preview Combined →" button that opens a preview panel/modal showing ALL approved items combined into one document, in the order the marketer arranged them:
+     - For notion_monthly: renders as a single Notion-style doc with each feature as a section (## headers, structured content)
+     - For email_newsletter: renders as the full newsletter body with all feature blocks stacked
+     - For twitter: shows each tweet as a separate card (since you'd publish them individually)
+     - For slack_internal: renders as one combined Slack message with all features
+     - For article_hmc: renders as sections of a longer article
+   - The combined preview should look polished — use proper formatting for each channel type
+
+   PUBLISH ACTIONS (depends on channel):
+     - notion_monthly: "Copy to Clipboard 📋" (paste into Notion)
+     - email_newsletter: "Send as Newsletter 📧" → calls /api/publish/email with the combined content
+     - email_standalone: "Send Email 📧" → same
+     - twitter: "Publish All Tweets 🐦" → publishes each approved tweet individually via /api/publish/twitter, shows per-tweet status
+     - inapp: "Publish All Announcements 📱" → publishes each as separate announcement via /api/publish/inapp
+     - slack_internal: "Copy for Slack 📋"
+     - linkedin: "Copy for LinkedIn 📋"
+     - article_hmc: "Copy Article 📋"
+
+   - "Copy All Combined 📋" button — copies the entire combined output to clipboard as one block of text
+
+   - After publishing: show summary — "Published 8 features to [channel]" with status per item (✅ Published / 📋 Copied / ❌ Failed)
+   - "Done — Back to Dashboard" button returns to the main feature list
+
+6. BACKEND — add/update endpoints:
+
+   POST /api/generate/batch-single-channel
+   - Body:
+   {
+       "features": [{...}, {...}, ...],
+       "channel": "notion_monthly",
+       "custom_instructions": ""
+   }
+   - Generates content for multiple features but only ONE channel
+   - Processes sequentially (to avoid rate limits) but returns results as they complete
+   - Response:
+   {
+       "channel": "notion_monthly",
+       "results": [
+           {"feature_id": "...", "feature_title": "...", "content": "...", "char_count": N, "success": true},
+           ...
+       ],
+       "total": 8,
+       "succeeded": 8,
+       "failed": 0
+   }
+
+   POST /api/content/combine
+   - Body:
+   {
+       "channel": "notion_monthly",
+       "items": [
+           {"feature_title": "...", "content": "..."},
+           ...
+       ]
+   }
+   - Combines multiple content items into one formatted document appropriate for the channel
+   - For notion_monthly: adds headers, separators between sections
+   - For email_newsletter: adds section breaks, consistent formatting
+   - For slack_internal: combines into one message with emoji headers per feature
+   - Returns: {"combined_content": "...", "format": "markdown" or "html" or "plaintext"}
+
+7. UI STATE MANAGEMENT:
+   - The workflow should be navigable: Steps 1 → 2 → 3 → 4, with back buttons at each step
+   - If the marketer leaves the workflow mid-way (clicks "Back to Dashboard"), save the state so they can resume
+   - Show a subtle breadcrumb at the top: "Dashboard > All Hands > 8 features > Review"
+
+8. KEEP the existing single-feature "Generate Content →" button on each card — that flow generates ALL channels for ONE feature. This new workflow generates ONE channel for MANY features. Both are useful, different use cases.
