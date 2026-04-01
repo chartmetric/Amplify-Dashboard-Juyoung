@@ -496,10 +496,14 @@ function checkHealth() {
 function renderFunnelBar(data, activeStep) {
     var bar = document.getElementById('funnel-bar');
     if (!data) { bar.style.display = 'none'; return; }
-    var totalAsana = data.total_enriched || data.total_from_asana || 0;
-    var sentToClaude = data.sent_to_claude || data.sent_to_claude_count || 0;
-    var classifiedCount = data.classified_count || 0;
-    var showingCount = data.filtered || data.showing_count || 0;
+    var feats = data.features || data.classified_features || allFeatures || [];
+    var totalAsana = data.total || data.total_enriched || data.total_from_asana || feats.length;
+    var classifiedCount = 0;
+    for (var i = 0; i < feats.length; i++) {
+        if (feats[i].classification && !feats[i].classification.unclassified) classifiedCount++;
+    }
+    var sentToClaude = data.sent_to_claude || data.sent_to_claude_count || classifiedCount;
+    var showingCount = data.filtered || data.showing_count || feats.length;
 
     var steps = [
         {
@@ -596,7 +600,7 @@ function loadAllAsanaTasks() {
     if (currentRequest) { currentRequest.abort(); }
     var controller = new AbortController();
     currentRequest = controller;
-    fetch('/api/features/all?pre_filter=false', { signal: controller.signal })
+    fetch('/api/features/all-raw', { signal: controller.signal })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             currentRequest = null;
@@ -681,13 +685,16 @@ function loadFeatures() {
     var loading = document.getElementById('loading');
     var empty = document.getElementById('empty-state');
     var errEl = document.getElementById('error-state');
+    var stats = document.getElementById('stats-row');
+    var funnelBar = document.getElementById('funnel-bar');
+    var loadAllBanner = document.getElementById('load-all-banner');
     isAllTasksMode = false;
     list.innerHTML = '';
     empty.style.display = 'none';
     errEl.style.display = 'none';
-    stats.style.display = 'none';
-    document.getElementById('funnel-bar').style.display = 'none';
-    document.getElementById('load-all-banner').style.display = 'none';
+    if (stats) stats.style.display = 'none';
+    if (funnelBar) funnelBar.style.display = 'none';
+    if (loadAllBanner) loadAllBanner.style.display = 'none';
     loading.style.display = 'flex';
     expandedId = null;
     allFeatures = [];
@@ -702,12 +709,14 @@ function loadFeatures() {
 
             allFeatures = data.features || data.classified_features || [];
             currentFunnelData = data;
-            stats.innerHTML =
-                '<span>Total: ' + allFeatures.length + '</span>' +
-                '<span id="stat-classified">Classified: ' + countClassified() + '</span>' +
-                '<span id="stat-unclassified">Unclassified: ' + (allFeatures.length - countClassified()) + '</span>';
-            stats.style.display = 'flex';
-            renderFunnelBar(data, 'showing');
+            if (stats) {
+                stats.innerHTML =
+                    '<span>Total: ' + allFeatures.length + '</span>' +
+                    '<span id="stat-classified">Classified: ' + countClassified() + '</span>' +
+                    '<span id="stat-unclassified">Unclassified: ' + (allFeatures.length - countClassified()) + '</span>';
+                stats.style.display = 'flex';
+            }
+            if (typeof renderFunnelBar === 'function') renderFunnelBar(data, 'showing');
             if (allFeatures.length === 0) {
                 empty.innerHTML = '<h3>No features found</h3><p>Try refreshing or check your data sources.</p>';
                 empty.style.display = 'block';

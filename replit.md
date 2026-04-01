@@ -72,6 +72,16 @@ Product marketing autopilot that ingests feature data from multiple sources and 
   - `POST /api/sources/manual/feature` — create manual FeatureContext from JSON
   - `GET /api/features/<source_type>` — unified list endpoint
   - `GET /api/features/<source_type>/<feature_id>` — unified detail endpoint
+  - `GET /api/features/all` — Slack-first pipeline features with cached classifications (?days=30&limit=100&refresh=false)
+  - `GET /api/features/all-raw` — all Asana features as unclassified cards (bypasses pre-filter)
+  - `GET /api/features/classified` — auto-classified features sorted by importance (?limit=20&min_importance=N)
+  - `POST /api/features/<feature_id>/classify` — classify single feature on demand
+  - `POST /api/features/classify-batch-async` — async batch classification
+  - `POST /api/generate` — generate marketing content for a feature
+  - `POST /api/generate/batch` — batch content generation
+  - `POST /api/generate/single` — single channel content generation
+  - `POST /api/classification/override` — save classification override
+  - `GET /api/classification/overrides` — list override history
 - **Architecture (Slack-first pipeline)**:
   - `sources/base.py` — FeatureContext dataclass + SourceAdapter ABC
   - `sources/slack_source.py` — SlackSource: extracts features from #product-updates release messages as bullets with stable IDs (slack-{ts}-{idx}), parses Slack link format `<URL|text>`, extracts prefixes (PE/Devin/FE/BE), release versions, reactions, thread URLs
