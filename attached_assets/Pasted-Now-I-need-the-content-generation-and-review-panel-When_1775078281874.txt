@@ -1,0 +1,61 @@
+Now I need the content generation and review panel. When a user clicks "Generate Content" on a feature card, it should show generated content for all channels.
+
+ADD to the existing dashboard.html:
+
+1. CONTENT GENERATION VIEW:
+   When "Generate Content →" is clicked on a feature card:
+   - Hide the feature list (or slide it to a narrow left sidebar showing just feature titles)
+   - Show a full-width content panel with:
+     - Back button: "← Back to Features" (returns to feature list view)
+     - Feature header: title, category badge, importance score, marketing_summary
+     - "Generating content..." loading state with a progress indicator (show channel names appearing one by one as they load)
+   - Call POST /api/generate with the full feature object and the recommended channels from classification
+   - When results arrive, display them as channel cards
+
+2. CHANNEL CARDS LAYOUT:
+   - Use a 2-column grid (or 1 column on narrow screens)
+   - Each card represents one channel's generated content:
+     - Header bar with:
+       - Channel icon/emoji (🐦 Twitter, 📧 Email Newsletter, 📨 Standalone Email, 💬 Slack, 📱 In-App, 💼 LinkedIn, 📋 Notion Monthly, 📝 HMC Article)
+       - Channel display name (from the API response)
+       - Character count badge: "{current}/{max}" — green if under limit, red if over
+       - Status indicator: "Draft" (yellow), "Approved" (green checkmark)
+     - Content area:
+       - Editable textarea showing the generated content
+       - Auto-resize textarea height to fit content (no scrollbar unless very long)
+       - Textarea should have a monospace-ish font for readability, dark background (#0d1520), subtle border
+     - Action bar at bottom of each card:
+       - "Regenerate" button (secondary/outline style) — has a small text input next to it for feedback (placeholder: "Optional: what to change...")
+       - "Approve ✓" button (teal/primary) — marks this channel as approved
+       - Once approved: card gets a green left border, "Approved ✓" badge replaces the approve button, and an "Undo" link appears
+
+3. REGENERATE FUNCTIONALITY:
+   - When "Regenerate" is clicked on a channel card:
+     - Show a loading spinner on JUST that card (not the whole page)
+     - Call POST /api/generate/single with:
+       - feature: the current feature object
+       - channel: the channel key
+       - feedback: the text from the feedback input (if any)
+     - Replace the textarea content with the new generation
+     - Update the character count
+     - Clear the feedback input
+     - Reset approval status (if it was approved, it goes back to Draft)
+
+4. APPROVE FUNCTIONALITY:
+   - When "Approve ✓" is clicked:
+     - Call POST /api/approve with:
+       - feature: the current feature object
+       - channel: the channel key
+       - original_draft: the initially generated content (store this in a JS variable when first generated)
+       - approved_draft: the current textarea content (may have been edited)
+       - feedback_note: auto-generate a note: if text was edited, note is "Marketer edited the draft"; if regenerated with feedback, include that feedback
+     - Update the card UI to show approved state
+
+5. BOTTOM ACTION BAR (sticky at bottom of screen when in content view):
+   - Left: "Approved: 3/8 channels" counter
+   - Right: "Publish All Approved →" button (teal, larger, prominent) — disabled until at least 1 channel is approved
+   - This button doesn't do anything yet — we'll wire publishing in a later prompt
+
+Make sure the textarea editing experience is smooth — the marketer will spend most of their time here. Changes to textarea content should update the character count in real-time.
+
+For the article_hmc channel (which can be very long), use a taller textarea and consider a "Preview" toggle that renders the markdown content.

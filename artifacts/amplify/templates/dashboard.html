@@ -393,6 +393,130 @@
         }
         .toast.visible { opacity: 1; transform: translateY(0); }
         .toast.warning { border-color: #eab308; }
+
+        .content-view {
+            max-width: 1200px; margin: 0 auto; padding: 20px 24px 100px;
+        }
+        .content-view-header { margin-bottom: 16px; }
+        .btn-back {
+            background: none; border: 1px solid #2a3a4a; color: #8899aa; padding: 8px 16px;
+            border-radius: 8px; cursor: pointer; font-size: 13px; font-family: inherit;
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .btn-back:hover { color: #e0e0e0; border-color: #4a5a6a; }
+        .content-feature-header {
+            background: #1a2733; border: 1px solid #2a3a4a; border-radius: 12px;
+            padding: 20px 24px; margin-bottom: 20px;
+        }
+        .content-feature-title { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+        .content-feature-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+        .content-feature-summary { font-size: 13px; color: #8899aa; line-height: 1.5; }
+        .content-loading {
+            display: flex; flex-direction: column; align-items: center; gap: 12px;
+            padding: 60px 20px; color: #8899aa;
+        }
+        .content-loading-text { font-size: 15px; font-weight: 600; color: #e0e0e0; }
+        .content-loading-channels { font-size: 13px; color: #00C9A7; min-height: 20px; }
+        .channel-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;
+        }
+        @media (max-width: 900px) { .channel-grid { grid-template-columns: 1fr; } }
+        .channel-card {
+            background: #1a2733; border: 1px solid #2a3a4a; border-radius: 12px;
+            overflow: hidden; display: flex; flex-direction: column;
+            transition: border-color 0.2s;
+        }
+        .channel-card.approved { border-left: 3px solid #00C9A7; }
+        .channel-card.full-width { grid-column: 1 / -1; }
+        .channel-card-header {
+            display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+            background: #15202b; border-bottom: 1px solid #2a3a4a;
+        }
+        .channel-icon { font-size: 18px; flex-shrink: 0; }
+        .channel-name { font-size: 14px; font-weight: 600; color: #e0e0e0; flex: 1; }
+        .char-count-badge {
+            font-size: 11px; padding: 3px 8px; border-radius: 99px;
+            font-weight: 600; font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+        .char-count-badge.ok { background: rgba(0,201,167,0.15); color: #00C9A7; }
+        .char-count-badge.over { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .status-badge {
+            font-size: 11px; padding: 3px 8px; border-radius: 99px; font-weight: 600;
+        }
+        .status-badge.draft { background: rgba(234,179,8,0.15); color: #eab308; }
+        .status-badge.approved-badge { background: rgba(0,201,167,0.15); color: #00C9A7; }
+        .channel-card-body { padding: 12px 16px; flex: 1; }
+        .channel-textarea {
+            width: 100%; background: #0d1520; color: #e0e0e0; border: 1px solid #2a3a4a;
+            border-radius: 8px; padding: 12px; font-size: 13px; line-height: 1.6;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; resize: vertical;
+            min-height: 120px; outline: none; transition: border-color 0.15s;
+        }
+        .channel-textarea:focus { border-color: #00C9A7; }
+        .channel-textarea.tall { min-height: 300px; }
+        .channel-card-actions {
+            display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+            border-top: 1px solid #2a3a4a; flex-wrap: wrap;
+        }
+        .btn-regen {
+            background: none; border: 1px solid #2a3a4a; color: #8899aa; padding: 6px 14px;
+            border-radius: 6px; font-size: 12px; cursor: pointer; font-family: inherit;
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .btn-regen:hover { color: #e0e0e0; border-color: #4a5a6a; }
+        .btn-regen:disabled { opacity: 0.5; cursor: not-allowed; }
+        .regen-feedback-input {
+            flex: 1; min-width: 120px; background: #0d1520; color: #e0e0e0;
+            border: 1px solid #2a3a4a; border-radius: 6px; padding: 6px 10px;
+            font-size: 12px; font-family: inherit; outline: none;
+        }
+        .regen-feedback-input:focus { border-color: #00C9A7; }
+        .btn-approve {
+            background: #00C9A7; color: #0f1923; border: none; padding: 6px 14px;
+            border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+            margin-left: auto; font-family: inherit;
+        }
+        .btn-approve:hover { background: #00e0bb; }
+        .btn-approve:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-undo-approve {
+            background: none; border: none; color: #8899aa; font-size: 11px;
+            cursor: pointer; text-decoration: underline; margin-left: auto;
+        }
+        .btn-undo-approve:hover { color: #e0e0e0; }
+        .content-bottom-bar {
+            position: fixed; bottom: 0; left: 0; right: 0; background: #15202b;
+            border-top: 1px solid #2a3a4a; padding: 14px 24px;
+            display: flex; align-items: center; justify-content: center; gap: 20px;
+            z-index: 200;
+        }
+        .approved-counter { font-size: 14px; color: #8899aa; font-weight: 500; }
+        .btn-publish {
+            background: #00C9A7; color: #0f1923; border: none; padding: 10px 28px;
+            border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer;
+            font-family: inherit;
+        }
+        .btn-publish:hover { background: #00e0bb; }
+        .btn-publish:disabled { opacity: 0.4; cursor: not-allowed; }
+        .md-preview {
+            padding: 12px; background: #0d1520; border: 1px solid #2a3a4a;
+            border-radius: 8px; color: #e0e0e0; font-size: 13px; line-height: 1.6;
+            display: none;
+        }
+        .md-preview h1, .md-preview h2, .md-preview h3 { color: #fff; margin: 12px 0 6px; }
+        .md-preview h1 { font-size: 18px; } .md-preview h2 { font-size: 16px; } .md-preview h3 { font-size: 14px; }
+        .md-preview p { margin: 6px 0; }
+        .md-preview strong { color: #00C9A7; }
+        .md-preview a { color: #3b82f6; }
+        .btn-preview-toggle {
+            background: none; border: 1px solid #2a3a4a; color: #8899aa; padding: 4px 10px;
+            border-radius: 6px; font-size: 11px; cursor: pointer; font-family: inherit;
+        }
+        .btn-preview-toggle.active { border-color: #00C9A7; color: #00C9A7; }
+        .channel-card-loading {
+            display: none; align-items: center; justify-content: center;
+            padding: 40px; color: #8899aa; gap: 10px;
+        }
+        .channel-card-loading .spinner { width: 20px; height: 20px; border-width: 2px; }
     </style>
 </head>
 <body>
@@ -489,6 +613,24 @@
         <div id="empty-state" class="empty-state" style="display:none;"></div>
         <div id="error-state" class="error-state" style="display:none;"></div>
     </div>
+
+    <div id="content-view" class="content-view" style="display:none;">
+        <div class="content-view-header">
+            <button class="btn-back" onclick="exitContentView()">&larr; Back to Features</button>
+        </div>
+        <div class="content-feature-header" id="content-feature-header"></div>
+        <div class="content-loading" id="content-loading" style="display:none;">
+            <div class="spinner"></div>
+            <div class="content-loading-text">Generating content...</div>
+            <div class="content-loading-channels" id="content-loading-channels"></div>
+        </div>
+        <div class="channel-grid" id="channel-grid"></div>
+        <div class="content-bottom-bar" id="content-bottom-bar" style="display:none;">
+            <span class="approved-counter" id="approved-counter">Approved: 0/0 channels</span>
+            <button class="btn-publish" id="btn-publish" disabled>Publish All Approved &rarr;</button>
+        </div>
+    </div>
+
     <div class="toast" id="toast"></div>
 
 <script>
@@ -1790,20 +1932,65 @@ function commitOverride(f, c, reason, onDone) {
     .catch(function(err) { showToast('Error: ' + err.message, true); });
 }
 
+var CHANNEL_ICONS = {
+    twitter: '\uD83D\uDC26', email_newsletter: '\uD83D\uDCE7', email_standalone: '\uD83D\uDCE8',
+    inapp: '\uD83D\uDCF1', linkedin: '\uD83D\uDCBC', notion_monthly: '\uD83D\uDCCB', article_hmc: '\uD83D\uDCDD'
+};
+var contentViewFeature = null;
+var contentViewChannels = {};
+var contentViewOriginals = {};
+var contentViewInitialDrafts = {};
+var contentViewApproved = {};
+var contentViewRegenFeedback = {};
+
 function generateContent(fid) {
     var feature = null;
     for (var i = 0; i < allFeatures.length; i++) {
         if (allFeatures[i].id === fid) { feature = allFeatures[i]; break; }
     }
     if (!feature) return;
+    enterContentView(feature);
+}
 
-    var channels = (feature.classification || {}).recommended_channels || [];
+function enterContentView(feature) {
+    contentViewFeature = feature;
+    contentViewChannels = {};
+    contentViewOriginals = {};
+    contentViewInitialDrafts = {};
+    contentViewApproved = {};
+    contentViewRegenFeedback = {};
+
+    document.querySelector('.main').style.display = 'none';
+    document.getElementById('content-view').style.display = 'block';
+    window.scrollTo(0, 0);
+
+    var cl = feature.classification || {};
+    var score = cl.importance_score || 0;
+    var cats = cl.categories || [cl.category || 'unclassified'];
+    var catBadges = cats.map(function(c) {
+        return '<span class="cat-badge cat-' + c + '">' + (CAT_LABELS[c] || c) + '</span>';
+    }).join('');
+    var scoreBadge = '<span class="score-badge score-' + score + '" style="width:32px;height:32px;font-size:16px;">' + score + '</span>';
+
+    document.getElementById('content-feature-header').innerHTML =
+        '<div class="content-feature-title">' + escHtml(feature.title) + '</div>' +
+        '<div class="content-feature-meta">' + scoreBadge + catBadges + '</div>' +
+        (cl.marketing_summary ? '<div class="content-feature-summary">' + escHtml(cl.marketing_summary) + '</div>' : '');
+
+    var channels = (cl.recommended_channels || []).slice();
     if (channels.length === 0) channels = ['twitter', 'linkedin', 'inapp'];
-    var btn = document.querySelector('[data-fid="' + fid + '"].btn-generate');
-    if (!btn) return;
-    var origText = btn.innerHTML;
-    btn.innerHTML = 'Generating...';
-    btn.disabled = true;
+
+    document.getElementById('channel-grid').innerHTML = '';
+    document.getElementById('content-bottom-bar').style.display = 'none';
+    document.getElementById('content-loading').style.display = 'flex';
+    var loadingChannelsEl = document.getElementById('content-loading-channels');
+    loadingChannelsEl.textContent = '';
+
+    var loadedChannels = [];
+    function tickChannel(name) {
+        loadedChannels.push(name);
+        loadingChannelsEl.textContent = loadedChannels.join(' \u2192 ');
+    }
 
     fetch('/api/generate', {
         method: 'POST',
@@ -1812,11 +1999,303 @@ function generateContent(fid) {
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        btn.innerHTML = origText; btn.disabled = false;
-        if (data.error) { alert('Generation failed: ' + data.error); return; }
-        alert('Content generated for ' + channels.join(', ') + '! Check /test/review for full editing.');
+        if (data.error) {
+            document.getElementById('content-loading').style.display = 'none';
+            showToast('Generation failed: ' + data.error, true); return;
+        }
+
+        var results = data.generated_content || {};
+        var grid = document.getElementById('channel-grid');
+        grid.innerHTML = '';
+
+        var orderedKeys = [];
+        channels.forEach(function(chKey) {
+            var ch = results[chKey];
+            if (!ch) return;
+            contentViewChannels[chKey] = ch;
+            contentViewOriginals[chKey] = ch.content || '';
+            contentViewInitialDrafts[chKey] = ch.content || '';
+            contentViewApproved[chKey] = false;
+            contentViewRegenFeedback[chKey] = '';
+            orderedKeys.push(chKey);
+        });
+
+        var idx = 0;
+        function revealNext() {
+            if (idx >= orderedKeys.length) {
+                document.getElementById('content-loading').style.display = 'none';
+                document.getElementById('content-bottom-bar').style.display = 'flex';
+                updateApprovalCounter();
+                return;
+            }
+            var chKey = orderedKeys[idx];
+            var ch = results[chKey];
+            tickChannel(ch.channel_display_name || chKey);
+            var card = buildChannelCard(chKey, ch);
+            card.style.opacity = '0';
+            card.style.transition = 'opacity 0.3s';
+            grid.appendChild(card);
+            setTimeout(function() { card.style.opacity = '1'; }, 30);
+            idx++;
+            setTimeout(revealNext, 150);
+        }
+        revealNext();
     })
-    .catch(function(err) { btn.innerHTML = origText; btn.disabled = false; alert('Error: ' + err.message); });
+    .catch(function(err) {
+        document.getElementById('content-loading').style.display = 'none';
+        showToast('Error: ' + err.message, true);
+    });
+}
+
+function buildChannelCard(chKey, ch) {
+    var card = document.createElement('div');
+    card.className = 'channel-card' + (chKey === 'article_hmc' || chKey === 'linkedin' ? ' full-width' : '');
+    card.id = 'ch-card-' + chKey;
+
+    var icon = CHANNEL_ICONS[chKey] || '\uD83D\uDCE2';
+    var content = ch.content || '';
+    var maxChars = ch.max_chars || 9999;
+    var charClass = content.length <= maxChars ? 'ok' : 'over';
+    var isArticle = chKey === 'article_hmc';
+
+    card.innerHTML =
+        '<div class="channel-card-header">' +
+            '<span class="channel-icon">' + icon + '</span>' +
+            '<span class="channel-name">' + escHtml(ch.channel_display_name || chKey) + '</span>' +
+            '<span class="char-count-badge ' + charClass + '" id="char-' + chKey + '">' + content.length + '/' + maxChars + '</span>' +
+            '<span class="status-badge draft" id="status-' + chKey + '">Draft</span>' +
+            (isArticle ? '<button class="btn-preview-toggle" id="preview-toggle-' + chKey + '" onclick="togglePreview(\'' + chKey + '\')">Preview</button>' : '') +
+        '</div>' +
+        '<div class="channel-card-body">' +
+            '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '">' + escHtml(content) + '</textarea>' +
+            (isArticle ? '<div class="md-preview" id="md-preview-' + chKey + '"></div>' : '') +
+        '</div>' +
+        '<div class="channel-card-loading" id="ch-loading-' + chKey + '"><div class="spinner"></div><span>Regenerating...</span></div>' +
+        '<div class="channel-card-actions" id="ch-actions-' + chKey + '">' +
+            '<button class="btn-regen" onclick="regenerateChannel(\'' + chKey + '\')">Regenerate</button>' +
+            '<input type="text" class="regen-feedback-input" id="feedback-' + chKey + '" placeholder="Optional: what to change...">' +
+            '<button class="btn-approve" id="approve-btn-' + chKey + '" onclick="approveChannel(\'' + chKey + '\')">Approve \u2713</button>' +
+        '</div>';
+
+    var ta = card.querySelector('textarea');
+    ta.addEventListener('input', function() {
+        var len = this.value.length;
+        var max = parseInt(this.getAttribute('data-max'));
+        var badge = document.getElementById('char-' + chKey);
+        if (badge) {
+            badge.textContent = len + '/' + max;
+            badge.className = 'char-count-badge ' + (len <= max ? 'ok' : 'over');
+        }
+    });
+
+    setTimeout(function() { autoResizeTextarea(ta); }, 0);
+    ta.addEventListener('input', function() { autoResizeTextarea(this); });
+
+    return card;
+}
+
+function autoResizeTextarea(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = Math.max(ta.scrollHeight, 120) + 'px';
+}
+
+function togglePreview(chKey) {
+    var ta = document.getElementById('ta-' + chKey);
+    var preview = document.getElementById('md-preview-' + chKey);
+    var toggle = document.getElementById('preview-toggle-' + chKey);
+    if (!preview) return;
+    if (preview.style.display === 'block') {
+        preview.style.display = 'none';
+        ta.style.display = 'block';
+        toggle.classList.remove('active');
+    } else {
+        preview.innerHTML = simpleMarkdown(ta.value);
+        preview.style.display = 'block';
+        ta.style.display = 'none';
+        toggle.classList.add('active');
+    }
+}
+
+function simpleMarkdown(text) {
+    var html = escHtml(text);
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    html = html.replace(/\n/g, '<br>');
+    return html;
+}
+
+function regenerateChannel(chKey) {
+    var feedbackInput = document.getElementById('feedback-' + chKey);
+    var feedback = feedbackInput ? feedbackInput.value.trim() : '';
+    var loadingEl = document.getElementById('ch-loading-' + chKey);
+    var bodyEl = document.querySelector('#ch-card-' + chKey + ' .channel-card-body');
+    var actionsEl = document.getElementById('ch-actions-' + chKey);
+
+    if (bodyEl) bodyEl.style.display = 'none';
+    if (actionsEl) actionsEl.style.display = 'none';
+    if (loadingEl) loadingEl.style.display = 'flex';
+
+    fetch('/api/generate/single', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            feature: contentViewFeature,
+            channel: chKey,
+            feedback: feedback
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (bodyEl) bodyEl.style.display = 'block';
+        if (actionsEl) actionsEl.style.display = 'flex';
+
+        if (data.error) { showToast('Regeneration failed: ' + data.error, true); return; }
+
+        var ta = document.getElementById('ta-' + chKey);
+        if (ta) {
+            ta.value = data.content || '';
+            autoResizeTextarea(ta);
+            ta.dispatchEvent(new Event('input'));
+        }
+
+        contentViewChannels[chKey] = data;
+        contentViewOriginals[chKey] = data.content || '';
+        contentViewRegenFeedback[chKey] = feedback;
+        if (feedbackInput) feedbackInput.value = '';
+
+        if (contentViewApproved[chKey]) {
+            contentViewApproved[chKey] = false;
+            updateChannelStatus(chKey);
+            updateApprovalCounter();
+        }
+
+        var preview = document.getElementById('md-preview-' + chKey);
+        if (preview && preview.style.display === 'block') {
+            preview.style.display = 'none';
+            var toggle = document.getElementById('preview-toggle-' + chKey);
+            if (toggle) toggle.classList.remove('active');
+            if (ta) ta.style.display = 'block';
+        }
+    })
+    .catch(function(err) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (bodyEl) bodyEl.style.display = 'block';
+        if (actionsEl) actionsEl.style.display = 'flex';
+        showToast('Error: ' + err.message, true);
+    });
+}
+
+function approveChannel(chKey) {
+    var ta = document.getElementById('ta-' + chKey);
+    var currentContent = ta ? ta.value : '';
+    var initialContent = contentViewInitialDrafts[chKey] || '';
+
+    var feedbackParts = [];
+    var lastRegenFeedback = contentViewRegenFeedback[chKey] || '';
+    if (lastRegenFeedback) {
+        feedbackParts.push('Regenerated with feedback: ' + lastRegenFeedback);
+    }
+    if (currentContent !== (contentViewOriginals[chKey] || '')) {
+        feedbackParts.push('Marketer edited the draft');
+    }
+    var feedbackNote = feedbackParts.join('. ');
+
+    var approveBtn = document.getElementById('approve-btn-' + chKey);
+    if (approveBtn) { approveBtn.textContent = 'Saving...'; approveBtn.disabled = true; }
+
+    fetch('/api/approve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            feature: contentViewFeature,
+            channel: chKey,
+            original_draft: initialContent,
+            approved_draft: currentContent,
+            feedback_note: feedbackNote
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            showToast('Approve failed: ' + data.error, true);
+            if (approveBtn) { approveBtn.textContent = 'Approve \u2713'; approveBtn.disabled = false; }
+            return;
+        }
+        contentViewApproved[chKey] = true;
+        updateChannelStatus(chKey);
+        updateApprovalCounter();
+        showToast('Approved!');
+    })
+    .catch(function(err) {
+        showToast('Error: ' + err.message, true);
+        if (approveBtn) { approveBtn.textContent = 'Approve \u2713'; approveBtn.disabled = false; }
+    });
+}
+
+function undoApproval(chKey) {
+    contentViewApproved[chKey] = false;
+    updateChannelStatus(chKey);
+    updateApprovalCounter();
+}
+
+function updateChannelStatus(chKey) {
+    var card = document.getElementById('ch-card-' + chKey);
+    var statusEl = document.getElementById('status-' + chKey);
+    var actionsEl = document.getElementById('ch-actions-' + chKey);
+
+    if (contentViewApproved[chKey]) {
+        if (card) card.classList.add('approved');
+        if (statusEl) { statusEl.className = 'status-badge approved-badge'; statusEl.textContent = 'Approved \u2713'; }
+        if (actionsEl) {
+            var approveBtn = actionsEl.querySelector('.btn-approve');
+            if (approveBtn) approveBtn.style.display = 'none';
+            var existing = actionsEl.querySelector('.btn-undo-approve');
+            if (!existing) {
+                var undo = document.createElement('button');
+                undo.className = 'btn-undo-approve';
+                undo.textContent = 'Undo';
+                undo.onclick = function() { undoApproval(chKey); };
+                actionsEl.appendChild(undo);
+            }
+        }
+    } else {
+        if (card) card.classList.remove('approved');
+        if (statusEl) { statusEl.className = 'status-badge draft'; statusEl.textContent = 'Draft'; }
+        if (actionsEl) {
+            var approveBtn = actionsEl.querySelector('.btn-approve');
+            if (approveBtn) { approveBtn.style.display = ''; approveBtn.textContent = 'Approve \u2713'; approveBtn.disabled = false; }
+            var undo = actionsEl.querySelector('.btn-undo-approve');
+            if (undo) undo.remove();
+        }
+    }
+}
+
+function updateApprovalCounter() {
+    var total = Object.keys(contentViewChannels).length;
+    var approved = 0;
+    for (var k in contentViewApproved) {
+        if (contentViewApproved[k]) approved++;
+    }
+    var counter = document.getElementById('approved-counter');
+    if (counter) counter.textContent = 'Approved: ' + approved + '/' + total + ' channels';
+    var btn = document.getElementById('btn-publish');
+    if (btn) btn.disabled = approved === 0;
+}
+
+function exitContentView() {
+    document.getElementById('content-view').style.display = 'none';
+    document.querySelector('.main').style.display = 'block';
+    contentViewFeature = null;
+    contentViewChannels = {};
+    contentViewOriginals = {};
+    contentViewInitialDrafts = {};
+    contentViewApproved = {};
+    contentViewRegenFeedback = {};
 }
 
 function escHtml(str) {
