@@ -813,12 +813,13 @@ def all_features_unclassified():
     for f in features:
         fid = f.get("id", "")
         cl = cache.get(fid)
-        if cl is None:
-            cl = overrides.get(fid)
         if cl is not None:
             f["classification"] = {**cl}
-            if fid in overrides:
-                f["classification"]["manual_override"] = True
+        if fid in overrides:
+            if "classification" not in f:
+                f["classification"] = {}
+            f["classification"].update(overrides[fid])
+            f["classification"]["manual_override"] = True
 
     cache_key = f"days_{days}"
     cached_entry = _pipeline_cache.get(cache_key)
