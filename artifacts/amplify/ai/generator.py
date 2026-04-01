@@ -108,11 +108,22 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
         }
 
     release_status = feature_data.get("release_status", False)
-    reactions_breakdown = feature_data.get("reactions_breakdown") or []
-    if reactions_breakdown:
-        reactions_info = ", ".join(f":{r['name']}: x{r['count']}" for r in reactions_breakdown)
-    else:
-        reactions_info = "No reactions data"
+    raw_reactions = feature_data.get("reactions_breakdown") or {}
+    reactions_info = "No reactions data"
+    if raw_reactions:
+        if isinstance(raw_reactions, dict):
+            parts = [f":{name}: x{count}" for name, count in raw_reactions.items() if count]
+            if parts:
+                reactions_info = ", ".join(parts)
+        elif isinstance(raw_reactions, list):
+            parts = []
+            for r in raw_reactions:
+                if isinstance(r, dict) and "name" in r:
+                    parts.append(f":{r['name']}: x{r.get('count', 1)}")
+                elif isinstance(r, str):
+                    parts.append(f":{r}:")
+            if parts:
+                reactions_info = ", ".join(parts)
 
     custom_instructions_section = ""
     if custom_instructions:
