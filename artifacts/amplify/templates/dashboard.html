@@ -496,6 +496,46 @@
             gap: 10px;
             margin-top: 20px;
         }
+        .category-filter-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .cat-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid #2a3a4a;
+            background: transparent;
+            color: #8899aa;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            white-space: nowrap;
+        }
+        .cat-pill:hover { border-color: #3a4a5a; color: #e0e0e0; }
+        .cat-pill-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .cat-pill.active-all {
+            background: #2a3a4a;
+            color: #ffffff;
+            border-color: #3a4a5a;
+        }
+        .cat-pill.active-new_feature { background: #00C9A7; color: #ffffff; border-color: #00C9A7; }
+        .cat-pill.active-improvement { background: #3b82f6; color: #ffffff; border-color: #3b82f6; }
+        .cat-pill.active-bug_fix { background: #ef4444; color: #ffffff; border-color: #ef4444; }
+        .cat-pill.active-infrastructure { background: #6b7280; color: #ffffff; border-color: #6b7280; }
+        .cat-pill.active-mobile { background: #a855f7; color: #ffffff; border-color: #a855f7; }
+        .cat-pill.active-deprecation { background: #f97316; color: #ffffff; border-color: #f97316; }
     </style>
 </head>
 <body>
@@ -529,6 +569,37 @@
         </div>
 
         <div class="stats-row" id="stats-row" style="display:none;"></div>
+
+        <div class="category-filter-row" id="category-filter-row" style="display:none;">
+            <button class="cat-pill active-all" data-cat="all" onclick="filterByCategory('all')">
+                <span class="cat-pill-dot" style="background:#8899aa;"></span>
+                <span class="cat-pill-label">All</span>
+            </button>
+            <button class="cat-pill" data-cat="new_feature" onclick="filterByCategory('new_feature')">
+                <span class="cat-pill-dot" style="background:#00C9A7;"></span>
+                <span class="cat-pill-label">New Feature</span>
+            </button>
+            <button class="cat-pill" data-cat="improvement" onclick="filterByCategory('improvement')">
+                <span class="cat-pill-dot" style="background:#3b82f6;"></span>
+                <span class="cat-pill-label">Improvement</span>
+            </button>
+            <button class="cat-pill" data-cat="bug_fix" onclick="filterByCategory('bug_fix')">
+                <span class="cat-pill-dot" style="background:#ef4444;"></span>
+                <span class="cat-pill-label">Bug Fix</span>
+            </button>
+            <button class="cat-pill" data-cat="infrastructure" onclick="filterByCategory('infrastructure')">
+                <span class="cat-pill-dot" style="background:#6b7280;"></span>
+                <span class="cat-pill-label">Infrastructure</span>
+            </button>
+            <button class="cat-pill" data-cat="mobile" onclick="filterByCategory('mobile')">
+                <span class="cat-pill-dot" style="background:#a855f7;"></span>
+                <span class="cat-pill-label">Mobile</span>
+            </button>
+            <button class="cat-pill" data-cat="deprecation" onclick="filterByCategory('deprecation')">
+                <span class="cat-pill-dot" style="background:#f97316;"></span>
+                <span class="cat-pill-label">Deprecation</span>
+            </button>
+        </div>
 
         <div id="feature-list" class="feature-list"></div>
 
@@ -566,6 +637,7 @@
 var allFeatures = [];
 var currentRequest = null;
 var expandedIdx = -1;
+var selectedCategory = 'all';
 
 function checkHealth() {
     fetch('/api/health')
@@ -592,8 +664,10 @@ function loadFeatures() {
     empty.style.display = 'none';
     errEl.style.display = 'none';
     stats.style.display = 'none';
+    document.getElementById('category-filter-row').style.display = 'none';
     loading.style.display = 'flex';
     expandedIdx = -1;
+    selectedCategory = 'all';
 
     if (currentRequest) { currentRequest.abort(); }
     var controller = new AbortController();
@@ -619,6 +693,8 @@ function loadFeatures() {
                 empty.style.display = 'block';
                 return;
             }
+            updateCategoryPills();
+            document.getElementById('category-filter-row').style.display = 'flex';
             renderFeatures();
         })
         .catch(function(err) {
@@ -688,10 +764,51 @@ function buildMetaPills(f) {
     return '<div class="meta-pills">' + pills.join('') + '</div>';
 }
 
+var CAT_DEFINITIONS = [
+    { key: 'all',            label: 'All',            color: '#8899aa' },
+    { key: 'new_feature',    label: 'New Feature',    color: '#00C9A7' },
+    { key: 'improvement',    label: 'Improvement',    color: '#3b82f6' },
+    { key: 'bug_fix',        label: 'Bug Fix',        color: '#ef4444' },
+    { key: 'infrastructure', label: 'Infrastructure', color: '#6b7280' },
+    { key: 'mobile',         label: 'Mobile',         color: '#a855f7' },
+    { key: 'deprecation',    label: 'Deprecation',    color: '#f97316' }
+];
+
+function updateCategoryPills() {
+    var counts = {};
+    allFeatures.forEach(function(f) {
+        var cat = (f.classification && f.classification.category) || 'unknown';
+        counts[cat] = (counts[cat] || 0) + 1;
+    });
+    var pills = document.querySelectorAll('#category-filter-row .cat-pill');
+    pills.forEach(function(pill) {
+        var cat = pill.getAttribute('data-cat');
+        var labelEl = pill.querySelector('.cat-pill-label');
+        var def = CAT_DEFINITIONS.find(function(d) { return d.key === cat; });
+        var baseLabel = def ? def.label : cat;
+        var count = cat === 'all' ? allFeatures.length : (counts[cat] || 0);
+        labelEl.textContent = baseLabel + ' (' + count + ')';
+        pill.className = 'cat-pill' + (selectedCategory === cat ? ' active-' + cat : '');
+    });
+}
+
+function filterByCategory(cat) {
+    selectedCategory = cat;
+    expandedIdx = -1;
+    updateCategoryPills();
+    renderFeatures();
+}
+
 function renderFeatures() {
     var list = document.getElementById('feature-list');
     list.innerHTML = '';
-    allFeatures.forEach(function(f, idx) {
+    var features = selectedCategory === 'all'
+        ? allFeatures
+        : allFeatures.filter(function(f) {
+            return (f.classification && f.classification.category) === selectedCategory;
+        });
+    features.forEach(function(f, renderIdx) {
+        var dataIdx = allFeatures.indexOf(f);
         var c = f.classification || {};
         var score = c.importance_score || 0;
         var cat = c.category || 'unknown';
@@ -726,29 +843,29 @@ function renderFeatures() {
                     (summary ? '<div class="card-summary">' + escHtml(summary) + '</div>' : '') +
                     '<div class="card-bottom-row">' +
                         '<div class="channel-pills">' + channelHtml + '</div>' +
-                        '<button class="btn-generate" data-idx="' + idx + '">Generate Content &rarr;</button>' +
+                        '<button class="btn-generate" data-idx="' + renderIdx + '">Generate Content &rarr;</button>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
             '<div class="card-expanded-content">' +
                 buildDescBlock(f) +
                 buildMetaPills(f) +
-                '<span class="override-link" data-idx="' + idx + '">&#9998; Edit Classification</span>' +
+                '<span class="override-link" data-idx="' + dataIdx + '">&#9998; Edit Classification</span>' +
             '</div>';
 
         card.addEventListener('click', function(e) {
             if (e.target.closest('.btn-generate') || e.target.closest('.show-more-link') || e.target.closest('.override-link') || e.target.closest('.override-form')) return;
-            toggleCard(idx);
+            toggleCard(renderIdx);
         });
 
         card.querySelector('.override-link').addEventListener('click', function(e) {
             e.stopPropagation();
-            showOverrideForm(idx);
+            showOverrideForm(dataIdx);
         });
 
         card.querySelector('.btn-generate').addEventListener('click', function(e) {
             e.stopPropagation();
-            generateContent(idx);
+            generateContentForFeature(renderIdx, f);
         });
 
         var showMore = card.querySelector('.show-more-link');
@@ -771,13 +888,12 @@ function renderFeatures() {
     });
 }
 
-function generateContent(idx) {
-    var feature = allFeatures[idx];
+function generateContentForFeature(renderIdx, feature) {
     var channels = (feature.classification || {}).recommended_channels || [];
     if (channels.length === 0) {
         channels = ['twitter', 'linkedin', 'inapp'];
     }
-    var btn = document.querySelectorAll('.btn-generate')[idx];
+    var btn = document.querySelectorAll('.btn-generate')[renderIdx];
     var origText = btn.innerHTML;
     btn.innerHTML = 'Generating...';
     btn.disabled = true;
@@ -802,6 +918,10 @@ function generateContent(idx) {
         btn.disabled = false;
         alert('Error: ' + err.message);
     });
+}
+
+function generateContent(idx) {
+    generateContentForFeature(idx, allFeatures[idx]);
 }
 
 function escHtml(str) {
