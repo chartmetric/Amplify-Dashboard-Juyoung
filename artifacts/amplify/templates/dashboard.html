@@ -550,11 +550,6 @@
                         <option value="1">1+</option>
                     </select>
                 </div>
-                <label class="toggle-label" title="Hide unclassified features">
-                    <input type="checkbox" id="classified-only-toggle" onchange="applyFilters()">
-                    <span class="toggle-switch"></span>
-                    Show classified only
-                </label>
             </div>
         </div>
 
@@ -1203,7 +1198,6 @@ function applyFilters() { currentPage = 1; renderAll(); }
 
 function getFilteredFeatures() {
     var minImp = parseInt(document.getElementById('importance-filter').value);
-    var classifiedOnly = document.getElementById('classified-only-toggle').checked;
     var catFilter = categoryFilter;
     var classified = [];
     var unclassified = [];
@@ -1216,7 +1210,6 @@ function getFilteredFeatures() {
         var isReallyUnclassified = !cl || cl.unclassified;
 
         if (isReallyUnclassified) {
-            if (classifiedOnly && !f._justAdded) continue;
             if (catFilter !== 'all' && catFilter !== 'unclassified') continue;
             if (isAsanaOnly) { asanaOnly.push(f); }
             else { unclassified.push(f); }
