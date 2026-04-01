@@ -828,6 +828,9 @@ def _run_batch_classification(features: list[dict]):
                 with _batch_lock:
                     _batch_state["classified"] += 1
 
+    from ai.classifier import _save_cache_to_disk
+    _save_cache_to_disk()
+
     with _batch_lock:
         _batch_state["running"] = False
         _batch_state["in_progress"] = False

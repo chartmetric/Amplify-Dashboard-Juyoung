@@ -1,12 +1,57 @@
 import json
 import logging
+import os
 import re
+import threading
 
 from ai.claude_client import generate_content
 
 logger = logging.getLogger("amplify.classifier")
 
-CLASSIFICATION_CACHE: dict = {}
+_CACHE_FILE = os.path.join(os.path.dirname(__file__), "..", ".classification_cache.json")
+_cache_lock = threading.Lock()
+_cache_dirty = False
+_SAVE_BATCH_SIZE = 10
+_unsaved_count = 0
+
+
+def _load_cache_from_disk() -> dict:
+    try:
+        if os.path.exists(_CACHE_FILE):
+            with open(_CACHE_FILE, "r") as f:
+                data = json.load(f)
+            logger.info(f"[cache] Loaded {len(data)} cached classifications from disk")
+            return data
+    except Exception as e:
+        logger.warning(f"[cache] Failed to load cache from disk: {e}")
+    return {}
+
+
+def _save_cache_to_disk():
+    global _cache_dirty, _unsaved_count
+    with _cache_lock:
+        if not _cache_dirty:
+            return
+        try:
+            tmp = _CACHE_FILE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(CLASSIFICATION_CACHE, f, separators=(",", ":"))
+            os.replace(tmp, _CACHE_FILE)
+            _cache_dirty = False
+            _unsaved_count = 0
+        except Exception as e:
+            logger.warning(f"[cache] Failed to save cache to disk: {e}")
+
+
+def _mark_dirty():
+    global _cache_dirty, _unsaved_count
+    _cache_dirty = True
+    _unsaved_count += 1
+    if _unsaved_count >= _SAVE_BATCH_SIZE:
+        _save_cache_to_disk()
+
+
+CLASSIFICATION_CACHE: dict = _load_cache_from_disk()
 
 QUICK_CLASSIFY_KEYWORDS = {
     "fix": "bug_fix",
@@ -275,6 +320,7 @@ def get_all_cached_classifications() -> dict:
 
 def clear_cache():
     CLASSIFICATION_CACHE.clear()
+    _save_cache_to_disk()
 
 
 def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
@@ -291,6 +337,7 @@ def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
             qc["title"] = feature_data.get("title", "")
             if feature_id:
                 CLASSIFICATION_CACHE[feature_id] = qc
+                _mark_dirty()
             return qc
 
     title = feature_data.get("title", "")
@@ -346,6 +393,7 @@ def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
         _enforce_classification_rules(classification)
         if feature_id:
             CLASSIFICATION_CACHE[feature_id] = classification
+            _mark_dirty()
         return classification
     except json.JSONDecodeError:
         logger.error(f"Failed to parse classification JSON for {feature_id}: {result['content'][:200]}")
@@ -383,6 +431,7 @@ def classify_features_batch(features: list[dict], max_workers: int = 2) -> list[
             classified[idx] = result
 
     classified.sort(key=lambda f: f["classification"].get("importance_score", 0), reverse=True)
+    _save_cache_to_disk()
     return classified
 
 
