@@ -332,7 +332,7 @@ def classify_features_endpoint():
         return jsonify({"error": "Each feature must be a JSON object with at least id, title, and description"}), 400
 
     try:
-        classified = classify_features_batch(features)
+        classified, tier_counts = classify_features_batch(features)
     except Exception as e:
         logger.error(f"Classification error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -344,7 +344,11 @@ def classify_features_endpoint():
             if f.get("classification", {}).get("importance_score", 0) >= min_importance
         ]
 
-    return jsonify({"classified_features": classified})
+    return jsonify({
+        "classified_features": classified,
+        "quick_classified_count": tier_counts.get("quick_keyword", 0),
+        "claude_classified_count": tier_counts.get("claude", 0),
+    })
 
 
 @app.route("/api/features/all")
@@ -409,10 +413,11 @@ def all_features_endpoint():
     logger.info(f"[all_features] Step 2 result: {len(to_classify)} to classify, {len(skipped)} skipped by pre-filter")
 
     classified = []
+    tier_counts = {"quick_keyword": 0, "claude": 0}
     if to_classify:
         logger.info(f"[all_features] Step 3 – Claude classification: sending {len(to_classify)} features")
         try:
-            classified = classify_features_batch(to_classify)
+            classified, tier_counts = classify_features_batch(to_classify)
             logger.info(f"[all_features] Step 3 result: {len(classified)} classified")
         except Exception as e:
             logger.error(f"all_features endpoint - classification error: {e}")
@@ -429,6 +434,8 @@ def all_features_endpoint():
         "pre_filter_applied": True,
         "pre_filter_skipped_count": len(skipped),
         "sent_to_claude_count": len(to_classify),
+        "quick_classified_count": tier_counts.get("quick_keyword", 0),
+        "claude_classified_count": tier_counts.get("claude", 0),
     })
 
 
@@ -485,7 +492,7 @@ def features_debug():
     classified = []
     if to_classify:
         try:
-            classified = classify_features_batch(to_classify)
+            classified, _tier_counts = classify_features_batch(to_classify)
             logger.info(f"[debug] Step 4 – classified: {len(classified)} returned from Claude")
         except Exception as e:
             logger.error(f"debug endpoint - classification error: {e}")
@@ -598,10 +605,11 @@ def classified_features():
         skipped = []
 
     classified = []
+    tier_counts = {"quick_keyword": 0, "claude": 0}
     if to_classify:
         logger.info(f"[classified] Step 5 – Claude classification: sending {len(to_classify)} features")
         try:
-            classified = classify_features_batch(to_classify)
+            classified, tier_counts = classify_features_batch(to_classify)
             logger.info(f"[classified] Step 5 result: {len(classified)} classified")
         except Exception as e:
             logger.error(f"Classified endpoint - classification error: {e}")
@@ -635,6 +643,8 @@ def classified_features():
         "pre_filter_applied": use_pre_filter,
         "min_importance_applied": min_importance,
         "manual_overrides_applied": len(get_manual_overrides()),
+        "quick_classified_count": tier_counts.get("quick_keyword", 0),
+        "claude_classified_count": tier_counts.get("claude", 0),
     })
 
 
@@ -950,6 +960,18 @@ def add_classification_override():
         "manual_override": True,
     })
 
+    original_method = original.get("classification_method", "")
+    original_new_score = override.get("importance_score", original.get("importance_score", 1))
+    if original_method == "quick_keyword" and original_new_score >= 3:
+        matched_keyword = original.get("matched_keyword", "")
+        if matched_keyword:
+            try:
+                from ai.db import increment_keyword_override
+                increment_keyword_override(matched_keyword)
+                logger.info(f"[override] Keyword override count incremented for '{matched_keyword}'")
+            except Exception as e:
+                logger.error(f"[override] Failed to increment keyword override for '{matched_keyword}': {e}")
+
     return jsonify({
         "success": True,
         "message": "Override saved and will improve future classifications",
@@ -968,6 +990,172 @@ def list_classification_overrides():
     """
     overrides = get_classification_overrides()
     return jsonify({"overrides": overrides, "count": len(overrides)})
+
+
+@app.route("/api/classifier/keywords", methods=["GET"])
+def get_classifier_keywords():
+    """Return all quick-classify keywords with match/override stats.
+
+    Category: Classifier
+
+    Response: {"keywords": [{"keyword": "fix", "category": "bug_fix", "match_count": 10, "override_count": 1, ...}]}
+    """
+    from ai.classifier import QUICK_CLASSIFY_KEYWORDS
+    try:
+        from ai.db import load_keyword_stats
+        stats = {row["keyword"]: row for row in load_keyword_stats()}
+    except Exception as e:
+        logger.error(f"[keywords] Failed to load keyword stats: {e}")
+        stats = {}
+
+    keyword_list = []
+    for category, keywords in QUICK_CLASSIFY_KEYWORDS.items():
+        for kw in keywords:
+            row = stats.get(kw, {})
+            keyword_list.append({
+                "keyword": kw,
+                "category": category,
+                "match_count": row.get("match_count", 0),
+                "override_count": row.get("override_count", 0),
+                "last_overridden_at": row.get("last_overridden_at"),
+                "auto_skipping_disabled": row.get("override_count", 0) >= 3,
+            })
+
+    return jsonify({"keywords": keyword_list, "threshold": 3})
+
+
+@app.route("/api/classifier/keywords", methods=["POST"])
+def manage_classifier_keywords():
+    """Add or remove a keyword from the quick-classify keyword list.
+
+    Category: Classifier
+
+    Body: {"action": "add"|"remove", "keyword": "myword", "category": "bug_fix"}
+
+    Response: {"status": "added"|"removed", "keyword": "myword"}
+    """
+    from ai.classifier import QUICK_CLASSIFY_KEYWORDS
+    data = request.get_json() or {}
+    action = data.get("action")
+    keyword = (data.get("keyword") or "").strip().lower()
+    category = data.get("category", "")
+
+    if not keyword:
+        return jsonify({"error": "keyword is required"}), 400
+    if action not in ("add", "remove"):
+        return jsonify({"error": "action must be 'add' or 'remove'"}), 400
+
+    if action == "add":
+        if not category or category not in QUICK_CLASSIFY_KEYWORDS:
+            valid = list(QUICK_CLASSIFY_KEYWORDS.keys())
+            return jsonify({"error": f"category must be one of {valid}"}), 400
+        kw_list = QUICK_CLASSIFY_KEYWORDS[category]
+        if keyword not in kw_list:
+            kw_list.append(keyword)
+        return jsonify({"status": "added", "keyword": keyword, "category": category})
+    else:
+        removed = False
+        for kw_list in QUICK_CLASSIFY_KEYWORDS.values():
+            if keyword in kw_list:
+                kw_list.remove(keyword)
+                removed = True
+                break
+        if not removed:
+            return jsonify({"error": f"Keyword '{keyword}' not found"}), 404
+        return jsonify({"status": "removed", "keyword": keyword})
+
+
+@app.route("/api/features/<feature_id>/reclassify", methods=["POST"])
+def reclassify_feature_with_ai(feature_id):
+    """Force full Claude classification for an auto-classified feature.
+
+    Category: Classifier
+
+    Response: {"classification": {...}, "feature_id": "..."}
+    """
+    from ai.classifier import (
+        CLASSIFICATION_CACHE, CLASSIFICATION_SYSTEM_PROMPT,
+        CLASSIFICATION_USER_PROMPT, _enforce_classification_rules,
+    )
+
+    CLASSIFICATION_CACHE.pop(feature_id, None)
+    try:
+        from ai.db import load_classification_by_id, save_classification
+        cached_in_db = load_classification_by_id(feature_id)
+        if cached_in_db and cached_in_db.get("classification_method") == "quick_keyword":
+            from ai.db import _get_conn
+            with _get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM amplify_classifications WHERE feature_id = %s",
+                        (feature_id,),
+                    )
+    except Exception as e:
+        logger.warning(f"[reclassify] Could not clear DB cache for {feature_id}: {e}")
+
+    try:
+        features = _get_enriched_features()
+    except Exception as e:
+        return jsonify({"error": f"Feature pipeline failed: {e}"}), 500
+
+    feature = next((f for f in features if f.get("id") == feature_id), None)
+    if feature is None:
+        return jsonify({"error": f"Feature {feature_id} not found"}), 404
+
+    try:
+        from ai.classification_overrides import get_override_learning_context
+        from ai.claude_client import generate_content
+        import json as _json
+
+        title = feature.get("title", "")
+        description = feature.get("description", "")
+        release_status = "Released" if feature.get("release_status") else "In Progress"
+        urgency_score = feature.get("urgency_score", "N/A")
+
+        user_prompt = CLASSIFICATION_USER_PROMPT.format(
+            feature_id=feature_id,
+            title=title,
+            description=description,
+            release_status=release_status,
+            urgency_score=urgency_score,
+        )
+        learning_context = get_override_learning_context(limit=3)
+        system_prompt = CLASSIFICATION_SYSTEM_PROMPT
+        if learning_context:
+            system_prompt = system_prompt + "\n" + learning_context
+
+        result = generate_content(system_prompt, user_prompt, max_tokens=512)
+        if not result["success"]:
+            return jsonify({"error": f"Claude classification failed: {result.get('error')}"}), 500
+
+        content = result["content"].strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:-3].strip()
+        classification = _json.loads(content)
+        classification["feature_id"] = feature_id
+        classification["title"] = title
+        classification["classification_method"] = "claude"
+        if "categories" not in classification or not classification["categories"]:
+            classification["categories"] = [classification.get("category", "unknown")]
+        if "category" not in classification and classification.get("categories"):
+            classification["category"] = classification["categories"][0]
+        _enforce_classification_rules(classification)
+
+        CLASSIFICATION_CACHE[feature_id] = classification
+        try:
+            from ai.db import save_classification
+            save_classification(feature_id, classification)
+        except Exception as e:
+            logger.error(f"[reclassify] Failed to persist reclassification for {feature_id}: {e}")
+
+        logger.info(f"[reclassify] Forced Claude classification for {feature_id}")
+        return jsonify({"classification": classification, "feature_id": feature_id})
+
+    except Exception as e:
+        logger.error(f"[reclassify] Error during forced classification for {feature_id}: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/examples")
@@ -1283,7 +1471,7 @@ def generate_batch_endpoint():
 
         if needs_classification:
             print(f"[generate/batch] Classifying {len(needs_classification)} unclassified features", flush=True)
-            newly_classified = classify_features_batch(needs_classification)
+            newly_classified, _tc = classify_features_batch(needs_classification)
             already_classified.extend(newly_classified)
 
         all_features = apply_manual_overrides(already_classified)
@@ -1353,8 +1541,8 @@ def test_channels():
     return jsonify({"channels": channels, "total": len(channels)})
 
 
-@app.route("/api/features/debug")
-def features_debug():
+@app.route("/api/features/pipeline-debug")
+def pipeline_debug():
     """Debug endpoint showing full pipeline diagnostics.
 
     Category: System

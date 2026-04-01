@@ -7,6 +7,67 @@ logger = logging.getLogger("amplify.classifier")
 
 CLASSIFICATION_CACHE: dict = {}
 
+QUICK_CLASSIFY_KEYWORDS: dict[str, list[str]] = {
+    "bug_fix": [
+        "fix", "bug", "hotfix", "bugfix", "typo", "lint", "revert",
+    ],
+    "infrastructure": [
+        "refactor", "ci/cd", "pipeline", "dependency", "upgrade package",
+        "devops", "cleanup", "internal only", "backend only", "be only",
+        "rename", "deprecate", "migration", "migrate db",
+    ],
+    "deprecation": [
+        "remove legacy", "sunset", "decommission",
+    ],
+}
+
+_QUICK_OVERRIDE_THRESHOLD = 3
+
+
+def quick_classify(feature: dict) -> dict | None:
+    feature_id = feature.get("id", "")
+    title = feature.get("title", "") or ""
+    description = feature.get("description", "") or ""
+    combined = f"{title} {description}".lower()
+
+    try:
+        from ai.db import get_keyword_override_counts
+        override_counts = get_keyword_override_counts()
+    except Exception:
+        override_counts = {}
+
+    for category, keywords in QUICK_CLASSIFY_KEYWORDS.items():
+        for kw in keywords:
+            if kw in combined:
+                if override_counts.get(kw, 0) >= _QUICK_OVERRIDE_THRESHOLD:
+                    logger.info(
+                        f"[quick_classify] Keyword '{kw}' has {override_counts[kw]} overrides — deferring to Claude for {feature_id}"
+                    )
+                    continue
+                logger.info(f"[quick_classify] Auto-skip '{feature_id}' — matched keyword '{kw}' (category={category})")
+                try:
+                    from ai.db import increment_keyword_match
+                    increment_keyword_match(kw)
+                except Exception as e:
+                    logger.error(f"[quick_classify] Failed to increment match count for '{kw}': {e}")
+                return {
+                    "feature_id": feature_id,
+                    "title": title,
+                    "category": category,
+                    "categories": [category],
+                    "importance_score": 1,
+                    "importance_score_reason": f"Auto-classified: matched low-value keyword '{kw}'",
+                    "is_user_facing": False,
+                    "target_audience": [],
+                    "marketing_summary": "",
+                    "recommended_channels": [],
+                    "skip_reason": f"Auto-skipped: matched keyword '{kw}'",
+                    "classification_method": "quick_keyword",
+                    "matched_keyword": kw,
+                }
+    return None
+
+
 CLASSIFICATION_SYSTEM_PROMPT = """You are a product marketing classifier for Chartmetric, a music data analytics platform used by artists, managers, labels, publishers, and playlist curators.
 
 Given a feature or update from our development team, classify it for marketing purposes.
@@ -164,6 +225,18 @@ def classify_feature(feature_data: dict) -> dict:
         except Exception as e:
             logger.error(f"[classifier] DB cache-miss lookup failed for {feature_id}: {e}")
 
+    quick_result = quick_classify(feature_data)
+    if quick_result is not None:
+        if feature_id:
+            CLASSIFICATION_CACHE[feature_id] = quick_result
+            try:
+                from ai.db import save_classification
+                save_classification(feature_id, quick_result)
+            except Exception as e:
+                logger.error(f"[classifier] Failed to persist quick classification for {feature_id}: {e}")
+        logger.info(f"[classifier] Tier 1 (quick_keyword) used for {feature_id}")
+        return quick_result
+
     title = feature_data.get("title", "")
     description = feature_data.get("description", "")
     release_status = "Released" if feature_data.get("release_status") else "In Progress"
@@ -208,11 +281,13 @@ def classify_feature(feature_data: dict) -> dict:
         classification = json.loads(content)
         classification["feature_id"] = feature_id
         classification["title"] = title
+        classification["classification_method"] = "claude"
         if "categories" not in classification or not classification["categories"]:
             classification["categories"] = [classification.get("category", "unknown")]
         if "category" not in classification and classification.get("categories"):
             classification["category"] = classification["categories"][0]
         _enforce_classification_rules(classification)
+        logger.info(f"[classifier] Tier 2 (claude) used for {feature_id}")
         if feature_id:
             CLASSIFICATION_CACHE[feature_id] = classification
             try:
@@ -237,14 +312,18 @@ def classify_feature(feature_data: dict) -> dict:
         }
 
 
-def classify_features_batch(features: list[dict], max_workers: int = 2) -> list[dict]:
+def classify_features_batch(
+    features: list[dict], max_workers: int = 2
+) -> tuple[list[dict], dict]:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     classified = [None] * len(features)
+    tier_counts = {"quick_keyword": 0, "claude": 0, "cached": 0}
 
     def classify_at_index(idx, feature):
         classification = classify_feature(feature)
-        return idx, {**feature, "classification": classification}
+        method = classification.get("classification_method", "claude")
+        return idx, {**feature, "classification": classification}, method
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
@@ -252,11 +331,18 @@ def classify_features_batch(features: list[dict], max_workers: int = 2) -> list[
             for i, f in enumerate(features)
         }
         for future in as_completed(futures):
-            idx, result = future.result()
+            idx, result, method = future.result()
             classified[idx] = result
+            if method == "quick_keyword":
+                tier_counts["quick_keyword"] += 1
+            else:
+                tier_counts["claude"] += 1
 
     classified.sort(key=lambda f: f["classification"].get("importance_score", 0), reverse=True)
-    return classified
+    logger.info(
+        f"[classifier] Batch done: {tier_counts['quick_keyword']} quick, {tier_counts['claude']} claude"
+    )
+    return classified, tier_counts
 
 
 _manual_overrides = {}

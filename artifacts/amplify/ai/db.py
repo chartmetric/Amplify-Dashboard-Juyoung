@@ -75,6 +75,13 @@ def _create_tables():
         data JSONB NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS amplify_keyword_overrides (
+        keyword TEXT PRIMARY KEY,
+        override_count INT NOT NULL DEFAULT 0,
+        match_count INT NOT NULL DEFAULT 0,
+        last_overridden_at TIMESTAMPTZ
+    );
     """
     with _get_conn() as conn:
         with conn.cursor() as cur:
@@ -276,6 +283,87 @@ def delete_feedback(channel: str = None):
                     cur.execute("DELETE FROM amplify_feedback")
     except Exception as e:
         logger.error(f"[db] delete_feedback failed: {e}")
+
+
+# ── Keyword Overrides ──────────────────────────────────────────────────────────
+
+def increment_keyword_match(keyword: str):
+    if not _db_available:
+        return
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO amplify_keyword_overrides (keyword, match_count, override_count)
+                    VALUES (%s, 1, 0)
+                    ON CONFLICT (keyword) DO UPDATE
+                        SET match_count = amplify_keyword_overrides.match_count + 1
+                    """,
+                    (keyword,),
+                )
+    except Exception as e:
+        logger.error(f"[db] increment_keyword_match failed for '{keyword}': {e}")
+
+
+def increment_keyword_override(keyword: str):
+    if not _db_available:
+        return
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO amplify_keyword_overrides (keyword, match_count, override_count, last_overridden_at)
+                    VALUES (%s, 0, 1, NOW())
+                    ON CONFLICT (keyword) DO UPDATE
+                        SET override_count = amplify_keyword_overrides.override_count + 1,
+                            last_overridden_at = NOW()
+                    """,
+                    (keyword,),
+                )
+    except Exception as e:
+        logger.error(f"[db] increment_keyword_override failed for '{keyword}': {e}")
+
+
+def load_keyword_stats() -> list:
+    if not _db_available:
+        return []
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT keyword, override_count, match_count, last_overridden_at FROM amplify_keyword_overrides ORDER BY keyword"
+                )
+                rows = cur.fetchall()
+        return [
+            {
+                "keyword": row[0],
+                "override_count": row[1],
+                "match_count": row[2],
+                "last_overridden_at": row[3].isoformat() if row[3] else None,
+            }
+            for row in rows
+        ]
+    except Exception as e:
+        logger.error(f"[db] load_keyword_stats failed: {e}")
+        return []
+
+
+def get_keyword_override_counts() -> dict:
+    if not _db_available:
+        return {}
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT keyword, override_count FROM amplify_keyword_overrides"
+                )
+                rows = cur.fetchall()
+        return {row[0]: row[1] for row in rows}
+    except Exception as e:
+        logger.error(f"[db] get_keyword_override_counts failed: {e}")
+        return {}
 
 
 _init()
