@@ -34,6 +34,7 @@
             transition: background 0.2s, transform 0.1s;
         }
         .btn-primary:hover { background: #00e0bb; transform: translateY(-1px); }
+        .btn-primary:active { transform: translateY(0); }
         .btn-outline {
             background: transparent; color: #00C9A7; border: 1px solid #00C9A7;
             padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
@@ -42,24 +43,76 @@
         .btn-outline:hover { background: rgba(0,201,167,0.1); }
         .health-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; display: inline-block; }
         .health-dot.ok { background: #00C9A7; box-shadow: 0 0 6px rgba(0,201,167,0.5); }
-        .health-dot.err { background: #ff4d4d; }
+        .health-dot.err { background: #ff4d4d; box-shadow: 0 0 6px rgba(255,77,77,0.4); }
         .health-label { font-size: 12px; color: #8899aa; }
         .main { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
-        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .section-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
+        }
         .section-title { font-size: 20px; font-weight: 700; color: #ffffff; }
+        .controls-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
         .filter-row { display: flex; align-items: center; gap: 10px; }
         .filter-label { font-size: 13px; color: #8899aa; }
         select { background: #1a2733; color: #e0e0e0; border: 1px solid #2a3a4a; border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; outline: none; }
         select:focus { border-color: #00C9A7; }
+        .toggle-label {
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+            font-size: 13px; color: #8899aa; user-select: none;
+        }
+        .toggle-label input[type=checkbox] { display: none; }
+        .toggle-switch {
+            width: 34px; height: 18px; background: #2a3a4a; border-radius: 9px;
+            position: relative; transition: background 0.2s; flex-shrink: 0;
+        }
+        .toggle-switch::after {
+            content: ''; position: absolute; top: 2px; left: 2px;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: #8899aa; transition: transform 0.2s, background 0.2s;
+        }
+        input[type=checkbox]:checked + .toggle-switch { background: rgba(0,201,167,0.3); }
+        input[type=checkbox]:checked + .toggle-switch::after { transform: translateX(16px); background: #00C9A7; }
+        .category-filter-row {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;
+        }
+        .cat-filter-pill {
+            display: inline-flex; align-items: center; gap: 6px; border-radius: 20px;
+            padding: 5px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+            border: 1px solid #2a3a4a; background: transparent; color: #8899aa;
+            transition: background 0.15s, color 0.15s, border-color 0.15s; white-space: nowrap;
+        }
+        .cat-filter-pill:hover { border-color: #3a4a5a; color: #c0d0e0; }
+        .cat-filter-pill.active { border-color: #00C9A7; color: #00C9A7; background: rgba(0,201,167,0.08); }
+        .cat-filter-pill.active-unclassified { border-color: #6b7280; color: #9ca3af; background: rgba(107,114,128,0.12); }
+        .cat-pill-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .progress-bar-wrap { margin-bottom: 14px; display: none; }
+        .progress-bar-wrap.visible { display: block; }
+        .progress-bar-label { font-size: 12px; color: #8899aa; margin-bottom: 6px; }
+        .progress-bar-track { height: 3px; background: #1a2733; border-radius: 99px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: #00C9A7; border-radius: 99px; transition: width 0.4s ease; }
+        .progress-bar-wrap.fading { opacity: 0; transition: opacity 0.6s ease; }
         .stats-row { display: flex; gap: 8px; margin-bottom: 20px; font-size: 12px; color: #8899aa; flex-wrap: wrap; }
         .stats-row span { background: #1a2733; padding: 4px 10px; border-radius: 6px; border: 1px solid #2a3a4a; }
         .feature-list { display: flex; flex-direction: column; gap: 12px; }
+        .section-divider { margin: 20px 0 12px; display: flex; align-items: center; gap: 12px; }
+        .section-divider-label {
+            font-size: 12px; font-weight: 600; color: #6b7280;
+            text-transform: uppercase; letter-spacing: 0.7px; white-space: nowrap;
+        }
+        .section-divider-line { flex: 1; height: 1px; background: #2a3a4a; }
         .feature-card {
             background: #1a2733; border: 1px solid #2a3a4a; border-radius: 12px;
-            padding: 20px; transition: border-color 0.2s, box-shadow 0.2s; cursor: pointer;
+            padding: 20px; transition: border-color 0.2s, box-shadow 0.2s, opacity 0.3s; cursor: pointer;
         }
         .feature-card:hover { border-color: #3a4a5a; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
         .feature-card.expanded { border-color: #00C9A7; box-shadow: 0 4px 24px rgba(0,201,167,0.1); }
+        .feature-card.unclassified-card { border-color: #1e2d3a; background: #16212d; opacity: 0.85; }
+        .feature-card.unclassified-card:hover { border-color: #2a3a4a; opacity: 1; }
+        .feature-card.just-classified { animation: fadeInClassified 0.5s ease-out; }
+        @keyframes fadeInClassified {
+            from { opacity: 0.5; transform: translateY(4px); border-color: rgba(0,201,167,0.5); }
+            to { opacity: 1; transform: translateY(0); border-color: #2a3a4a; }
+        }
         .card-top { display: flex; align-items: flex-start; gap: 16px; }
         .score-badge {
             min-width: 44px; height: 44px; border-radius: 10px; display: flex;
@@ -73,11 +126,11 @@
         .score-2 { background: rgba(249,115,22,0.15); color: #f97316; }
         .score-1 { background: rgba(107,114,128,0.15); color: #6b7280; }
         .score-0 { background: rgba(107,114,128,0.1); color: #4b5563; }
+        .score-unclassified { background: rgba(75,85,99,0.12); color: #4b5563; font-size: 16px; font-weight: 700; }
         .override-indicator {
             position: absolute; top: -4px; right: -4px; font-size: 10px;
             background: #1a2733; border-radius: 50%; width: 16px; height: 16px;
-            display: flex; align-items: center; justify-content: center;
-            border: 1px solid #2a3a4a;
+            display: flex; align-items: center; justify-content: center; border: 1px solid #2a3a4a;
         }
         .score-popover {
             position: absolute; top: 0; left: 52px; background: #1a2733;
@@ -101,8 +154,7 @@
         .card-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; position: relative; }
         .category-pill {
             font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 99px;
-            text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
-            transition: opacity 0.15s;
+            text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; transition: opacity 0.15s;
         }
         .category-pill:hover { opacity: 0.8; }
         .cat-new_feature { background: rgba(0,201,167,0.15); color: #00C9A7; }
@@ -112,6 +164,7 @@
         .cat-mobile { background: rgba(168,85,247,0.15); color: #a855f7; }
         .cat-deprecation { background: rgba(249,115,22,0.15); color: #f97316; }
         .cat-default { background: rgba(107,114,128,0.15); color: #8899aa; }
+        .cat-unclassified { background: rgba(75,85,99,0.12); color: #6b7280; font-style: italic; }
         .pre-filter-badge { font-size: 10px; padding: 2px 8px; border-radius: 99px; background: rgba(107,114,128,0.15); color: #6b7280; }
         .cat-popover {
             position: absolute; top: 100%; left: 0; margin-top: 6px;
@@ -135,6 +188,7 @@
         .cat-toggle.selected.sel-deprecation { background: rgba(249,115,22,0.25); color: #f97316; border-color: #f97316; }
         .cat-check { font-size: 10px; }
         .card-summary { font-size: 13px; color: #8899aa; line-height: 1.4; margin-bottom: 10px; }
+        .card-summary.awaiting { font-style: italic; color: #4b5a6a; }
         .card-bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .channel-pills { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
         .channel-pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid #2a3a4a; color: #8899aa; }
@@ -144,6 +198,21 @@
             white-space: nowrap; transition: background 0.2s, transform 0.1s, box-shadow 0.2s; flex-shrink: 0;
         }
         .btn-generate:hover { background: #00e0bb; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,201,167,0.3); }
+        .btn-generate:active { transform: translateY(0); box-shadow: none; }
+        .btn-classify-now {
+            background: transparent; color: #6b7280; border: 1px solid #2a3a4a;
+            padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600;
+            cursor: pointer; white-space: nowrap; transition: border-color 0.2s, color 0.2s, background 0.2s;
+            flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+        }
+        .btn-classify-now:hover { border-color: #00C9A7; color: #00C9A7; background: rgba(0,201,167,0.05); }
+        .btn-classify-now:disabled { cursor: not-allowed; opacity: 0.5; }
+        .btn-classify-now .btn-spinner {
+            width: 12px; height: 12px; border: 2px solid #4b5a6a; border-top-color: #00C9A7;
+            border-radius: 50%; animation: spin 0.7s linear infinite; display: none;
+        }
+        .btn-classify-now.classifying .btn-spinner { display: inline-block; }
+        .btn-classify-now.classifying .btn-label { display: none; }
         .card-expanded-content {
             max-height: 0; overflow: hidden;
             transition: max-height 0.25s ease-out, opacity 0.2s ease-out; opacity: 0;
@@ -204,29 +273,12 @@
         .modal textarea { resize: vertical; min-height: 80px; }
         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
         .toast {
-            position: fixed; bottom: 24px; right: 24px; background: #1a2733;
-            border: 1px solid #00C9A7; color: #e0e0e0; padding: 12px 20px;
-            border-radius: 10px; font-size: 13px; z-index: 300;
+            position: fixed; bottom: 24px; right: 24px; background: #1a2733; border: 1px solid #00C9A7;
+            color: #e0e0e0; padding: 12px 20px; border-radius: 10px; font-size: 13px; z-index: 300;
             opacity: 0; transform: translateY(10px); transition: opacity 0.2s, transform 0.2s; pointer-events: none;
         }
         .toast.visible { opacity: 1; transform: translateY(0); }
         .toast.warning { border-color: #eab308; }
-        .category-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-        .cat-pill {
-            display: inline-flex; align-items: center; gap: 6px; border-radius: 20px;
-            padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
-            border: 1px solid #2a3a4a; background: transparent; color: #8899aa;
-            transition: background 0.15s, color 0.15s, border-color 0.15s; white-space: nowrap;
-        }
-        .cat-pill:hover { border-color: #3a4a5a; color: #e0e0e0; }
-        .cat-pill-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-        .cat-pill.active-all { background: #2a3a4a; color: #ffffff; border-color: #3a4a5a; }
-        .cat-pill.active-new_feature { background: #00C9A7; color: #ffffff; border-color: #00C9A7; }
-        .cat-pill.active-improvement { background: #3b82f6; color: #ffffff; border-color: #3b82f6; }
-        .cat-pill.active-bug_fix { background: #ef4444; color: #ffffff; border-color: #ef4444; }
-        .cat-pill.active-infrastructure { background: #6b7280; color: #ffffff; border-color: #6b7280; }
-        .cat-pill.active-mobile { background: #a855f7; color: #ffffff; border-color: #a855f7; }
-        .cat-pill.active-deprecation { background: #f97316; color: #ffffff; border-color: #f97316; }
     </style>
 </head>
 <body>
@@ -246,52 +298,65 @@
     <div class="main">
         <div class="section-header">
             <span class="section-title">Features</span>
-            <div class="filter-row">
-                <span class="filter-label">Min importance</span>
-                <select id="importance-filter" onchange="loadFeatures()">
-                    <option value="5">5 only</option>
-                    <option value="4">4+</option>
-                    <option value="3" selected>3+</option>
-                    <option value="2">2+</option>
-                    <option value="1">1+</option>
-                </select>
+            <div class="controls-row">
+                <div class="filter-row">
+                    <span class="filter-label">Min importance</span>
+                    <select id="importance-filter" onchange="applyFilters()">
+                        <option value="5">5 only</option>
+                        <option value="4">4+</option>
+                        <option value="3" selected>3+</option>
+                        <option value="2">2+</option>
+                        <option value="1">1+</option>
+                    </select>
+                </div>
+                <label class="toggle-label" title="Hide unclassified features">
+                    <input type="checkbox" id="classified-only-toggle" onchange="applyFilters()">
+                    <span class="toggle-switch"></span>
+                    Show classified only
+                </label>
+            </div>
+        </div>
+
+        <div class="category-filter-row" id="category-filter-row">
+            <span class="filter-label">Category:</span>
+            <button class="cat-filter-pill active" data-cat="all" onclick="setCategoryFilter('all', this)">
+                <span class="cat-pill-dot" style="background:#8899aa;"></span>All
+            </button>
+            <button class="cat-filter-pill" data-cat="new_feature" onclick="setCategoryFilter('new_feature', this)">
+                <span class="cat-pill-dot" style="background:#00C9A7;"></span>New Feature
+            </button>
+            <button class="cat-filter-pill" data-cat="improvement" onclick="setCategoryFilter('improvement', this)">
+                <span class="cat-pill-dot" style="background:#3b82f6;"></span>Improvement
+            </button>
+            <button class="cat-filter-pill" data-cat="mobile" onclick="setCategoryFilter('mobile', this)">
+                <span class="cat-pill-dot" style="background:#a855f7;"></span>Mobile
+            </button>
+            <button class="cat-filter-pill" data-cat="deprecation" onclick="setCategoryFilter('deprecation', this)">
+                <span class="cat-pill-dot" style="background:#f97316;"></span>Deprecation
+            </button>
+            <button class="cat-filter-pill" data-cat="bug_fix" onclick="setCategoryFilter('bug_fix', this)">
+                <span class="cat-pill-dot" style="background:#ef4444;"></span>Bug Fix
+            </button>
+            <button class="cat-filter-pill" data-cat="infrastructure" onclick="setCategoryFilter('infrastructure', this)">
+                <span class="cat-pill-dot" style="background:#6b7280;"></span>Infrastructure
+            </button>
+            <button class="cat-filter-pill" data-cat="unclassified" onclick="setCategoryFilter('unclassified', this)">
+                <span class="cat-pill-dot" style="background:#4b5563;"></span>Unclassified
+            </button>
+        </div>
+
+        <div class="progress-bar-wrap" id="progress-bar-wrap">
+            <div class="progress-bar-label" id="progress-bar-label">Classifying features...</div>
+            <div class="progress-bar-track">
+                <div class="progress-bar-fill" id="progress-bar-fill" style="width:0%"></div>
             </div>
         </div>
         <div class="stats-row" id="stats-row" style="display:none;"></div>
-        <div class="category-filter-row" id="category-filter-row" style="display:none;">
-            <button class="cat-pill active-all" data-cat="all" onclick="filterByCategory('all')">
-                <span class="cat-pill-dot" style="background:#8899aa;"></span>
-                <span class="cat-pill-label">All</span>
-            </button>
-            <button class="cat-pill" data-cat="new_feature" onclick="filterByCategory('new_feature')">
-                <span class="cat-pill-dot" style="background:#00C9A7;"></span>
-                <span class="cat-pill-label">New Feature</span>
-            </button>
-            <button class="cat-pill" data-cat="improvement" onclick="filterByCategory('improvement')">
-                <span class="cat-pill-dot" style="background:#3b82f6;"></span>
-                <span class="cat-pill-label">Improvement</span>
-            </button>
-            <button class="cat-pill" data-cat="bug_fix" onclick="filterByCategory('bug_fix')">
-                <span class="cat-pill-dot" style="background:#ef4444;"></span>
-                <span class="cat-pill-label">Bug Fix</span>
-            </button>
-            <button class="cat-pill" data-cat="infrastructure" onclick="filterByCategory('infrastructure')">
-                <span class="cat-pill-dot" style="background:#6b7280;"></span>
-                <span class="cat-pill-label">Infrastructure</span>
-            </button>
-            <button class="cat-pill" data-cat="mobile" onclick="filterByCategory('mobile')">
-                <span class="cat-pill-dot" style="background:#a855f7;"></span>
-                <span class="cat-pill-label">Mobile</span>
-            </button>
-            <button class="cat-pill" data-cat="deprecation" onclick="filterByCategory('deprecation')">
-                <span class="cat-pill-dot" style="background:#f97316;"></span>
-                <span class="cat-pill-label">Deprecation</span>
-            </button>
-        </div>
+
         <div id="feature-list" class="feature-list"></div>
         <div id="loading" class="loading-container" style="display:none;">
             <div class="spinner"></div>
-            <span class="loading-text">Classifying features with AI...</span>
+            <span class="loading-text">Loading features...</span>
         </div>
         <div id="empty-state" class="empty-state" style="display:none;"></div>
         <div id="error-state" class="error-state" style="display:none;"></div>
@@ -320,14 +385,15 @@
 
 <script>
 var allFeatures = [];
-var currentRequest = null;
-var expandedIdx = -1;
-var selectedCategory = 'all';
+var expandedId = null;
+var categoryFilter = 'all';
+var pollInterval = null;
+var classificationTotal = 0;
+var classificationDone = 0;
 var activePopover = null;
 var ALL_CATS = ['new_feature','improvement','bug_fix','infrastructure','mobile','deprecation'];
 var CAT_LABELS = {new_feature:'New Feature',improvement:'Improvement',bug_fix:'Bug Fix',infrastructure:'Infrastructure',mobile:'Mobile',deprecation:'Deprecation'};
 var CAT_COLORS = {new_feature:'#00C9A7',improvement:'#3b82f6',bug_fix:'#ef4444',infrastructure:'#6b7280',mobile:'#a855f7',deprecation:'#f97316'};
-var SCORE_COLORS = {5:'#00C9A7',4:'#3b82f6',3:'#eab308',2:'#f97316',1:'#6b7280',0:'#4b5563'};
 
 function getCategories(f) {
     var c = f.classification || {};
@@ -369,7 +435,6 @@ function checkHealth() {
 }
 
 function loadFeatures() {
-    var minImp = document.getElementById('importance-filter').value;
     var list = document.getElementById('feature-list');
     var loading = document.getElementById('loading');
     var empty = document.getElementById('empty-state');
@@ -379,56 +444,387 @@ function loadFeatures() {
     empty.style.display = 'none';
     errEl.style.display = 'none';
     stats.style.display = 'none';
-    document.getElementById('category-filter-row').style.display = 'none';
     loading.style.display = 'flex';
-    expandedIdx = -1;
-    selectedCategory = 'all';
-    if (currentRequest) { currentRequest.abort(); }
-    var controller = new AbortController();
-    currentRequest = controller;
-    fetch('/api/features/classified?limit=40&min_importance=' + minImp, { signal: controller.signal })
+    expandedId = null;
+    allFeatures = [];
+    stopPolling();
+    hideProgressBar();
+
+    fetch('/api/features/all?limit=40')
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            currentRequest = null;
             loading.style.display = 'none';
             if (data.error) throw new Error(data.error);
-            allFeatures = data.classified_features || [];
+
+            allFeatures = data.features || [];
+
             stats.innerHTML =
-                '<span>Total enriched: ' + (data.total_enriched || 0) + '</span>' +
-                '<span>Sent to Claude: ' + (data.sent_to_claude || '?') + '</span>' +
-                '<span>Pre-filtered: ' + (data.pre_filtered_skipped || 0) + '</span>' +
-                '<span>Showing: ' + allFeatures.length + '</span>';
+                '<span>Total: ' + allFeatures.length + '</span>' +
+                '<span id="stat-classified">Classified: ' + countClassified() + '</span>' +
+                '<span id="stat-unclassified">Unclassified: ' + (allFeatures.length - countClassified()) + '</span>';
             stats.style.display = 'flex';
             if (allFeatures.length === 0) {
-                empty.innerHTML = '<h3>No features found above importance level ' + minImp + '</h3><p>Try lowering the minimum importance filter.</p>';
+                empty.innerHTML = '<h3>No features found</h3><p>Try refreshing or check your data sources.</p>';
                 empty.style.display = 'block';
                 return;
             }
-            updateCategoryPills();
-            document.getElementById('category-filter-row').style.display = 'flex';
-            renderFeatures();
+
+            renderAll();
+            startBatchClassification();
         })
         .catch(function(err) {
-            currentRequest = null;
             loading.style.display = 'none';
-            if (err.name === 'AbortError') return;
             errEl.innerHTML = '<h3>Failed to load features</h3><p>' + err.message + '</p>';
             errEl.style.display = 'block';
         });
 }
 
-function toggleCard(renderIdx) {
-    var cards = document.querySelectorAll('.feature-card');
-    if (expandedIdx === renderIdx) {
-        cards[renderIdx].classList.remove('expanded');
-        expandedIdx = -1;
+function countClassified() {
+    var n = 0;
+    for (var i = 0; i < allFeatures.length; i++) {
+        if (allFeatures[i].classification) n++;
+    }
+    return n;
+}
+
+function startBatchClassification() {
+    fetch('/api/features/classify-batch-async', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'complete') return;
+            classificationTotal = data.total || allFeatures.length;
+            classificationDone = data.classified || 0;
+            showProgressBar(classificationDone, classificationTotal);
+            startPolling();
+        })
+        .catch(function(err) { console.warn('Batch classification start failed:', err.message); });
+}
+
+function startPolling() {
+    if (pollInterval) return;
+    pollInterval = setInterval(pollClassificationStatus, 3000);
+}
+
+function stopPolling() {
+    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+}
+
+function pollClassificationStatus() {
+    fetch('/api/classifications/cache')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var cache = data.cache || {};
+            var anyUpdated = false;
+            for (var i = 0; i < allFeatures.length; i++) {
+                var f = allFeatures[i];
+                var fid = f.id || '';
+                if (!f.classification && cache[fid]) {
+                    f.classification = cache[fid];
+                    anyUpdated = true;
+                }
+            }
+            if (anyUpdated) { renderAll(); updateStats(); }
+
+            fetch('/api/classifications/status')
+                .then(function(r2) { return r2.json(); })
+                .then(function(status) {
+                    classificationTotal = status.total || allFeatures.length;
+                    classificationDone = status.classified || 0;
+                    if (status.in_progress) {
+                        showProgressBar(classificationDone, classificationTotal);
+                    } else {
+                        var allDone = allFeatures.every(function(f) { return !!f.classification; });
+                        if (allDone || !status.in_progress) { stopPolling(); fadeOutProgressBar(); }
+                        else { showProgressBar(classificationDone, classificationTotal); }
+                    }
+                });
+        })
+        .catch(function(err) { console.warn('Poll error:', err.message); });
+}
+
+function showProgressBar(done, total) {
+    var wrap = document.getElementById('progress-bar-wrap');
+    var fill = document.getElementById('progress-bar-fill');
+    var label = document.getElementById('progress-bar-label');
+    wrap.classList.remove('fading');
+    wrap.classList.add('visible');
+    var pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    fill.style.width = pct + '%';
+    label.textContent = 'Classifying features\u2026 ' + done + '/' + total;
+}
+
+function hideProgressBar() {
+    var wrap = document.getElementById('progress-bar-wrap');
+    wrap.classList.remove('visible', 'fading');
+}
+
+function fadeOutProgressBar() {
+    var wrap = document.getElementById('progress-bar-wrap');
+    if (!wrap.classList.contains('visible')) return;
+    var fill = document.getElementById('progress-bar-fill');
+    fill.style.width = '100%';
+    setTimeout(function() {
+        wrap.classList.add('fading');
+        setTimeout(function() { wrap.classList.remove('visible', 'fading'); }, 700);
+    }, 400);
+}
+
+function updateStats() {
+    var cl = countClassified();
+    var statCl = document.getElementById('stat-classified');
+    var statUncl = document.getElementById('stat-unclassified');
+    if (statCl) statCl.textContent = 'Classified: ' + cl;
+    if (statUncl) statUncl.textContent = 'Unclassified: ' + (allFeatures.length - cl);
+}
+
+function setCategoryFilter(cat, btn) {
+    categoryFilter = cat;
+    var pills = document.querySelectorAll('.cat-filter-pill');
+    for (var i = 0; i < pills.length; i++) {
+        pills[i].classList.remove('active', 'active-unclassified');
+    }
+    if (cat === 'unclassified') { btn.classList.add('active-unclassified'); }
+    else { btn.classList.add('active'); }
+    renderAll();
+}
+
+function applyFilters() { renderAll(); }
+
+function getFilteredFeatures() {
+    var minImp = parseInt(document.getElementById('importance-filter').value);
+    var classifiedOnly = document.getElementById('classified-only-toggle').checked;
+    var catFilter = categoryFilter;
+    var classified = [];
+    var unclassified = [];
+
+    for (var i = 0; i < allFeatures.length; i++) {
+        var f = allFeatures[i];
+        var cl = f.classification;
+
+        if (!cl) {
+            if (classifiedOnly) continue;
+            if (catFilter !== 'all' && catFilter !== 'unclassified') continue;
+            unclassified.push(f);
+        } else {
+            var score = cl.importance_score || 0;
+            if (catFilter === 'unclassified') continue;
+            if (catFilter !== 'all' && !featureMatchesCategory(f, catFilter)) continue;
+            if (score < minImp) continue;
+            classified.push(f);
+        }
+    }
+
+    classified.sort(function(a, b) {
+        return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
+    });
+    unclassified.sort(function(a, b) { return (a.title || '').localeCompare(b.title || ''); });
+
+    return { classified: classified, unclassified: unclassified };
+}
+
+function renderAll() {
+    var list = document.getElementById('feature-list');
+    var result = getFilteredFeatures();
+    var classified = result.classified;
+    var unclassified = result.unclassified;
+    var prevExpanded = expandedId;
+
+    list.innerHTML = '';
+
+    if (classified.length === 0 && unclassified.length === 0) {
+        list.innerHTML = '<div class="empty-state" style="display:block;"><h3>No features match current filters</h3><p>Try adjusting the category or importance filter.</p></div>';
         return;
     }
-    if (expandedIdx >= 0 && expandedIdx < cards.length) {
-        cards[expandedIdx].classList.remove('expanded');
+
+    for (var i = 0; i < classified.length; i++) {
+        var card = buildCard(classified[i], false);
+        if (classified[i].id === prevExpanded) card.classList.add('expanded');
+        list.appendChild(card);
     }
-    cards[renderIdx].classList.add('expanded');
-    expandedIdx = renderIdx;
+
+    if (unclassified.length > 0) {
+        var divider = document.createElement('div');
+        divider.className = 'section-divider';
+        divider.innerHTML = '<span class="section-divider-label">Needs Classification (' + unclassified.length + ')</span><div class="section-divider-line"></div>';
+        list.appendChild(divider);
+
+        for (var j = 0; j < unclassified.length; j++) {
+            var ucard = buildCard(unclassified[j], true);
+            if (unclassified[j].id === prevExpanded) ucard.classList.add('expanded');
+            list.appendChild(ucard);
+        }
+    }
+
+    attachShowMore();
+}
+
+function buildCard(f, isUnclassified) {
+    var c = f.classification || {};
+    var score = c.importance_score || 0;
+    var summary = c.marketing_summary || '';
+    var channels = c.recommended_channels || [];
+    var preFiltered = c.pre_filtered || false;
+    var isOverridden = c.manual_override || false;
+    var fid = f.id || '';
+
+    var card = document.createElement('div');
+    card.className = 'feature-card' + (isUnclassified ? ' unclassified-card' : '');
+    card.dataset.fid = fid;
+
+    var scoreBadgeClass, scoreBadgeContent;
+    if (isUnclassified) {
+        scoreBadgeClass = 'score-badge score-unclassified';
+        scoreBadgeContent = '&mdash;';
+    } else {
+        scoreBadgeClass = 'score-badge score-' + Math.min(score, 5);
+        scoreBadgeContent = score + (isOverridden ? '<span class="override-indicator" title="Manually overridden">&#9998;</span>' : '');
+    }
+
+    var catBadgesHtml = '';
+    if (isUnclassified) {
+        catBadgesHtml = '<span class="category-pill cat-unclassified">Unclassified</span>';
+    } else {
+        var cats = getCategories(f);
+        catBadgesHtml = cats.map(function(cat) {
+            var cls = ALL_CATS.indexOf(cat) !== -1 ? 'cat-' + cat : 'cat-default';
+            return '<span class="category-pill ' + cls + '">' + (CAT_LABELS[cat] || cat.replace(/_/g, ' ')) + '</span>';
+        }).join('');
+    }
+
+    var summaryHtml;
+    if (isUnclassified) {
+        summaryHtml = '<div class="card-summary awaiting">Awaiting AI classification\u2026</div>';
+    } else if (summary) {
+        summaryHtml = '<div class="card-summary">' + escHtml(summary) + '</div>';
+    } else {
+        summaryHtml = '';
+    }
+
+    var channelHtml = '';
+    if (!isUnclassified) {
+        channels.forEach(function(ch) { channelHtml += '<span class="channel-pill">' + escHtml(ch) + '</span>'; });
+    }
+
+    var actionBtn;
+    if (isUnclassified) {
+        actionBtn = '<button class="btn-classify-now" data-fid="' + escAttr(fid) + '">' +
+            '<span class="btn-spinner"></span><span class="btn-label">Classify</span></button>';
+    } else {
+        actionBtn = '<button class="btn-generate" data-fid="' + escAttr(fid) + '">Generate Content &rarr;</button>';
+    }
+
+    card.innerHTML =
+        '<div class="card-top">' +
+            '<div class="' + scoreBadgeClass + '">' + scoreBadgeContent + '</div>' +
+            '<div class="card-body">' +
+                '<div class="card-title-row">' +
+                    '<span class="card-title">' + escHtml(f.title || 'Untitled') + '</span>' +
+                    '<span class="chevron">&#9660;</span>' +
+                '</div>' +
+                '<div class="card-meta">' +
+                    catBadgesHtml +
+                    ((!isUnclassified && preFiltered) ? '<span class="pre-filter-badge">pre-filtered</span>' : '') +
+                '</div>' +
+                summaryHtml +
+                '<div class="card-bottom-row">' +
+                    '<div class="channel-pills">' + channelHtml + '</div>' +
+                    actionBtn +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div class="card-expanded-content">' +
+            buildDescBlock(f) +
+            buildMetaPills(f) +
+        '</div>';
+
+    card.addEventListener('click', function(e) {
+        if (e.target.closest('.btn-generate') || e.target.closest('.btn-classify-now') ||
+            e.target.closest('.show-more-link') || e.target.closest('.score-badge') ||
+            e.target.closest('.score-popover') || e.target.closest('.cat-popover') ||
+            e.target.closest('.override-reason-row') || e.target.closest('.card-meta')) return;
+        toggleCard(card, fid);
+    });
+
+    if (!isUnclassified) {
+        var scoreBadgeEl = card.querySelector('.score-badge');
+        scoreBadgeEl.addEventListener('click', function(e) {
+            e.stopPropagation();
+            showScorePopover(fid, scoreBadgeEl);
+        });
+
+        var metaEl = card.querySelector('.card-meta');
+        metaEl.addEventListener('click', function(e) {
+            if (e.target.closest('.category-pill') || e.target.closest('.override-indicator')) {
+                e.stopPropagation();
+                showCatPopover(fid, metaEl);
+            }
+        });
+    }
+
+    var genBtn = card.querySelector('.btn-generate');
+    if (genBtn) {
+        genBtn.addEventListener('click', function(e) { e.stopPropagation(); generateContent(fid); });
+    }
+
+    var classifyBtn = card.querySelector('.btn-classify-now');
+    if (classifyBtn) {
+        classifyBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            classifySingle(fid, classifyBtn, card);
+        });
+    }
+
+    return card;
+}
+
+function attachShowMore() {
+    var links = document.querySelectorAll('.show-more-link');
+    for (var i = 0; i < links.length; i++) {
+        (function(link) {
+            link.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var fullText = link.getAttribute('data-full');
+                var descText = link.parentElement.querySelector('.desc-text');
+                if (link.textContent === 'Show more...') { descText.textContent = fullText; link.textContent = 'Show less'; }
+                else { descText.textContent = fullText.substring(0, 500) + '...'; link.textContent = 'Show more...'; }
+            });
+        })(links[i]);
+    }
+}
+
+function toggleCard(card, fid) {
+    if (expandedId === fid) { card.classList.remove('expanded'); expandedId = null; return; }
+    var prev = document.querySelector('.feature-card.expanded');
+    if (prev) prev.classList.remove('expanded');
+    card.classList.add('expanded');
+    expandedId = fid;
+}
+
+function classifySingle(fid, btn, card) {
+    btn.classList.add('classifying');
+    btn.disabled = true;
+
+    fetch('/api/features/' + encodeURIComponent(fid) + '/classify', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                showToast('Classification failed: ' + data.error, true);
+                btn.classList.remove('classifying'); btn.disabled = false;
+                return;
+            }
+            var cl = data.classification;
+            for (var i = 0; i < allFeatures.length; i++) {
+                if (allFeatures[i].id === fid) { allFeatures[i].classification = cl; break; }
+            }
+            updateStats();
+            renderAll();
+            var newCard = document.querySelector('[data-fid="' + fid + '"]');
+            if (newCard) newCard.classList.add('just-classified');
+        })
+        .catch(function(err) {
+            showToast('Error: ' + err.message, true);
+            btn.classList.remove('classifying'); btn.disabled = false;
+        });
 }
 
 function buildDescBlock(f) {
@@ -453,148 +849,18 @@ function buildMetaPills(f) {
     if ((f.total_reactions || 0) > 0) pills.push('<span class="meta-pill">&#128640; ' + f.total_reactions + ' reactions</span>');
     if (f.engineer) pills.push('<span class="meta-pill">Eng: ' + escHtml(f.engineer) + '</span>');
     if (f.assignee) pills.push('<span class="meta-pill">Assignee: ' + escHtml(f.assignee) + '</span>');
+    if (f.urgency_score) pills.push('<span class="meta-pill">Urgency: ' + f.urgency_score + '</span>');
     if (pills.length === 0) return '';
     return '<div class="meta-pills">' + pills.join('') + '</div>';
 }
 
-var CAT_DEFINITIONS = [
-    { key: 'all', label: 'All', color: '#8899aa' },
-    { key: 'new_feature', label: 'New Feature', color: '#00C9A7' },
-    { key: 'improvement', label: 'Improvement', color: '#3b82f6' },
-    { key: 'bug_fix', label: 'Bug Fix', color: '#ef4444' },
-    { key: 'infrastructure', label: 'Infrastructure', color: '#6b7280' },
-    { key: 'mobile', label: 'Mobile', color: '#a855f7' },
-    { key: 'deprecation', label: 'Deprecation', color: '#f97316' }
-];
-
-function updateCategoryPills() {
-    var counts = {};
-    allFeatures.forEach(function(f) {
-        getCategories(f).forEach(function(cat) {
-            counts[cat] = (counts[cat] || 0) + 1;
-        });
-    });
-    var pills = document.querySelectorAll('#category-filter-row .cat-pill');
-    pills.forEach(function(pill) {
-        var cat = pill.getAttribute('data-cat');
-        var labelEl = pill.querySelector('.cat-pill-label');
-        var def = CAT_DEFINITIONS.find(function(d) { return d.key === cat; });
-        var baseLabel = def ? def.label : cat;
-        var count = cat === 'all' ? allFeatures.length : (counts[cat] || 0);
-        labelEl.textContent = baseLabel + ' (' + count + ')';
-        pill.className = 'cat-pill' + (selectedCategory === cat ? ' active-' + cat : '');
-    });
-}
-
-function filterByCategory(cat) {
-    selectedCategory = cat;
-    expandedIdx = -1;
-    updateCategoryPills();
-    renderFeatures();
-}
-
-function renderFeatures() {
-    var list = document.getElementById('feature-list');
-    list.innerHTML = '';
-    var features = selectedCategory === 'all' ? allFeatures : allFeatures.filter(function(f) { return featureMatchesCategory(f, selectedCategory); });
-    features.forEach(function(f, renderIdx) {
-        var c = f.classification || {};
-        var score = c.importance_score || 0;
-        var cats = getCategories(f);
-        var summary = c.marketing_summary || '';
-        var channels = c.recommended_channels || [];
-        var preFiltered = c.pre_filtered || false;
-        var isOverridden = c.manual_override || false;
-        var origScore = c._original_score;
-        var origCats = c._original_categories;
-
-        var catBadgesHtml = cats.map(function(cat) {
-            var catClass = ALL_CATS.indexOf(cat) !== -1 ? 'cat-' + cat : 'cat-default';
-            return '<span class="category-pill ' + catClass + '">' + (CAT_LABELS[cat] || cat).replace(/_/g, ' ') + '</span>';
-        }).join('');
-        if (isOverridden) catBadgesHtml += '<span class="override-indicator" title="Manually changed from ' + (origCats || []).join(', ') + '">&#9998;</span>';
-
-        var channelHtml = '';
-        channels.forEach(function(ch) { channelHtml += '<span class="channel-pill">' + ch + '</span>'; });
-
-        var scoreOverrideHtml = isOverridden && origScore !== undefined && origScore !== score
-            ? '<span class="override-indicator" title="Changed from ' + origScore + '">&#9998;</span>' : '';
-
-        var card = document.createElement('div');
-        card.className = 'feature-card';
-        var featureId = f.id || f.feature_id || '';
-        card.setAttribute('data-fid', featureId);
-        card.setAttribute('data-fidx', allFeatures.indexOf(f));
-        card.innerHTML =
-            '<div class="card-top">' +
-                '<div class="score-badge score-' + Math.min(score, 5) + '" data-fidx="' + allFeatures.indexOf(f) + '">' +
-                    score + scoreOverrideHtml +
-                '</div>' +
-                '<div class="card-body">' +
-                    '<div class="card-title-row">' +
-                        '<span class="card-title">' + escHtml(f.title || 'Untitled') + '</span>' +
-                        '<span class="chevron">&#9660;</span>' +
-                    '</div>' +
-                    '<div class="card-meta">' +
-                        catBadgesHtml +
-                        (preFiltered ? '<span class="pre-filter-badge">pre-filtered</span>' : '') +
-                    '</div>' +
-                    (summary ? '<div class="card-summary">' + escHtml(summary) + '</div>' : '') +
-                    '<div class="card-bottom-row">' +
-                        '<div class="channel-pills">' + channelHtml + '</div>' +
-                        '<button class="btn-generate">Generate Content &rarr;</button>' +
-                    '</div>' +
-                '</div>' +
-            '</div>' +
-            '<div class="card-expanded-content">' +
-                buildDescBlock(f) +
-                buildMetaPills(f) +
-            '</div>';
-
-        card.querySelector('.score-badge').addEventListener('click', function(e) {
-            e.stopPropagation();
-            showScorePopover(allFeatures.indexOf(f), this);
-        });
-
-        var metaEl = card.querySelector('.card-meta');
-        metaEl.addEventListener('click', function(e) {
-            if (e.target.closest('.category-pill') || e.target.closest('.override-indicator')) {
-                e.stopPropagation();
-                showCatPopover(allFeatures.indexOf(f), metaEl);
-            }
-        });
-
-        card.addEventListener('click', function(e) {
-            if (e.target.closest('.btn-generate') || e.target.closest('.show-more-link') ||
-                e.target.closest('.score-badge') || e.target.closest('.score-popover') ||
-                e.target.closest('.cat-popover') || e.target.closest('.override-reason-row')) return;
-            if (e.target.closest('.card-meta')) return;
-            toggleCard(renderIdx);
-        });
-
-        card.querySelector('.btn-generate').addEventListener('click', function(e) {
-            e.stopPropagation();
-            generateContentForFeature(renderIdx, f);
-        });
-
-        var showMore = card.querySelector('.show-more-link');
-        if (showMore) {
-            showMore.addEventListener('click', function(e) {
-                e.stopPropagation();
-                var fullText = this.getAttribute('data-full');
-                var descText = this.parentElement.querySelector('.desc-text');
-                if (this.textContent === 'Show more...') { descText.textContent = fullText; this.textContent = 'Show less'; }
-                else { descText.textContent = fullText.substring(0, 500) + '...'; this.textContent = 'Show more...'; }
-            });
-        }
-
-        list.appendChild(card);
-    });
-}
-
-function showScorePopover(fidx, badgeEl) {
+function showScorePopover(fid, badgeEl) {
     closeActivePopover();
-    var f = allFeatures[fidx];
+    var f = null;
+    for (var i = 0; i < allFeatures.length; i++) {
+        if ((allFeatures[i].id || '') === fid) { f = allFeatures[i]; break; }
+    }
+    if (!f) return;
     var c = f.classification || {};
     var currentScore = c.importance_score || 0;
 
@@ -607,20 +873,23 @@ function showScorePopover(fidx, badgeEl) {
         opt.addEventListener('click', function(e) {
             e.stopPropagation();
             if (s === currentScore) { closeActivePopover(); return; }
-            applyOverride(fidx, s, null);
+            applyOverride(fid, s, null);
             closeActivePopover();
         });
         pop.appendChild(opt);
     });
 
-    badgeEl.style.position = 'relative';
     badgeEl.appendChild(pop);
     activePopover = pop;
 }
 
-function showCatPopover(fidx, metaEl) {
+function showCatPopover(fid, metaEl) {
     closeActivePopover();
-    var f = allFeatures[fidx];
+    var f = null;
+    for (var i = 0; i < allFeatures.length; i++) {
+        if ((allFeatures[i].id || '') === fid) { f = allFeatures[i]; break; }
+    }
+    if (!f) return;
     var currentCats = getCategories(f);
 
     var pop = document.createElement('div');
@@ -637,10 +906,7 @@ function showCatPopover(fidx, metaEl) {
                 e.stopPropagation();
                 var idx = currentCats.indexOf(cat);
                 if (idx !== -1) {
-                    if (currentCats.length <= 1) {
-                        showToast('At least one category required', true);
-                        return;
-                    }
+                    if (currentCats.length <= 1) { showToast('At least one category required', true); return; }
                     currentCats.splice(idx, 1);
                 } else {
                     currentCats.push(cat);
@@ -655,24 +921,20 @@ function showCatPopover(fidx, metaEl) {
     pop._commitOnClose = function() {
         var origCats = getCategories(f);
         var changed = origCats.length !== currentCats.length || origCats.some(function(c) { return currentCats.indexOf(c) === -1; });
-        if (changed) applyOverride(fidx, null, currentCats.slice());
+        if (changed) applyOverride(fid, null, currentCats.slice());
     };
 
     metaEl.appendChild(pop);
     activePopover = pop;
 }
 
-var pendingOverride = null;
-
-function applyOverride(fidx, newScore, newCats) {
-    var f = allFeatures[fidx];
-    var c = f.classification || {};
-    var featureId = f.id || f.feature_id || '';
-
-    if (pendingOverride && pendingOverride.featureId !== featureId) {
-        commitOverride(pendingOverride.fidx, pendingOverride.f, pendingOverride.c, '', null);
-        pendingOverride = null;
+function applyOverride(fid, newScore, newCats) {
+    var f = null;
+    for (var i = 0; i < allFeatures.length; i++) {
+        if ((allFeatures[i].id || '') === fid) { f = allFeatures[i]; break; }
     }
+    if (!f) return;
+    var c = f.classification || {};
 
     if (!c._original_score && c._original_score !== 0) {
         c._original_score = c.importance_score;
@@ -680,27 +942,17 @@ function applyOverride(fidx, newScore, newCats) {
     }
 
     if (newScore !== null) c.importance_score = newScore;
-    if (newCats !== null) {
-        c.categories = newCats;
-        c.category = newCats[0];
-    }
+    if (newCats !== null) { c.categories = newCats; c.category = newCats[0]; }
     c.manual_override = true;
     f.classification = c;
 
-    allFeatures.sort(function(a, b) {
-        return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
-    });
-    expandedIdx = -1;
-    updateCategoryPills();
-    renderFeatures();
-
-    var newFidx = allFeatures.indexOf(f);
-    pendingOverride = { featureId: featureId, fidx: newFidx, f: f, c: c };
-    showReasonInput(featureId, f, c);
+    expandedId = fid;
+    renderAll();
+    showReasonInput(fid, f, c);
 }
 
-function showReasonInput(featureId, f, c) {
-    var card = document.querySelector('.feature-card[data-fid="' + featureId + '"]');
+function showReasonInput(fid, f, c) {
+    var card = document.querySelector('.feature-card[data-fid="' + fid + '"]');
     if (!card) return;
     var existing = card.querySelector('.override-reason-row');
     if (existing) existing.remove();
@@ -711,8 +963,8 @@ function showReasonInput(featureId, f, c) {
         '<input type="text" class="override-reason-input" placeholder="Why this change? (optional, helps AI learn)">' +
         '<button class="btn-save-reason">Save</button>';
 
-    var metaEl = card.querySelector('.card-meta');
-    metaEl.parentElement.insertBefore(row, metaEl.nextSibling);
+    var cardBody = card.querySelector('.card-body');
+    cardBody.appendChild(row);
 
     var input = row.querySelector('.override-reason-input');
     var saveBtn = row.querySelector('.btn-save-reason');
@@ -722,14 +974,12 @@ function showReasonInput(featureId, f, c) {
         var reason = input.value.trim();
         saveBtn.textContent = 'Saving...';
         saveBtn.disabled = true;
-        pendingOverride = null;
-        var fidx = allFeatures.indexOf(f);
-        commitOverride(fidx, f, c, reason, function() {
+        commitOverride(f, c, reason, function() {
             row.remove();
             var confirm = document.createElement('div');
             confirm.className = 'override-confirm';
             confirm.textContent = '\u2713 AI will learn from this';
-            if (metaEl.parentElement) metaEl.parentElement.insertBefore(confirm, metaEl.nextSibling);
+            cardBody.appendChild(confirm);
         });
     }
 
@@ -738,9 +988,9 @@ function showReasonInput(featureId, f, c) {
     row.addEventListener('click', function(e) { e.stopPropagation(); });
 }
 
-function commitOverride(fidx, f, c, reason, onDone) {
+function commitOverride(f, c, reason, onDone) {
     var payload = {
-        feature_id: f.id || f.feature_id || '',
+        feature_id: f.id || '',
         feature_title: f.title || '',
         original_classification: {
             category: (c._original_categories || [])[0] || c.category,
@@ -767,27 +1017,30 @@ function commitOverride(fidx, f, c, reason, onDone) {
         if (data.error) { showToast('Error: ' + data.error, true); return; }
         c.recommended_channels = data.recommended_channels || c.recommended_channels;
         f.classification = c;
-
         var minImp = parseInt(document.getElementById('importance-filter').value);
-        if (c.importance_score < minImp) {
-            showToast('Feature moved out of current filter view', true);
-        } else {
-            showToast('Classification updated - AI will learn from this');
-        }
-        updateCategoryPills();
-        renderFeatures();
+        if (c.importance_score < minImp) { showToast('Feature moved out of current filter view', true); }
+        else { showToast('Classification updated \u2014 AI will learn from this'); }
+        renderAll();
         if (onDone) onDone();
     })
     .catch(function(err) { showToast('Error: ' + err.message, true); });
 }
 
-function generateContentForFeature(renderIdx, feature) {
+function generateContent(fid) {
+    var feature = null;
+    for (var i = 0; i < allFeatures.length; i++) {
+        if (allFeatures[i].id === fid) { feature = allFeatures[i]; break; }
+    }
+    if (!feature) return;
+
     var channels = (feature.classification || {}).recommended_channels || [];
     if (channels.length === 0) channels = ['twitter', 'linkedin', 'inapp'];
-    var btn = document.querySelectorAll('.btn-generate')[renderIdx];
+    var btn = document.querySelector('[data-fid="' + fid + '"].btn-generate');
+    if (!btn) return;
     var origText = btn.innerHTML;
     btn.innerHTML = 'Generating...';
     btn.disabled = true;
+
     fetch('/api/generate', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -802,28 +1055,41 @@ function generateContentForFeature(renderIdx, feature) {
     .catch(function(err) { btn.innerHTML = origText; btn.disabled = false; alert('Error: ' + err.message); });
 }
 
-function generateContent(idx) { generateContentForFeature(idx, allFeatures[idx]); }
+function escHtml(str) {
+    if (!str) return '';
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
 
-function escHtml(str) { var d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
-function escAttr(str) { return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 function showToast(msg, isWarning) {
     var t = document.getElementById('toast');
-    t.textContent = msg; t.className = 'toast visible' + (isWarning ? ' warning' : '');
-    clearTimeout(t._timer); t._timer = setTimeout(function() { t.className = 'toast'; }, 3000);
+    t.textContent = msg;
+    t.className = 'toast visible' + (isWarning ? ' warning' : '');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function() { t.className = 'toast'; }, 3000);
 }
 
 function openManualInput() { document.getElementById('manual-modal').classList.add('open'); }
 function closeManualInput() { document.getElementById('manual-modal').classList.remove('open'); }
+
 function submitManualInput() {
     var title = document.getElementById('manual-title').value.trim();
     var desc = document.getElementById('manual-desc').value.trim();
     var cat = document.getElementById('manual-category').value;
     if (!title) { alert('Please enter a title'); return; }
     var btn = document.querySelector('.modal-actions .btn-primary');
-    btn.textContent = 'Adding...'; btn.disabled = true;
-    fetch('/api/sources/manual/add', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
+    btn.textContent = 'Adding...';
+    btn.disabled = true;
+
+    fetch('/api/sources/manual/feature', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ title: title, description: desc, category: cat })
     })
     .then(function(r) { return r.json(); })

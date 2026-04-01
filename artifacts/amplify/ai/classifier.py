@@ -5,6 +5,8 @@ from ai.claude_client import generate_content
 
 logger = logging.getLogger("amplify.classifier")
 
+CLASSIFICATION_CACHE: dict = {}
+
 CLASSIFICATION_SYSTEM_PROMPT = """You are a product marketing classifier for Chartmetric, a music data analytics platform used by artists, managers, labels, publishers, and playlist curators.
 
 Given a feature or update from our development team, classify it for marketing purposes.
@@ -115,8 +117,25 @@ def _enforce_classification_rules(classification: dict):
         classification["recommended_channels"] = []
 
 
+def get_cached_classification(feature_id: str) -> dict | None:
+    return CLASSIFICATION_CACHE.get(feature_id)
+
+
+def get_all_cached_classifications() -> dict:
+    return dict(CLASSIFICATION_CACHE)
+
+
+def clear_cache():
+    CLASSIFICATION_CACHE.clear()
+
+
 def classify_feature(feature_data: dict) -> dict:
     feature_id = feature_data.get("id", "")
+
+    cached = get_cached_classification(feature_id)
+    if cached is not None:
+        return cached
+
     title = feature_data.get("title", "")
     description = feature_data.get("description", "")
     release_status = "Released" if feature_data.get("release_status") else "In Progress"
@@ -166,6 +185,8 @@ def classify_feature(feature_data: dict) -> dict:
         if "category" not in classification and classification.get("categories"):
             classification["category"] = classification["categories"][0]
         _enforce_classification_rules(classification)
+        if feature_id:
+            CLASSIFICATION_CACHE[feature_id] = classification
         return classification
     except json.JSONDecodeError:
         logger.error(f"Failed to parse classification JSON for {feature_id}: {result['content'][:200]}")

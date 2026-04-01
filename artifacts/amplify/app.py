@@ -3,6 +3,7 @@ import sys
 import signal
 import logging
 import html
+import threading
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -11,7 +12,12 @@ import config
 from sources.asana_source import AsanaSource
 from sources.slack_source import SlackSource
 from sources.manual_source import ManualSource
-from ai.classifier import classify_features_batch, classify_feature, set_manual_override, get_manual_overrides, remove_manual_override, apply_manual_overrides
+from ai.classifier import (
+    classify_features_batch, classify_feature, set_manual_override,
+    get_manual_overrides, remove_manual_override, apply_manual_overrides,
+    get_cached_classification, get_all_cached_classifications, clear_cache,
+    CLASSIFICATION_CACHE,
+)
 from ai.pre_filter import pre_filter_batch
 from ai.generator import generate_for_channel, generate_all_channels
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
@@ -34,6 +40,14 @@ SOURCE_REGISTRY = {
     "slack": SlackSource(channel_id="C014BMSCGS2"),
     "manual": ManualSource(),
 }
+
+_batch_state = {
+    "running": False,
+    "total": 0,
+    "classified": 0,
+    "in_progress": False,
+}
+_batch_lock = threading.Lock()
 
 
 @app.route("/")
@@ -356,6 +370,220 @@ def classified_features():
         "min_importance_applied": min_importance,
         "manual_overrides_applied": len(get_manual_overrides()),
     })
+
+
+@app.route("/api/features/all")
+def all_features_unclassified():
+    """Fetch all enriched features without classification (instant load).
+
+    Category: Sources
+
+    Query Params: ?limit=40&released_only=false
+
+    Response: {"features": [...], "total": N}
+    """
+    limit = request.args.get("limit", default=40, type=int)
+    released_only = request.args.get("released_only", default="false").lower() == "true"
+    try:
+        enriched = _get_enriched_features()
+    except Exception as e:
+        logger.error(f"All features endpoint - enrichment error: {e}")
+        return jsonify({"error": f"Feature enrichment failed: {e}"}), 500
+
+    if released_only:
+        enriched = [f for f in enriched if f.get("release_status")]
+    enriched = enriched[:limit]
+
+    cache = get_all_cached_classifications()
+    overrides = get_manual_overrides()
+    for f in enriched:
+        fid = f.get("id", "")
+        cl = cache.get(fid)
+        if cl is None:
+            cl = overrides.get(fid)
+        if cl is not None:
+            f["classification"] = {**cl}
+            if fid in overrides:
+                f["classification"]["manual_override"] = True
+
+    return jsonify({"features": enriched, "total": len(enriched)})
+
+
+@app.route("/api/features/<feature_id>/classify", methods=["POST"])
+def classify_single_feature(feature_id):
+    """Classify a single feature on demand, using cache if available.
+
+    Category: Sources
+
+    Response: {"classification": {...}, "cached": bool}
+    """
+    cached = get_cached_classification(feature_id)
+    if cached is not None:
+        return jsonify({"classification": cached, "cached": True})
+
+    try:
+        enriched = _get_enriched_features()
+    except Exception as e:
+        return jsonify({"error": f"Feature enrichment failed: {e}"}), 500
+
+    feature = next((f for f in enriched if f.get("id") == feature_id), None)
+    if feature is None:
+        return jsonify({"error": f"Feature {feature_id} not found"}), 404
+
+    filter_result = pre_filter_batch([feature])
+    to_classify = filter_result["to_classify"]
+    skipped = filter_result["skipped"]
+
+    if skipped:
+        cl = skipped[0]["classification"]
+        if feature_id:
+            CLASSIFICATION_CACHE[feature_id] = cl
+        return jsonify({"classification": cl, "cached": False})
+
+    try:
+        cl = classify_feature(feature)
+    except Exception as e:
+        return jsonify({"error": f"Classification failed: {e}"}), 500
+
+    overrides = get_manual_overrides()
+    if feature_id in overrides:
+        cl = {**cl, **overrides[feature_id], "manual_override": True}
+
+    return jsonify({"classification": cl, "cached": False})
+
+
+def _run_batch_classification(features: list[dict]):
+    with _batch_lock:
+        _batch_state["running"] = True
+        _batch_state["total"] = len(features)
+        _batch_state["classified"] = 0
+        _batch_state["in_progress"] = True
+
+    filter_result = pre_filter_batch(features)
+    to_classify = filter_result["to_classify"]
+    skipped = filter_result["skipped"]
+
+    for f in skipped:
+        fid = f.get("id", "")
+        if fid and fid not in CLASSIFICATION_CACHE:
+            CLASSIFICATION_CACHE[fid] = f["classification"]
+        with _batch_lock:
+            _batch_state["classified"] += 1
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _do_classify(feature):
+        cl = classify_feature(feature)
+        fid = feature.get("id", "")
+        overrides = get_manual_overrides()
+        if fid in overrides:
+            cl = {**cl, **overrides[fid], "manual_override": True}
+            CLASSIFICATION_CACHE[fid] = cl
+        with _batch_lock:
+            _batch_state["classified"] += 1
+        return fid, cl
+
+    max_workers = 3
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_do_classify, f) for f in to_classify]
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                logger.error(f"Batch classification error: {e}")
+                with _batch_lock:
+                    _batch_state["classified"] += 1
+
+    with _batch_lock:
+        _batch_state["running"] = False
+        _batch_state["in_progress"] = False
+
+
+@app.route("/api/features/classify-batch-async", methods=["POST"])
+def classify_batch_async():
+    """Start background classification of all features. Returns immediately.
+
+    Category: Sources
+
+    Response: {"status": "started"|"already_running"|"complete", "total": N, "classified": N}
+    """
+    with _batch_lock:
+        if _batch_state["in_progress"]:
+            return jsonify({
+                "status": "already_running",
+                "total": _batch_state["total"],
+                "classified": _batch_state["classified"],
+            })
+
+    try:
+        enriched = _get_enriched_features()
+    except Exception as e:
+        return jsonify({"error": f"Feature enrichment failed: {e}"}), 500
+
+    limit = request.args.get("limit", default=40, type=int)
+    released_only = request.args.get("released_only", default="false").lower() == "true"
+    if released_only:
+        enriched = [f for f in enriched if f.get("release_status")]
+    enriched = enriched[:limit]
+
+    already_cached = [f for f in enriched if f.get("id") in CLASSIFICATION_CACHE]
+    if len(already_cached) == len(enriched):
+        return jsonify({
+            "status": "complete",
+            "total": len(enriched),
+            "classified": len(enriched),
+        })
+
+    t = threading.Thread(target=_run_batch_classification, args=(enriched,), daemon=True)
+    t.start()
+
+    return jsonify({
+        "status": "started",
+        "total": len(enriched),
+        "classified": len(already_cached),
+    })
+
+
+@app.route("/api/classifications/status")
+def classifications_status():
+    """Get current classification progress status.
+
+    Category: Sources
+
+    Response: {"total": N, "classified": N, "pending": N, "in_progress": bool}
+    """
+    with _batch_lock:
+        total = _batch_state["total"]
+        classified = _batch_state["classified"]
+        in_progress = _batch_state["in_progress"]
+
+    if total == 0:
+        cache_count = len(CLASSIFICATION_CACHE)
+        return jsonify({
+            "total": cache_count,
+            "classified": cache_count,
+            "pending": 0,
+            "in_progress": False,
+        })
+
+    return jsonify({
+        "total": total,
+        "classified": classified,
+        "pending": max(0, total - classified),
+        "in_progress": in_progress,
+    })
+
+
+@app.route("/api/classifications/cache")
+def classifications_cache():
+    """Return full classification cache.
+
+    Category: Sources
+
+    Response: {"cache": {...}, "count": N}
+    """
+    cache = get_all_cached_classifications()
+    return jsonify({"cache": cache, "count": len(cache)})
 
 
 @app.route("/api/features/override", methods=["POST"])
