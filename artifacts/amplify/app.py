@@ -18,7 +18,7 @@ from ai.classifier import (
     get_cached_classification, get_all_cached_classifications, clear_cache,
     CLASSIFICATION_CACHE,
 )
-from ai.pre_filter import pre_filter_batch
+from ai.pre_filter import pre_filter_batch  # kept for backward compat, not used in main pipeline
 from ai.generator import generate_for_channel, generate_all_channels
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
@@ -214,29 +214,76 @@ def unified_list(source_type):
         return jsonify({"error": str(e)}), 500
 
 
-def _get_enriched_features():
-    asana_source = SOURCE_REGISTRY["asana"]
+_pipeline_cache = {}
+_PIPELINE_TTL = 120
+
+def _get_slack_first_features(days: int = 30, force_refresh: bool = False) -> dict:
+    import time
+    now = time.time()
+    cache_key = f"days_{days}"
+    cached = _pipeline_cache.get(cache_key)
+    if not force_refresh and cached is not None and (now - cached["timestamp"]) < _PIPELINE_TTL:
+        return {"features": cached["features"], "debug": cached["debug"]}
+
     slack_source = SOURCE_REGISTRY["slack"]
-    features = asana_source.list_recent_features()
+    asana_source = SOURCE_REGISTRY["asana"]
 
-    released_map = {}
+    logger.info(f"[pipeline] Starting Slack-first pipeline (days={days})")
+
+    slack_result = slack_source.extract_features_from_channel(days=days)
+    features = slack_result["features"]
+    debug_info = slack_result["stats"]
+    debug_info["skipped"] = slack_result["skipped"]
+    debug_info["parse_errors"] = slack_result["parse_errors"]
+    debug_info["asana_matches"] = {"url": 0, "search": 0, "none": 0}
+
+    logger.info(f"[pipeline] Extracted {len(features)} features from Slack, enriching with Asana...")
+
+    def _enrich_one(f):
+        try:
+            asana_source.enrich_feature(f)
+            return f.get("asana_match_method", "none")
+        except Exception as e:
+            logger.warning(f"Asana enrichment failed for '{f.get('title', '')[:50]}': {e}")
+            f["asana_linked"] = False
+            f["asana_match_method"] = "error"
+            return "none"
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        methods = list(pool.map(_enrich_one, features))
+    for m in methods:
+        debug_info["asana_matches"][m] = debug_info["asana_matches"].get(m, 0) + 1
+
+    announced_ids = set()
+    for f in features:
+        tid = f.get("asana_task_id")
+        if tid:
+            announced_ids.add(tid)
+
     try:
-        released_map = slack_source.get_released_task_ids()
+        unannounced = asana_source.list_unannounced_tasks(days=days, announced_task_ids=announced_ids)
+        debug_info["asana_only_count"] = len(unannounced)
+        features.extend(unannounced)
     except Exception as e:
-        logger.warning(f"Slack enrichment failed, continuing without: {e}")
+        logger.warning(f"Asana unannounced scan failed: {e}")
+        debug_info["asana_only_count"] = 0
 
-    enriched = []
-    for feature in features:
-        task_id = feature.get("id", "")
-        release_info = released_map.get(task_id, {})
-        enriched.append({
-            **feature,
-            "release_status": release_info.get("released", False),
-            "release_date": release_info.get("release_date"),
-            "total_reactions": release_info.get("total_reactions"),
-            "reactions_breakdown": release_info.get("reactions_breakdown"),
-        })
-    return enriched
+    debug_info["total_features_final"] = len(features)
+    logger.info(f"[pipeline] Pipeline complete: {len(features)} total features ({debug_info['asana_matches']})")
+
+    _pipeline_cache[cache_key] = {
+        "features": features,
+        "debug": debug_info,
+        "timestamp": now,
+    }
+
+    return {"features": features, "debug": debug_info}
+
+
+def _get_enriched_features():
+    result = _get_slack_first_features()
+    return result["features"]
 
 
 @app.route("/api/features/enriched")
@@ -374,29 +421,30 @@ def classified_features():
 
 @app.route("/api/features/all")
 def all_features_unclassified():
-    """Fetch all enriched features without classification (instant load).
+    """Fetch all features using Slack-first pipeline, with cached classifications.
 
     Category: Sources
 
-    Query Params: ?limit=40&released_only=false
+    Query Params: ?days=30&limit=100&refresh=false
 
     Response: {"features": [...], "total": N}
     """
-    limit = request.args.get("limit", default=40, type=int)
-    released_only = request.args.get("released_only", default="false").lower() == "true"
+    days = request.args.get("days", default=30, type=int)
+    limit = request.args.get("limit", default=100, type=int)
+    force_refresh = request.args.get("refresh", default="false").lower() == "true"
     try:
-        enriched = _get_enriched_features()
+        result = _get_slack_first_features(days=days, force_refresh=force_refresh)
+        features = result["features"]
     except Exception as e:
-        logger.error(f"All features endpoint - enrichment error: {e}")
-        return jsonify({"error": f"Feature enrichment failed: {e}"}), 500
+        logger.error(f"All features endpoint error: {e}")
+        return jsonify({"error": f"Feature pipeline failed: {e}"}), 500
 
-    if released_only:
-        enriched = [f for f in enriched if f.get("release_status")]
-    enriched = enriched[:limit]
+    if limit and limit < len(features):
+        features = features[:limit]
 
     cache = get_all_cached_classifications()
     overrides = get_manual_overrides()
-    for f in enriched:
+    for f in features:
         fid = f.get("id", "")
         cl = cache.get(fid)
         if cl is None:
@@ -406,7 +454,7 @@ def all_features_unclassified():
             if fid in overrides:
                 f["classification"]["manual_override"] = True
 
-    return jsonify({"features": enriched, "total": len(enriched)})
+    return jsonify({"features": features, "total": len(features)})
 
 
 @app.route("/api/features/<feature_id>/classify", methods=["POST"])
@@ -422,23 +470,13 @@ def classify_single_feature(feature_id):
         return jsonify({"classification": cached, "cached": True})
 
     try:
-        enriched = _get_enriched_features()
+        features = _get_enriched_features()
     except Exception as e:
-        return jsonify({"error": f"Feature enrichment failed: {e}"}), 500
+        return jsonify({"error": f"Feature pipeline failed: {e}"}), 500
 
-    feature = next((f for f in enriched if f.get("id") == feature_id), None)
+    feature = next((f for f in features if f.get("id") == feature_id), None)
     if feature is None:
         return jsonify({"error": f"Feature {feature_id} not found"}), 404
-
-    filter_result = pre_filter_batch([feature])
-    to_classify = filter_result["to_classify"]
-    skipped = filter_result["skipped"]
-
-    if skipped:
-        cl = skipped[0]["classification"]
-        if feature_id:
-            CLASSIFICATION_CACHE[feature_id] = cl
-        return jsonify({"classification": cl, "cached": False})
 
     try:
         cl = classify_feature(feature)
@@ -459,16 +497,17 @@ def _run_batch_classification(features: list[dict]):
         _batch_state["classified"] = 0
         _batch_state["in_progress"] = True
 
-    filter_result = pre_filter_batch(features)
-    to_classify = filter_result["to_classify"]
-    skipped = filter_result["skipped"]
-
-    for f in skipped:
+    already_cached = []
+    to_classify = []
+    for f in features:
         fid = f.get("id", "")
-        if fid and fid not in CLASSIFICATION_CACHE:
-            CLASSIFICATION_CACHE[fid] = f["classification"]
-        with _batch_lock:
-            _batch_state["classified"] += 1
+        if fid and fid in CLASSIFICATION_CACHE:
+            already_cached.append(f)
+        else:
+            to_classify.append(f)
+
+    with _batch_lock:
+        _batch_state["classified"] = len(already_cached)
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -483,7 +522,7 @@ def _run_batch_classification(features: list[dict]):
             _batch_state["classified"] += 1
         return fid, cl
 
-    max_workers = 3
+    max_workers = 2
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(_do_classify, f) for f in to_classify]
         for future in as_completed(futures):
@@ -515,31 +554,27 @@ def classify_batch_async():
                 "classified": _batch_state["classified"],
             })
 
+    days = request.args.get("days", default=30, type=int)
     try:
-        enriched = _get_enriched_features()
+        result = _get_slack_first_features(days=days)
+        features = result["features"]
     except Exception as e:
-        return jsonify({"error": f"Feature enrichment failed: {e}"}), 500
+        return jsonify({"error": f"Feature pipeline failed: {e}"}), 500
 
-    limit = request.args.get("limit", default=40, type=int)
-    released_only = request.args.get("released_only", default="false").lower() == "true"
-    if released_only:
-        enriched = [f for f in enriched if f.get("release_status")]
-    enriched = enriched[:limit]
-
-    already_cached = [f for f in enriched if f.get("id") in CLASSIFICATION_CACHE]
-    if len(already_cached) == len(enriched):
+    already_cached = [f for f in features if f.get("id") in CLASSIFICATION_CACHE]
+    if len(already_cached) == len(features):
         return jsonify({
             "status": "complete",
-            "total": len(enriched),
-            "classified": len(enriched),
+            "total": len(features),
+            "classified": len(features),
         })
 
-    t = threading.Thread(target=_run_batch_classification, args=(enriched,), daemon=True)
+    t = threading.Thread(target=_run_batch_classification, args=(features,), daemon=True)
     t.start()
 
     return jsonify({
         "status": "started",
-        "total": len(enriched),
+        "total": len(features),
         "classified": len(already_cached),
     })
 
@@ -1097,6 +1132,47 @@ def test_channels():
         for k, v in CHANNEL_CONFIGS.items()
     ]
     return jsonify({"channels": channels, "total": len(channels)})
+
+
+@app.route("/api/features/debug")
+def features_debug():
+    """Debug endpoint showing full pipeline diagnostics.
+
+    Category: System
+
+    Query Params: ?days=30&refresh=false
+
+    Response: Pipeline stats including Slack messages, extracted features, Asana matches, parse errors.
+    """
+    days = request.args.get("days", default=30, type=int)
+    force_refresh = request.args.get("refresh", default="false").lower() == "true"
+    try:
+        result = _get_slack_first_features(days=days, force_refresh=force_refresh)
+        features = result["features"]
+        debug = result["debug"]
+
+        source_breakdown = {"slack+asana": 0, "slack_only": 0, "asana_only": 0}
+        for f in features:
+            src = f.get("source", "unknown")
+            source_breakdown[src] = source_breakdown.get(src, 0) + 1
+
+        return jsonify({
+            "pipeline": "slack-first",
+            "days": days,
+            "total_slack_messages": debug.get("total_messages", 0),
+            "total_features_extracted": debug.get("total_features", 0),
+            "total_features_final": debug.get("total_features_final", 0),
+            "source_breakdown": source_breakdown,
+            "asana_matches": debug.get("asana_matches", {}),
+            "asana_only_count": debug.get("asana_only_count", 0),
+            "skipped_messages": debug.get("skipped_messages", 0),
+            "parse_errors_count": debug.get("parse_errors", 0) if isinstance(debug.get("parse_errors"), int) else len(debug.get("parse_errors", [])),
+            "skipped_details": debug.get("skipped", [])[:20],
+            "parse_error_details": (debug.get("parse_errors", []) if isinstance(debug.get("parse_errors"), list) else [])[:20],
+        })
+    except Exception as e:
+        logger.error(f"Debug endpoint error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/debug/slack-links")

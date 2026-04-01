@@ -166,6 +166,19 @@
         .cat-default { background: rgba(107,114,128,0.15); color: #8899aa; }
         .cat-unclassified { background: rgba(75,85,99,0.12); color: #6b7280; font-style: italic; }
         .pre-filter-badge { font-size: 10px; padding: 2px 8px; border-radius: 99px; background: rgba(107,114,128,0.15); color: #6b7280; }
+        .source-pill {
+            font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
+            text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap;
+        }
+        .source-slack-asana { background: rgba(0,201,167,0.12); color: #00C9A7; }
+        .source-slack-only { background: rgba(234,179,8,0.12); color: #eab308; }
+        .source-asana-only { background: rgba(249,115,22,0.12); color: #f97316; }
+        .version-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(88,166,255,0.1); color: #58a6ff; font-family: 'SF Mono', 'Fira Code', monospace; white-space: nowrap; }
+        .prefix-label { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(139,148,158,0.1); color: #8b949e; font-weight: 600; }
+        .link-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+        .link-row a { font-size: 12px; color: #58a6ff; text-decoration: none; display: flex; align-items: center; gap: 4px; }
+        .link-row a:hover { text-decoration: underline; }
+        .no-asana-note { font-size: 11px; color: #6b7280; font-style: italic; margin-top: 6px; }
         .cat-popover {
             position: absolute; top: 100%; left: 0; margin-top: 6px;
             background: #1a2733; border: 1px solid #2a3a4a; border-radius: 10px;
@@ -596,21 +609,25 @@ function getFilteredFeatures() {
     var catFilter = categoryFilter;
     var classified = [];
     var unclassified = [];
+    var asanaOnly = [];
 
     for (var i = 0; i < allFeatures.length; i++) {
         var f = allFeatures[i];
         var cl = f.classification;
+        var isAsanaOnly = f.source === 'asana_only';
 
         if (!cl) {
             if (classifiedOnly) continue;
             if (catFilter !== 'all' && catFilter !== 'unclassified') continue;
-            unclassified.push(f);
+            if (isAsanaOnly) { asanaOnly.push(f); }
+            else { unclassified.push(f); }
         } else {
             var score = cl.importance_score || 0;
             if (catFilter === 'unclassified') continue;
             if (catFilter !== 'all' && !featureMatchesCategory(f, catFilter)) continue;
             if (score < minImp) continue;
-            classified.push(f);
+            if (isAsanaOnly) { asanaOnly.push(f); }
+            else { classified.push(f); }
         }
     }
 
@@ -618,8 +635,9 @@ function getFilteredFeatures() {
         return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
     });
     unclassified.sort(function(a, b) { return (a.title || '').localeCompare(b.title || ''); });
+    asanaOnly.sort(function(a, b) { return (a.title || '').localeCompare(b.title || ''); });
 
-    return { classified: classified, unclassified: unclassified };
+    return { classified: classified, unclassified: unclassified, asanaOnly: asanaOnly };
 }
 
 function renderAll() {
@@ -632,11 +650,12 @@ function renderAll() {
     var result = getFilteredFeatures();
     var classified = result.classified;
     var unclassified = result.unclassified;
+    var asanaOnly = result.asanaOnly;
     var prevExpanded = expandedId;
 
     list.innerHTML = '';
 
-    if (classified.length === 0 && unclassified.length === 0) {
+    if (classified.length === 0 && unclassified.length === 0 && asanaOnly.length === 0) {
         list.innerHTML = '<div class="empty-state" style="display:block;"><h3>No features match current filters</h3><p>Try adjusting the category or importance filter.</p></div>';
         return;
     }
@@ -657,6 +676,19 @@ function renderAll() {
             var ucard = buildCard(unclassified[j], true);
             if (unclassified[j].id === prevExpanded) ucard.classList.add('expanded');
             list.appendChild(ucard);
+        }
+    }
+
+    if (asanaOnly.length > 0) {
+        var aoDivider = document.createElement('div');
+        aoDivider.className = 'section-divider';
+        aoDivider.innerHTML = '<span class="section-divider-label">Not Yet Announced (' + asanaOnly.length + ')</span><div class="section-divider-line"></div>';
+        list.appendChild(aoDivider);
+
+        for (var k = 0; k < asanaOnly.length; k++) {
+            var aoCard = buildCard(asanaOnly[k], !asanaOnly[k].classification);
+            if (asanaOnly[k].id === prevExpanded) aoCard.classList.add('expanded');
+            list.appendChild(aoCard);
         }
     }
 
@@ -696,6 +728,26 @@ function buildCard(f, isUnclassified) {
         }).join('');
     }
 
+    var sourcePillHtml = '';
+    var src = f.source || '';
+    if (src === 'slack+asana') {
+        sourcePillHtml = '<span class="source-pill source-slack-asana">Slack + Asana</span>';
+    } else if (src === 'slack_only') {
+        sourcePillHtml = '<span class="source-pill source-slack-only">Slack only</span>';
+    } else if (src === 'asana_only') {
+        sourcePillHtml = '<span class="source-pill source-asana-only">Asana only</span>';
+    }
+
+    var versionHtml = '';
+    var rv = f.release_version || {};
+    if (rv.fe) versionHtml += '<span class="version-badge">FE ' + escHtml(rv.fe) + '</span>';
+    if (rv.be) versionHtml += '<span class="version-badge">BE ' + escHtml(rv.be) + '</span>';
+
+    var prefixHtml = '';
+    if (f.source_prefix) {
+        prefixHtml = '<span class="prefix-label">' + escHtml(f.source_prefix) + '</span>';
+    }
+
     var summaryHtml;
     if (isUnclassified) {
         summaryHtml = '<div class="card-summary awaiting">Awaiting AI classification\u2026</div>';
@@ -728,7 +780,9 @@ function buildCard(f, isUnclassified) {
                 '</div>' +
                 '<div class="card-meta">' +
                     catBadgesHtml +
-                    ((!isUnclassified && preFiltered) ? '<span class="pre-filter-badge">pre-filtered</span>' : '') +
+                    sourcePillHtml +
+                    prefixHtml +
+                    versionHtml +
                 '</div>' +
                 summaryHtml +
                 '<div class="card-bottom-row">' +
@@ -845,18 +899,42 @@ function buildDescBlock(f) {
 
 function buildMetaPills(f) {
     var pills = [];
-    var rs = f.release_status;
-    if (rs) {
-        if (rs === 'released' || rs === 'completed') pills.push('<span class="meta-pill released">Released &#10003;</span>');
-        else pills.push('<span class="meta-pill in-progress">In Progress</span>');
+    if (f.released) {
+        pills.push('<span class="meta-pill released">Released &#10003;</span>');
+    } else if (f.source === 'asana_only') {
+        pills.push('<span class="meta-pill in-progress">Not yet announced</span>');
     }
     if (f.release_date) pills.push('<span class="meta-pill">' + escHtml(f.release_date) + '</span>');
-    if ((f.total_reactions || 0) > 0) pills.push('<span class="meta-pill">&#128640; ' + f.total_reactions + ' reactions</span>');
+    if ((f.total_reactions || 0) > 0) {
+        var rxSummary = '';
+        var bd = f.reactions_breakdown || {};
+        if (typeof bd === 'object' && !Array.isArray(bd)) {
+            var rxParts = [];
+            for (var emoji in bd) { rxParts.push(':' + emoji + ': ' + bd[emoji]); }
+            rxSummary = rxParts.join(' ');
+        }
+        pills.push('<span class="meta-pill">&#128640; ' + f.total_reactions + ' reactions' + (rxSummary ? ' (' + escHtml(rxSummary) + ')' : '') + '</span>');
+    }
     if (f.engineer) pills.push('<span class="meta-pill">Eng: ' + escHtml(f.engineer) + '</span>');
     if (f.assignee) pills.push('<span class="meta-pill">Assignee: ' + escHtml(f.assignee) + '</span>');
+    if (f.team) pills.push('<span class="meta-pill">Team: ' + escHtml(f.team) + '</span>');
     if (f.urgency_score) pills.push('<span class="meta-pill">Urgency: ' + f.urgency_score + '</span>');
-    if (pills.length === 0) return '';
-    return '<div class="meta-pills">' + pills.join('') + '</div>';
+
+    var links = [];
+    if (f.slack_url) links.push('<a href="' + escAttr(f.slack_url) + '" target="_blank" rel="noopener">&#128172; Slack</a>');
+    if (f.asana_url) links.push('<a href="' + escAttr(f.asana_url) + '" target="_blank" rel="noopener">&#128203; Asana</a>');
+    if (f.github_url) links.push('<a href="' + escAttr(f.github_url) + '" target="_blank" rel="noopener">&#128187; GitHub</a>');
+    var linksHtml = links.length > 0 ? '<div class="link-row">' + links.join('') + '</div>' : '';
+
+    var noAsanaNote = '';
+    if (f.asana_linked === false && f.source !== 'asana_only') {
+        noAsanaNote = '<div class="no-asana-note">No Asana task linked</div>';
+    }
+
+    var html = '';
+    if (pills.length > 0) html += '<div class="meta-pills">' + pills.join('') + '</div>';
+    html += linksHtml + noAsanaNote;
+    return html;
 }
 
 function showScorePopover(fid, badgeEl) {

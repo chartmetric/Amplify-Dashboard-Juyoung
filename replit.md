@@ -72,13 +72,17 @@ Product marketing autopilot that ingests feature data from multiple sources and 
   - `POST /api/sources/manual/feature` — create manual FeatureContext from JSON
   - `GET /api/features/<source_type>` — unified list endpoint
   - `GET /api/features/<source_type>/<feature_id>` — unified detail endpoint
-- **Architecture**:
-  - `sources/base.py` — FeatureContext(title, description, raw_details, source_type, metadata) with to_prompt_block() and to_dict(); SourceAdapter ABC with list_recent_features() and get_feature_context()
-  - `sources/asana_source.py` — AsanaSource using asana v5 SDK (Configuration + ApiClient pattern)
-  - `sources/slack_source.py` — SlackSource using slack_sdk WebClient
+- **Architecture (Slack-first pipeline)**:
+  - `sources/base.py` — FeatureContext dataclass + SourceAdapter ABC
+  - `sources/slack_source.py` — SlackSource: extracts features from #product-updates release messages as bullets with stable IDs (slack-{ts}-{idx}), parses Slack link format `<URL|text>`, extracts prefixes (PE/Devin/FE/BE), release versions, reactions, thread URLs
+  - `sources/asana_source.py` — AsanaSource: enrichment-only via `enrich_feature()` (3-tier: URL match → title search → no match); `list_unannounced_tasks()` for Asana-only features; workspace GID=1198197264916217
   - `sources/manual_source.py` — ManualSource (stateless, returns FeatureContext from kwargs)
-  - `ai/generator.py` — empty placeholder for future content generation
-- **Placeholders**: "YOUR_PROJECT_GID_HERE" (Asana), "YOUR_CHANNEL_ID_HERE" (Slack)
+  - `ai/generator.py` — Content generation across 7 channels (twitter, email_newsletter, email_standalone, inapp, linkedin, notion_monthly, article_hmc)
+  - `ai/classifier.py` — Claude-powered feature classification with multi-category support
+  - `ai/classification_overrides.py` — In-memory override store + learning context
+- **Pipeline**: `_get_slack_first_features(days)` → Slack extraction → parallel Asana enrichment (ThreadPoolExecutor, 5 workers) → unannounced task scan → 120s TTL cache
+- **Feature IDs**: `slack-{ts}-{bullet_idx}` for Slack features; Asana GID for asana-only
+- **Feature sources**: `slack+asana` (teal), `slack_only` (yellow), `asana_only` (orange)
 - **Run**: `python app.py` (from artifacts/amplify directory)
 - **Classification overrides**: Inline editing on dashboard cards
   - Score badge: clickable, shows popover with 1-5 options
