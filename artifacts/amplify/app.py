@@ -347,13 +347,214 @@ def classify_features_endpoint():
     return jsonify({"classified_features": classified})
 
 
+@app.route("/api/features/all")
+def all_features_endpoint():
+    """Return all Asana features, optionally skipping pre-filter.
+
+    Category: Sources
+
+    Query Params:
+      ?pre_filter=false  — skip all pre-filtering and return every Asana task as an unclassified card
+      ?pre_filter=true   — (default) apply pre-filter and classify normally
+
+    Response:
+    {
+        "features": [...],
+        "total": 356,
+        "pre_filter_applied": true,
+        "pre_filter_skipped_count": 280,
+        "sent_to_claude_count": 29
+    }
+    """
+    use_pre_filter = request.args.get("pre_filter", default="true").lower() != "false"
+
+    try:
+        enriched = _get_enriched_features()
+    except Exception as e:
+        logger.error(f"all_features endpoint - enrichment error: {e}")
+        return jsonify({"error": f"Feature enrichment failed: {e}"}), 500
+
+    total_from_asana = len(enriched)
+    logger.info(f"[all_features] Step 1 – Asana fetch: {total_from_asana} total features")
+
+    if not use_pre_filter:
+        logger.info(f"[all_features] pre_filter=false – returning all {total_from_asana} features unclassified")
+        features_out = []
+        for f in enriched:
+            features_out.append({
+                **f,
+                "classification": {
+                    "importance_score": 0,
+                    "importance_score_reason": "Not classified (pre-filter bypassed)",
+                    "category": "unknown",
+                    "categories": ["unknown"],
+                    "recommended_channels": [],
+                    "marketing_summary": "",
+                    "target_audience": [],
+                    "unclassified": True,
+                },
+            })
+        return jsonify({
+            "features": features_out,
+            "total": total_from_asana,
+            "pre_filter_applied": False,
+            "pre_filter_skipped_count": 0,
+            "sent_to_claude_count": 0,
+        })
+
+    logger.info(f"[all_features] Step 2 – pre-filter: evaluating {total_from_asana} features")
+    filter_result = pre_filter_batch(enriched)
+    to_classify = filter_result["to_classify"]
+    skipped = filter_result["skipped"]
+    logger.info(f"[all_features] Step 2 result: {len(to_classify)} to classify, {len(skipped)} skipped by pre-filter")
+
+    classified = []
+    if to_classify:
+        logger.info(f"[all_features] Step 3 – Claude classification: sending {len(to_classify)} features")
+        try:
+            classified = classify_features_batch(to_classify)
+            logger.info(f"[all_features] Step 3 result: {len(classified)} classified")
+        except Exception as e:
+            logger.error(f"all_features endpoint - classification error: {e}")
+            return jsonify({"error": f"Classification failed: {e}"}), 500
+
+    all_out = classified + skipped
+    all_out = apply_manual_overrides(all_out)
+    all_out.sort(key=lambda f: f.get("classification", {}).get("importance_score", 0), reverse=True)
+    logger.info(f"[all_features] Final: {len(all_out)} features returned")
+
+    return jsonify({
+        "features": all_out,
+        "total": total_from_asana,
+        "pre_filter_applied": True,
+        "pre_filter_skipped_count": len(skipped),
+        "sent_to_claude_count": len(to_classify),
+    })
+
+
+@app.route("/api/features/debug")
+def features_debug():
+    """Return a complete filter funnel breakdown without side effects.
+
+    Category: Sources
+
+    Response:
+    {
+        "total_from_asana": 356,
+        "pre_filter_rules": [...],
+        "pre_filter_skipped_count": 280,
+        "pre_filter_excluded": [{"id": ..., "title": ..., "reason": ...}],
+        "sent_to_claude_count": 29,
+        "classified_count": 29,
+        "showing_count": 8,
+        "filter_settings": {...}
+    }
+    """
+    limit = request.args.get("limit", default=40, type=int)
+    min_importance = request.args.get("min_importance", default=3, type=int)
+
+    try:
+        enriched = _get_enriched_features()
+    except Exception as e:
+        logger.error(f"debug endpoint - enrichment error: {e}")
+        return jsonify({"error": f"Feature enrichment failed: {e}"}), 500
+
+    total_from_asana = len(enriched)
+    logger.info(f"[debug] Step 1 – Asana fetch: {total_from_asana} features")
+
+    enriched_limited = enriched[:limit]
+    logger.info(f"[debug] Step 2 – limit applied: {len(enriched_limited)} (limit={limit})")
+
+    from ai.pre_filter import pre_filter_feature
+    filter_result = pre_filter_batch(enriched_limited)
+    to_classify = filter_result["to_classify"]
+    skipped = filter_result["skipped"]
+
+    pre_filter_excluded = []
+    for f in skipped:
+        c = f.get("classification", {})
+        pre_filter_excluded.append({
+            "id": f.get("id", ""),
+            "title": f.get("title", ""),
+            "reason": c.get("importance_score_reason", ""),
+            "score": c.get("importance_score", 0),
+        })
+
+    logger.info(f"[debug] Step 3 – pre-filter: {len(to_classify)} to classify, {len(skipped)} excluded")
+
+    classified = []
+    if to_classify:
+        try:
+            classified = classify_features_batch(to_classify)
+            logger.info(f"[debug] Step 4 – classified: {len(classified)} returned from Claude")
+        except Exception as e:
+            logger.error(f"debug endpoint - classification error: {e}")
+            return jsonify({"error": f"Classification failed: {e}"}), 500
+
+    all_features_combined = classified + skipped
+    all_features_combined = apply_manual_overrides(all_features_combined)
+    all_features_combined.sort(key=lambda f: f.get("classification", {}).get("importance_score", 0), reverse=True)
+
+    classified_count = len(all_features_combined)
+    showing = [
+        f for f in all_features_combined
+        if f.get("classification", {}).get("importance_score", 0) >= min_importance
+    ]
+    showing_count = len(showing)
+    logger.info(f"[debug] Step 5 – importance filter (min={min_importance}): {showing_count} showing")
+
+    pre_filter_rules = [
+        {
+            "name": "low_value_keywords",
+            "description": "Matches keywords like: fix, bug, hotfix, typo, lint, refactor, ci/cd, pipeline, dependency, upgrade package, revert",
+            "action": "skip classification (score=1)",
+        },
+        {
+            "name": "internal_keywords",
+            "description": "Matches keywords like: be only, backend only, internal only, devops, cleanup, rename, minor, tweak",
+            "action": "skip classification (score=2)",
+        },
+        {
+            "name": "high_value_keywords_or_reactions",
+            "description": "Matches: new feature, new tool, major, v2 — or has 10+ reactions",
+            "action": "always classify (score=5)",
+        },
+        {
+            "name": "notable_keywords_or_reactions",
+            "description": "Matches: new, launch, release, redesign, overhaul — or has 5+ reactions",
+            "action": "classify (score=4)",
+        },
+        {
+            "name": "default",
+            "description": "All other features with no strong signal",
+            "action": "classify (score=3)",
+        },
+    ]
+
+    return jsonify({
+        "total_from_asana": total_from_asana,
+        "pre_filter_rules": pre_filter_rules,
+        "limit_applied": limit,
+        "after_limit_count": len(enriched_limited),
+        "pre_filter_skipped_count": len(skipped),
+        "pre_filter_excluded": pre_filter_excluded,
+        "sent_to_claude_count": len(to_classify),
+        "classified_count": classified_count,
+        "showing_count": showing_count,
+        "filter_settings": {
+            "limit": limit,
+            "min_importance": min_importance,
+        },
+    })
+
+
 @app.route("/api/features/classified")
 def classified_features():
     """Fetch and auto-classify all enriched features, sorted by importance.
 
     Category: Sources
 
-    Query Params: ?limit=20&min_importance=N&released_only=true
+    Query Params: ?limit=20&min_importance=N&released_only=true&pre_filter=false
 
     Response:
     {
@@ -365,6 +566,7 @@ def classified_features():
     """
     limit = request.args.get("limit", default=20, type=int)
     released_only = request.args.get("released_only", default="false").lower() == "true"
+    use_pre_filter = request.args.get("pre_filter", default="true").lower() != "false"
 
     try:
         enriched = _get_enriched_features()
@@ -373,22 +575,34 @@ def classified_features():
         return jsonify({"error": f"Feature enrichment failed: {e}"}), 500
 
     total_enriched = len(enriched)
+    logger.info(f"[classified] Step 1 – Asana fetch: {total_enriched} total features")
 
     if released_only:
+        before = len(enriched)
         enriched = [f for f in enriched if f.get("release_status")]
+        logger.info(f"[classified] Step 2 – released_only filter: {before} → {len(enriched)} (excluded {before - len(enriched)})")
 
+    before_limit = len(enriched)
     enriched = enriched[:limit]
+    logger.info(f"[classified] Step 3 – limit={limit}: {before_limit} → {len(enriched)}")
 
-    print(f"[classified] Pre-filtering {len(enriched)} features...", flush=True)
-    filter_result = pre_filter_batch(enriched)
-    to_classify = filter_result["to_classify"]
-    skipped = filter_result["skipped"]
-    print(f"[classified] {len(to_classify)} need Claude classification, {len(skipped)} pre-filtered out", flush=True)
+    if use_pre_filter:
+        logger.info(f"[classified] Step 4 – pre-filter: evaluating {len(enriched)} features")
+        filter_result = pre_filter_batch(enriched)
+        to_classify = filter_result["to_classify"]
+        skipped = filter_result["skipped"]
+        logger.info(f"[classified] Step 4 result: {len(to_classify)} to classify, {len(skipped)} skipped (condition: skip_classification=True)")
+    else:
+        logger.info(f"[classified] Step 4 – pre-filter BYPASSED (pre_filter=false), sending all {len(enriched)} to classify")
+        to_classify = enriched
+        skipped = []
 
     classified = []
     if to_classify:
+        logger.info(f"[classified] Step 5 – Claude classification: sending {len(to_classify)} features")
         try:
             classified = classify_features_batch(to_classify)
+            logger.info(f"[classified] Step 5 result: {len(classified)} classified")
         except Exception as e:
             logger.error(f"Classified endpoint - classification error: {e}")
             return jsonify({"error": f"Classification failed: {e}"}), 500
@@ -400,10 +614,14 @@ def classified_features():
     total = len(all_features)
     min_importance = request.args.get("min_importance", type=int)
     if min_importance is not None:
+        before_imp = len(all_features)
         all_features = [
             f for f in all_features
             if f.get("classification", {}).get("importance_score", 0) >= min_importance
         ]
+        logger.info(f"[classified] Step 6 – min_importance={min_importance}: {before_imp} → {len(all_features)} (excluded {before_imp - len(all_features)})")
+
+    logger.info(f"[classified] Final: showing {len(all_features)} of {total_enriched} total features")
 
     return jsonify({
         "classified_features": all_features,
@@ -414,6 +632,7 @@ def classified_features():
         "sent_to_claude": len(to_classify),
         "limit_applied": limit,
         "released_only": released_only,
+        "pre_filter_applied": use_pre_filter,
         "min_importance_applied": min_importance,
         "manual_overrides_applied": len(get_manual_overrides()),
     })

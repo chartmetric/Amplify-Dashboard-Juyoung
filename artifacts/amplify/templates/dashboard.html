@@ -93,6 +93,42 @@
         .progress-bar-wrap.fading { opacity: 0; transition: opacity 0.6s ease; }
         .stats-row { display: flex; gap: 8px; margin-bottom: 20px; font-size: 12px; color: #8899aa; flex-wrap: wrap; }
         .stats-row span { background: #1a2733; padding: 4px 10px; border-radius: 6px; border: 1px solid #2a3a4a; }
+        .funnel-bar { display: flex; align-items: center; gap: 0; margin-bottom: 20px; flex-wrap: wrap; }
+        .funnel-step {
+            display: flex; align-items: center; position: relative;
+        }
+        .funnel-btn {
+            background: #1a2733; border: 1px solid #2a3a4a; border-radius: 8px;
+            padding: 6px 14px; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            text-decoration: none; color: inherit; font-family: inherit;
+        }
+        .funnel-btn:hover { border-color: #00C9A7; background: rgba(0,201,167,0.05); }
+        .funnel-btn.active { border-color: #00C9A7; background: rgba(0,201,167,0.1); }
+        .funnel-count { font-size: 16px; font-weight: 700; color: #ffffff; line-height: 1; }
+        .funnel-label { font-size: 10px; color: #8899aa; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        .funnel-arrow { font-size: 14px; color: #3a4a5a; padding: 0 6px; flex-shrink: 0; }
+        .funnel-tooltip {
+            position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+            background: #0f1923; border: 1px solid #2a3a4a; color: #c0c0c0;
+            font-size: 11px; padding: 6px 10px; border-radius: 8px; white-space: nowrap;
+            pointer-events: none; z-index: 60; opacity: 0; transition: opacity 0.15s;
+            max-width: 260px; white-space: normal; text-align: center; line-height: 1.4;
+        }
+        .funnel-step:hover .funnel-tooltip { opacity: 1; }
+        .load-all-banner {
+            background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3);
+            border-radius: 10px; padding: 12px 18px; margin-bottom: 16px;
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+        }
+        .load-all-banner-icon { font-size: 18px; flex-shrink: 0; }
+        .load-all-banner-text { font-size: 13px; color: #eab308; flex: 1; line-height: 1.4; }
+        .btn-load-all {
+            background: transparent; color: #00C9A7; border: 1px solid #00C9A7;
+            padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+            cursor: pointer; white-space: nowrap; transition: background 0.2s;
+        }
+        .btn-load-all:hover { background: rgba(0,201,167,0.1); }
         .feature-list { display: flex; flex-direction: column; gap: 12px; }
         .section-divider { margin: 20px 0 12px; display: flex; align-items: center; gap: 12px; }
         .section-divider-label {
@@ -313,6 +349,7 @@
             <span class="section-title">Features</span>
             <div class="controls-row">
                 <div class="filter-row">
+                    <button class="btn-outline" id="btn-load-all" onclick="loadAllAsanaTasks()" style="font-size:12px;padding:6px 14px;">Load All Asana Tasks</button>
                     <span class="filter-label">Min importance</span>
                     <select id="importance-filter" onchange="applyFilters()">
                         <option value="5">5 only</option>
@@ -328,6 +365,12 @@
                     Show classified only
                 </label>
             </div>
+        </div>
+
+        <div class="funnel-bar" id="funnel-bar" style="display:none;"></div>
+        <div id="load-all-banner" style="display:none;" class="load-all-banner">
+            <span class="load-all-banner-icon">&#9888;</span>
+            <span class="load-all-banner-text">Showing all Asana tasks &mdash; only classified features can generate content. Use "Classify" on individual cards or wait for background classification.</span>
         </div>
 
         <div class="category-filter-row" id="category-filter-row">
@@ -407,6 +450,9 @@ var activePopover = null;
 var ALL_CATS = ['new_feature','improvement','bug_fix','infrastructure','mobile','deprecation'];
 var CAT_LABELS = {new_feature:'New Feature',improvement:'Improvement',bug_fix:'Bug Fix',infrastructure:'Infrastructure',mobile:'Mobile',deprecation:'Deprecation'};
 var CAT_COLORS = {new_feature:'#00C9A7',improvement:'#3b82f6',bug_fix:'#ef4444',infrastructure:'#6b7280',mobile:'#a855f7',deprecation:'#f97316'};
+var SCORE_COLORS = {5:'#00C9A7',4:'#3b82f6',3:'#eab308',2:'#f97316',1:'#6b7280',0:'#4b5563'};
+var currentFunnelData = null;
+var isAllTasksMode = false;
 
 function getCategories(f) {
     var c = f.classification || {};
@@ -447,16 +493,201 @@ function checkHealth() {
     });
 }
 
+function renderFunnelBar(data, activeStep) {
+    var bar = document.getElementById('funnel-bar');
+    if (!data) { bar.style.display = 'none'; return; }
+    var totalAsana = data.total_enriched || data.total_from_asana || 0;
+    var sentToClaude = data.sent_to_claude || data.sent_to_claude_count || 0;
+    var classifiedCount = data.classified_count || 0;
+    var showingCount = data.filtered || data.showing_count || 0;
+
+    var steps = [
+        {
+            id: 'total',
+            count: totalAsana,
+            label: 'Total from Asana',
+            tooltip: 'All tasks fetched from the Asana project. Click to load every task unclassified.',
+            clickable: true,
+        },
+        {
+            id: 'claude',
+            count: sentToClaude,
+            label: 'Sent to Claude',
+            tooltip: 'Tasks that passed the pre-filter and were sent to Claude for AI classification. Pre-filter excludes tasks matching bug/fix/refactor/internal keywords or with no keyword signal.',
+            clickable: true,
+        },
+        {
+            id: 'classified',
+            count: classifiedCount,
+            label: 'Classified',
+            tooltip: 'Tasks that received a classification from Claude, including pre-filtered tasks with assigned scores. Click to reset category filter to All.',
+            clickable: true,
+        },
+        {
+            id: 'showing',
+            count: showingCount,
+            label: 'Showing',
+            tooltip: 'Features passing the current importance filter and category selection. This is the current view.',
+            clickable: false,
+        },
+    ];
+
+    bar.innerHTML = '';
+    steps.forEach(function(step, i) {
+        var stepEl = document.createElement('div');
+        stepEl.className = 'funnel-step';
+
+        var btn = document.createElement('button');
+        btn.className = 'funnel-btn' + (step.id === activeStep ? ' active' : '');
+        btn.disabled = !step.clickable;
+        btn.style.cursor = step.clickable ? 'pointer' : 'default';
+        btn.innerHTML =
+            '<span class="funnel-count">' + step.count + '</span>' +
+            '<span class="funnel-label">' + step.label + '</span>';
+
+        if (step.clickable) {
+            btn.addEventListener('click', function() { onFunnelClick(step.id); });
+        }
+
+        var tooltip = document.createElement('div');
+        tooltip.className = 'funnel-tooltip';
+        tooltip.textContent = step.tooltip;
+
+        stepEl.appendChild(btn);
+        stepEl.appendChild(tooltip);
+        bar.appendChild(stepEl);
+
+        if (i < steps.length - 1) {
+            var arrow = document.createElement('span');
+            arrow.className = 'funnel-arrow';
+            arrow.textContent = '\u2192';
+            bar.appendChild(arrow);
+        }
+    });
+    bar.style.display = 'flex';
+}
+
+function onFunnelClick(stepId) {
+    if (stepId === 'total') {
+        loadAllAsanaTasks();
+    } else if (stepId === 'claude') {
+        loadFeaturesSentToClaude();
+    } else if (stepId === 'classified') {
+        setCategoryFilter('all', document.querySelector('.cat-filter-pill[data-cat="all"]'));
+        if (currentFunnelData) renderFunnelBar(currentFunnelData, 'classified');
+    }
+}
+
+function loadAllAsanaTasks() {
+    var list = document.getElementById('feature-list');
+    var loading = document.getElementById('loading');
+    var empty = document.getElementById('empty-state');
+    var errEl = document.getElementById('error-state');
+    isAllTasksMode = true;
+    list.innerHTML = '';
+    empty.style.display = 'none';
+    errEl.style.display = 'none';
+    document.getElementById('category-filter-row').style.display = 'none';
+    document.getElementById('load-all-banner').style.display = 'flex';
+    loading.style.display = 'flex';
+    document.getElementById('loading').querySelector('.loading-text').textContent = 'Fetching all Asana tasks...';
+    expandedId = null;
+    categoryFilter = 'all';
+    if (currentRequest) { currentRequest.abort(); }
+    var controller = new AbortController();
+    currentRequest = controller;
+    fetch('/api/features/all?pre_filter=false', { signal: controller.signal })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            currentRequest = null;
+            loading.style.display = 'none';
+            document.getElementById('loading').querySelector('.loading-text').textContent = 'Classifying features with AI...';
+            if (data.error) throw new Error(data.error);
+            allFeatures = data.features || [];
+            var funnelData = {
+                total_enriched: data.total || 0,
+                sent_to_claude: 0,
+                classified_count: 0,
+                filtered: allFeatures.length,
+            };
+            currentFunnelData = funnelData;
+            renderFunnelBar(funnelData, 'total');
+            if (allFeatures.length === 0) {
+                empty.innerHTML = '<h3>No tasks found</h3><p>No features returned from Asana.</p>';
+                empty.style.display = 'block';
+                return;
+            }
+            renderAll();
+        })
+        .catch(function(err) {
+            currentRequest = null;
+            loading.style.display = 'none';
+            document.getElementById('loading').querySelector('.loading-text').textContent = 'Classifying features with AI...';
+            isAllTasksMode = false;
+            document.getElementById('load-all-banner').style.display = 'none';
+            if (err.name === 'AbortError') return;
+            errEl.innerHTML = '<h3>Failed to load all tasks</h3><p>' + err.message + '</p>';
+            errEl.style.display = 'block';
+        });
+}
+
+function loadFeaturesSentToClaude() {
+    var minImp = document.getElementById('importance-filter').value;
+    var list = document.getElementById('feature-list');
+    var loading = document.getElementById('loading');
+    var empty = document.getElementById('empty-state');
+    var errEl = document.getElementById('error-state');
+    isAllTasksMode = false;
+    list.innerHTML = '';
+    empty.style.display = 'none';
+    errEl.style.display = 'none';
+    document.getElementById('load-all-banner').style.display = 'none';
+    loading.style.display = 'flex';
+    expandedId = null;
+    categoryFilter = 'all';
+    if (currentRequest) { currentRequest.abort(); }
+    var controller = new AbortController();
+    currentRequest = controller;
+    fetch('/api/features/classified?limit=40&min_importance=1', { signal: controller.signal })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            currentRequest = null;
+            loading.style.display = 'none';
+            if (data.error) throw new Error(data.error);
+            allFeatures = (data.classified_features || []).filter(function(f) {
+                return !(f.classification || {}).pre_filtered;
+            });
+            currentFunnelData = data;
+            renderFunnelBar(data, 'claude');
+            if (allFeatures.length === 0) {
+                empty.innerHTML = '<h3>No features sent to Claude</h3><p>All features were filtered before reaching Claude.</p>';
+                empty.style.display = 'block';
+                return;
+            }
+            document.getElementById('category-filter-row').style.display = 'flex';
+            renderAll();
+        })
+        .catch(function(err) {
+            currentRequest = null;
+            loading.style.display = 'none';
+            if (err.name === 'AbortError') return;
+            errEl.innerHTML = '<h3>Failed to load features</h3><p>' + err.message + '</p>';
+            errEl.style.display = 'block';
+        });
+}
+
 function loadFeatures() {
     var list = document.getElementById('feature-list');
     var loading = document.getElementById('loading');
     var empty = document.getElementById('empty-state');
     var errEl = document.getElementById('error-state');
-    var stats = document.getElementById('stats-row');
+    isAllTasksMode = false;
     list.innerHTML = '';
     empty.style.display = 'none';
     errEl.style.display = 'none';
     stats.style.display = 'none';
+    document.getElementById('funnel-bar').style.display = 'none';
+    document.getElementById('load-all-banner').style.display = 'none';
     loading.style.display = 'flex';
     expandedId = null;
     allFeatures = [];
@@ -469,13 +700,14 @@ function loadFeatures() {
             loading.style.display = 'none';
             if (data.error) throw new Error(data.error);
 
-            allFeatures = data.features || [];
-
+            allFeatures = data.features || data.classified_features || [];
+            currentFunnelData = data;
             stats.innerHTML =
                 '<span>Total: ' + allFeatures.length + '</span>' +
                 '<span id="stat-classified">Classified: ' + countClassified() + '</span>' +
                 '<span id="stat-unclassified">Unclassified: ' + (allFeatures.length - countClassified()) + '</span>';
             stats.style.display = 'flex';
+            renderFunnelBar(data, 'showing');
             if (allFeatures.length === 0) {
                 empty.innerHTML = '<h3>No features found</h3><p>Try refreshing or check your data sources.</p>';
                 empty.style.display = 'block';
@@ -596,9 +828,18 @@ function setCategoryFilter(cat, btn) {
     for (var i = 0; i < pills.length; i++) {
         pills[i].classList.remove('active', 'active-unclassified');
     }
-    if (cat === 'unclassified') { btn.classList.add('active-unclassified'); }
-    else { btn.classList.add('active'); }
+    if (btn) {
+        if (cat === 'unclassified') { btn.classList.add('active-unclassified'); }
+        else { btn.classList.add('active'); }
+    }
     renderAll();
+    if (currentFunnelData) {
+        var visible = (cat === 'all' || cat === 'unclassified')
+            ? allFeatures
+            : allFeatures.filter(function(f) { return featureMatchesCategory(f, cat); });
+        currentFunnelData.filtered = visible.length;
+        renderFunnelBar(currentFunnelData, 'showing');
+    }
 }
 
 function applyFilters() { renderAll(); }
@@ -935,6 +1176,21 @@ function buildMetaPills(f) {
     if (pills.length > 0) html += '<div class="meta-pills">' + pills.join('') + '</div>';
     html += linksHtml + noAsanaNote;
     return html;
+}
+
+var CAT_DEFINITIONS = [
+    { key: 'all', label: 'All', color: '#8899aa' },
+    { key: 'new_feature', label: 'New Feature', color: '#00C9A7' },
+    { key: 'improvement', label: 'Improvement', color: '#3b82f6' },
+    { key: 'bug_fix', label: 'Bug Fix', color: '#ef4444' },
+    { key: 'infrastructure', label: 'Infrastructure', color: '#6b7280' },
+    { key: 'mobile', label: 'Mobile', color: '#a855f7' },
+    { key: 'deprecation', label: 'Deprecation', color: '#f97316' }
+];
+
+function filterByCategory(cat) {
+    var pill = document.querySelector('.cat-filter-pill[data-cat="' + cat + '"]');
+    setCategoryFilter(cat, pill || document.querySelector('.cat-filter-pill'));
 }
 
 function showScorePopover(fid, badgeEl) {
