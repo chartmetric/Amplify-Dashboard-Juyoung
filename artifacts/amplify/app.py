@@ -215,70 +215,88 @@ def unified_list(source_type):
 
 
 _pipeline_cache = {}
-_PIPELINE_TTL = 120
+_PIPELINE_TTL = 300
+_pipeline_lock = threading.Lock()
 
 def _get_slack_first_features(days: int = 30, force_refresh: bool = False) -> dict:
     import time
-    now = time.time()
     cache_key = f"days_{days}"
+
+    now = time.time()
     cached = _pipeline_cache.get(cache_key)
     if not force_refresh and cached is not None and (now - cached["timestamp"]) < _PIPELINE_TTL:
         return {"features": cached["features"], "debug": cached["debug"]}
 
-    slack_source = SOURCE_REGISTRY["slack"]
-    asana_source = SOURCE_REGISTRY["asana"]
-
-    logger.info(f"[pipeline] Starting Slack-first pipeline (days={days})")
-
-    slack_result = slack_source.extract_features_from_channel(days=days)
-    features = slack_result["features"]
-    debug_info = slack_result["stats"]
-    debug_info["skipped"] = slack_result["skipped"]
-    debug_info["parse_errors"] = slack_result["parse_errors"]
-    debug_info["asana_matches"] = {"url": 0, "search": 0, "none": 0}
-
-    logger.info(f"[pipeline] Extracted {len(features)} features from Slack, enriching with Asana...")
-
-    def _enrich_one(f):
-        try:
-            asana_source.enrich_feature(f)
-            return f.get("asana_match_method", "none")
-        except Exception as e:
-            logger.warning(f"Asana enrichment failed for '{f.get('title', '')[:50]}': {e}")
-            f["asana_linked"] = False
-            f["asana_match_method"] = "error"
-            return "none"
-
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        methods = list(pool.map(_enrich_one, features))
-    for m in methods:
-        debug_info["asana_matches"][m] = debug_info["asana_matches"].get(m, 0) + 1
-
-    announced_ids = set()
-    for f in features:
-        tid = f.get("asana_task_id")
-        if tid:
-            announced_ids.add(tid)
+    acquired = _pipeline_lock.acquire(timeout=180)
+    if not acquired:
+        if cached is not None:
+            logger.warning(f"[pipeline] Lock timeout for {cache_key}, returning stale cache")
+            return {"features": cached["features"], "debug": cached["debug"]}
+        logger.error(f"[pipeline] Lock timeout for {cache_key} with no cache, returning empty")
+        return {"features": [], "debug": {"error": "pipeline_timeout"}}
 
     try:
-        unannounced = asana_source.list_unannounced_tasks(days=days, announced_task_ids=announced_ids)
-        debug_info["asana_only_count"] = len(unannounced)
-        features.extend(unannounced)
-    except Exception as e:
-        logger.warning(f"Asana unannounced scan failed: {e}")
-        debug_info["asana_only_count"] = 0
+        now = time.time()
+        cached = _pipeline_cache.get(cache_key)
+        if not force_refresh and cached is not None and (now - cached["timestamp"]) < _PIPELINE_TTL:
+            return {"features": cached["features"], "debug": cached["debug"]}
 
-    debug_info["total_features_final"] = len(features)
-    logger.info(f"[pipeline] Pipeline complete: {len(features)} total features ({debug_info['asana_matches']})")
+        slack_source = SOURCE_REGISTRY["slack"]
+        asana_source = SOURCE_REGISTRY["asana"]
 
-    _pipeline_cache[cache_key] = {
-        "features": features,
-        "debug": debug_info,
-        "timestamp": now,
-    }
+        logger.info(f"[pipeline] Starting Slack-first pipeline (days={days})")
 
-    return {"features": features, "debug": debug_info}
+        slack_result = slack_source.extract_features_from_channel(days=days)
+        features = slack_result["features"]
+        debug_info = slack_result["stats"]
+        debug_info["skipped"] = slack_result["skipped"]
+        debug_info["parse_errors"] = slack_result["parse_errors"]
+        debug_info["asana_matches"] = {"url": 0, "search": 0, "none": 0}
+
+        logger.info(f"[pipeline] Extracted {len(features)} features from Slack, enriching with Asana...")
+
+        def _enrich_one(f):
+            try:
+                asana_source.enrich_feature(f)
+                return f.get("asana_match_method", "none")
+            except Exception as e:
+                logger.warning(f"Asana enrichment failed for '{f.get('title', '')[:50]}': {e}")
+                f["asana_linked"] = False
+                f["asana_match_method"] = "error"
+                return "none"
+
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            methods = list(pool.map(_enrich_one, features))
+        for m in methods:
+            debug_info["asana_matches"][m] = debug_info["asana_matches"].get(m, 0) + 1
+
+        announced_ids = set()
+        for f in features:
+            tid = f.get("asana_task_id")
+            if tid:
+                announced_ids.add(tid)
+
+        try:
+            unannounced = asana_source.list_unannounced_tasks(days=days, announced_task_ids=announced_ids)
+            debug_info["asana_only_count"] = len(unannounced)
+            features.extend(unannounced)
+        except Exception as e:
+            logger.warning(f"Asana unannounced scan failed: {e}")
+            debug_info["asana_only_count"] = 0
+
+        debug_info["total_features_final"] = len(features)
+        logger.info(f"[pipeline] Pipeline complete: {len(features)} total features ({debug_info['asana_matches']})")
+
+        _pipeline_cache[cache_key] = {
+            "features": features,
+            "debug": debug_info,
+            "timestamp": time.time(),
+        }
+
+        return {"features": features, "debug": debug_info}
+    finally:
+        _pipeline_lock.release()
 
 
 def _get_enriched_features():
