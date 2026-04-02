@@ -1463,20 +1463,29 @@ def publish_email():
             else:
                 subject = "Chartmetric Product Update"
 
-    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test)
+    image = data.get("image", None)
+    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, image_data_uri=image)
     if result.get("success") and result.get("method") == "sendgrid" and feature_id:
         mark_published(feature_id, channel)
     status_code = 200 if result.get("success") else 500
     return jsonify(result), status_code
 
 
-@app.route("/api/publish/email/preview", methods=["GET"])
+@app.route("/api/publish/email/preview", methods=["GET", "POST"])
 def preview_email():
     from integrations.sendgrid_client import render_email_html
 
-    content = request.args.get("content", "")
-    subject = request.args.get("subject", "Chartmetric Product Update")
-    html = render_email_html(subject, content)
+    if request.method == "POST":
+        data = request.get_json() or {}
+        content = data.get("content", "")
+        subject = data.get("subject", "Chartmetric Product Update")
+        image = data.get("image", None)
+    else:
+        content = request.args.get("content", "")
+        subject = request.args.get("subject", "Chartmetric Product Update")
+        image = None
+
+    html = render_email_html(subject, content, image_data_uri=image)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 

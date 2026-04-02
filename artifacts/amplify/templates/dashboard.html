@@ -3591,8 +3591,23 @@ function previewEmailHtml(chKey) {
             content = lines.slice(1).join('\n').trim();
         }
     }
-    var url = '/api/publish/email/preview?content=' + encodeURIComponent(content) + '&subject=' + encodeURIComponent(subject);
-    window.open(url, '_blank');
+    var imgData = contentViewImages[chKey];
+    var imageUri = (imgData && imgData.dataUrl) ? imgData.dataUrl : null;
+    var payload = { content: content, subject: subject };
+    if (imageUri) payload.image = imageUri;
+    fetch('/api/publish/email/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+        var w = window.open('', '_blank');
+        if (w) { w.document.write(html); w.document.close(); }
+    })
+    .catch(function(err) {
+        showToast('Preview failed: ' + err.message, 'error');
+    });
 }
 
 function doPublishToChannel(chKey) {
@@ -3612,11 +3627,14 @@ function doPublishToChannel(chKey) {
     var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
     var payload = { content: content, feature_id: fid };
 
+    var imgData = contentViewImages[chKey];
     if (isEmail) {
         payload.channel = chKey;
         payload.is_test = true;
+        if (imgData && imgData.dataUrl) {
+            payload.image = imgData.dataUrl;
+        }
     } else {
-        var imgData = contentViewImages[chKey];
         if (imgData && imgData.dataUrl) {
             payload.image = imgData.dataUrl.split(',')[1];
         }

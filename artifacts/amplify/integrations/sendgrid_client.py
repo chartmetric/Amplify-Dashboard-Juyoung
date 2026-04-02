@@ -9,7 +9,7 @@ def _esc(text: str) -> str:
     return html_mod.escape(text, quote=True)
 
 
-def render_email_html(subject: str, body: str) -> str:
+def render_email_html(subject: str, body: str, image_data_uri: str = None) -> str:
     safe_subject = _esc(subject)
     lines = body.strip().split("\n")
     body_html = ""
@@ -31,6 +31,10 @@ def render_email_html(subject: str, body: str) -> str:
             else:
                 body_html += f'<p style="margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.6;">{_esc(stripped)}</p>'
 
+    image_block = ""
+    if image_data_uri:
+        image_block = f'<div style="margin:0 0 20px 0;"><img src="{_esc(image_data_uri)}" alt="Feature image" style="max-width:100%;height:auto;border-radius:6px;display:block;"></div>'
+
     return f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -43,6 +47,7 @@ def render_email_html(subject: str, body: str) -> str:
 </td></tr>
 <tr><td style="background:#ffffff;padding:32px;border-radius:0 0 8px 8px;">
 <h2 style="margin:0 0 20px 0;color:#1a1d23;font-size:22px;font-weight:700;">{safe_subject}</h2>
+{image_block}
 {body_html}
 <hr style="border:none;border-top:1px solid #e8e8eb;margin:28px 0 16px 0;">
 <p style="margin:0;color:#999999;font-size:12px;">Chartmetric &middot; Product Update</p>
@@ -54,14 +59,14 @@ def render_email_html(subject: str, body: str) -> str:
 </html>"""
 
 
-def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True) -> dict:
+def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, image_data_uri: str = None) -> dict:
     api_key = os.environ.get("SENDGRID_API_KEY")
     from_email = os.environ.get("SENDGRID_FROM_EMAIL")
     test_email = os.environ.get("SENDGRID_TEST_EMAIL")
 
     if not api_key or not from_email:
         logger.warning("[sendgrid] Missing SENDGRID_API_KEY or SENDGRID_FROM_EMAIL")
-        preview_html = render_email_html(subject, body)
+        preview_html = render_email_html(subject, body, image_data_uri=image_data_uri)
         return {
             "success": True,
             "method": "fallback",
@@ -81,7 +86,7 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
         }
 
     final_subject = f"[TEST] {subject}" if is_test else subject
-    html_content = render_email_html(final_subject, body)
+    html_content = render_email_html(final_subject, body, image_data_uri=image_data_uri)
 
     try:
         from sendgrid import SendGridAPIClient
