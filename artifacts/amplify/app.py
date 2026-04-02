@@ -202,6 +202,69 @@ def manual_create():
     return jsonify(ctx.to_dict())
 
 
+@app.route("/api/features/manual", methods=["POST"])
+def manual_feature_add():
+    """Add a manual feature, classify it, and return it in the same format as /api/features/classified.
+
+    Category: Sources
+
+    Request Body:
+    {
+        "title": "Feature name",
+        "description": "Feature description",
+        "category": "new_feature"  (optional)
+    }
+
+    Response: {"feature": {...classified feature object...}}
+    """
+    data = request.get_json() or {}
+    title = data.get("title", "").strip()
+    description = data.get("description", "").strip()
+    category = data.get("category", "new_feature")
+
+    if not title:
+        return jsonify({"error": "title is required"}), 400
+    if not description:
+        return jsonify({"error": "description is required"}), 400
+
+    import uuid
+    feature_id = "manual-" + uuid.uuid4().hex[:8]
+
+    feature = {
+        "id": feature_id,
+        "title": title,
+        "description": description,
+        "source": "manual",
+        "release_status": True,
+    }
+
+    try:
+        cl = classify_feature(feature)
+        if cl:
+            if category and category != cl.get("category"):
+                cl["category"] = category
+            feature["classification"] = cl
+        else:
+            feature["classification"] = {
+                "importance_score": 3,
+                "category": category,
+                "recommended_channels": ["twitter", "linkedin", "inapp"],
+                "marketing_summary": description[:200],
+                "classification_method": "manual",
+            }
+    except Exception as e:
+        logger.warning("Classification failed for manual feature: %s", e)
+        feature["classification"] = {
+            "importance_score": 3,
+            "category": category,
+            "recommended_channels": ["twitter", "linkedin", "inapp"],
+            "marketing_summary": description[:200],
+            "classification_method": "manual_fallback",
+        }
+
+    return jsonify({"feature": feature})
+
+
 @app.route("/api/features/from-url", methods=["POST"])
 def feature_from_url():
     """Extract a feature from a pasted URL (Slack, Asana, GitHub) or plain text.

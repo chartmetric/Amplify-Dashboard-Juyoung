@@ -37,7 +37,9 @@ artifacts-monorepo/
 │       │   └── manual_source.py # Manual feature entry
 │       ├── integrations/    # Publishing integrations
 │       │   ├── __init__.py
-│       │   └── twitter_client.py  # Twitter/X publishing (API + fallback intent URL)
+│       │   ├── twitter_client.py  # Twitter/X publishing (API + fallback intent URL)
+│       │   ├── sendgrid_client.py # SendGrid email sending
+│       │   └── inapp_client.py    # In-app announcements (in-memory store)
 │       └── ai/             # AI integration module
 │           ├── __init__.py
 │           └── generator.py  # Empty placeholder for now
@@ -63,6 +65,10 @@ Product marketing autopilot that ingests feature data from multiple sources and 
 - **Port**: 5000
 - **Paths**: `/` and `/api` (owns both route prefixes)
 - **Python packages**: flask, anthropic, asana, slack-sdk, requests, python-dotenv, waitress
+- **Publishing channels**:
+  - **API-backed**: twitter (X API + intent URL fallback), email_newsletter/email_standalone (SendGrid), inapp (in-memory announcements)
+  - **Clipboard**: linkedin, notion_monthly, article_hmc (copy to clipboard with channel-specific paste instructions)
+- **Manual features**: POST /api/features/manual - adds feature, classifies via Claude, returns to list
 - **Source registry**: SOURCE_REGISTRY dict mapping "asana", "slack", "manual" to adapter instances
 - **Routes**:
   - `GET /` — HTML dashboard

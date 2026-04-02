@@ -1,0 +1,50 @@
+Final core prompt. Add clipboard publishing for remaining channels, then fix any issues with the full flow.
+
+1. CLIPBOARD PUBLISH for channels without a dedicated API (linkedin, slack_internal, notion_monthly, article_hmc):
+   - The publish action copies approved content to clipboard using navigator.clipboard.writeText()
+   - Show a toast with channel-specific messaging:
+     - LinkedIn: "LinkedIn post copied! Paste it at linkedin.com/feed"
+     - Slack Internal: "Slack message copied! Paste it in #product-updates"
+     - Notion Monthly: "Notion doc copied! Paste it in your monthly meeting notes"
+     - HMC Article: "Article copied! Paste it into your CMS"
+   - Update the card status to "Copied to Clipboard ✅"
+   - Add publish buttons to each of these channel cards (they appear after approval):
+     - "Copy for LinkedIn 📋"
+     - "Copy for Slack 📋"
+     - "Copy for Notion 📋"
+     - "Copy Article 📋"
+
+2. END-TO-END FLOW — verify and fix the complete happy path:
+   Walk through this exact sequence and fix any issues found:
+   a. Page loads → feature list shows classified features from Asana/Slack
+   b. User changes importance filter → list updates
+   c. User clicks "Generate Content" → loading state → channel cards appear
+   d. User edits text in a channel card → char count updates
+   e. User clicks "Regenerate" with feedback → that card reloads with improved content
+   f. User clicks "Approve" on several channels → approved counter updates
+   g. User clicks "Publish All Approved" → each channel publishes/copies → summary modal
+   h. User clicks "Back to Features" → returns to list, can pick another feature
+   i. Verify error handling: what happens if /api/generate fails? Show a friendly error with retry, not a blank screen.
+
+3. BUG FIXES — address these common issues:
+   - Make sure the feature object passed to /api/generate includes ALL fields the backend needs (check what /api/features/classified returns vs what /api/generate expects)
+   - Make sure channel keys match between frontend and backend (e.g., "email_newsletter" not "emailNewsletter")
+   - If a channel's generated content exceeds max_chars, show the count in RED and add a warning "(over limit — edit or regenerate)"
+   - Make sure the "Back to Features" navigation doesn't lose the feature list (don't re-fetch unnecessarily, cache it)
+   - If the Claude API is slow (10+ seconds), make sure the loading state is clear — add a "This may take 15-30 seconds..." message after 5 seconds
+   - Ensure the page doesn't scroll-jump when switching between views
+
+4. MANUAL INPUT FORM:
+   - Make sure the "Manual Input" button in the top bar opens a clean modal with:
+     - Feature title input (required)
+     - Feature description textarea (required)
+     - Category dropdown (optional, defaults to "new_feature")
+     - "Add Feature" button that calls a POST endpoint to add the feature to the classified list
+     - After adding: close modal, new feature appears in the list with a brief highlight animation
+   - If manual input endpoint doesn't exist yet, create POST /api/features/manual that:
+     - Takes {title, description, category}
+     - Runs it through the classifier
+     - Returns the classified feature
+     - Adds it to the in-memory feature list
+
+After this prompt, do a full walkthrough of the app. The core product should be: select feature → AI generates 8 channels → edit/regenerate → approve → publish to Twitter (intent URL), email (preview), in-app (API), and clipboard for the rest. Full pipeline working.

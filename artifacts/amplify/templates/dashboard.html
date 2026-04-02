@@ -562,6 +562,27 @@
         .btn-approve:hover { background: var(--accent-hover); filter: brightness(1.1); }
         .btn-approve:active { transform: scale(0.97); }
         .btn-approve:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-clipboard-publish {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 7px 16px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.15s;
+        }
+        .btn-clipboard-publish:hover { filter: brightness(1.15); transform: translateY(-1px); }
+        .btn-clipboard-publish:active { transform: translateY(0); }
+        .char-over-warning {
+            color: #ef4444;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 6px;
+            animation: pulse-warn 1s ease-in-out infinite;
+        }
+        @keyframes pulse-warn { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
         .btn-undo-approve {
             background: none; border: none; color: var(--text-muted); font-size: 11px;
             cursor: pointer; text-decoration: underline; margin-left: auto;
@@ -675,6 +696,25 @@
         .publish-confirm-box .pc-btns button:hover { background: var(--border); }
         .publish-confirm-box .pc-btns .pc-btn-confirm { background: var(--accent); color: #fff; border-color: var(--accent); }
         .publish-confirm-box .pc-btns .pc-btn-confirm:hover { background: #00b898; }
+        .manual-input-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); }
+        .manual-input-box { background: var(--bg-panel); border-radius: 14px; padding: 28px 32px; max-width: 480px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+        .manual-input-box h3 { margin: 0 0 18px; font-size: 18px; color: var(--text-body); }
+        .manual-input-box label { display: block; margin-bottom: 4px; font-size: 13px; color: var(--text-muted); font-weight: 600; }
+        .manual-input-box input, .manual-input-box textarea, .manual-input-box select {
+            width: 100%; box-sizing: border-box; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--bg-body); color: var(--text-body); font-size: 14px; margin-bottom: 14px; font-family: inherit;
+        }
+        .manual-input-box textarea { min-height: 100px; resize: vertical; }
+        .manual-input-box .mi-btns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 6px; }
+        .manual-input-box .mi-btns button { padding: 9px 20px; border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--bg-panel); color: var(--text-body); }
+        .manual-input-box .mi-btns .mi-submit { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .manual-input-box .mi-btns .mi-submit:hover { background: #00b898; }
+        .manual-input-box .mi-btns .mi-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+        .feature-highlight { animation: highlight-glow 2s ease-out; }
+        @keyframes highlight-glow {
+            0% { box-shadow: 0 0 0 3px rgba(0,201,167,0.6); }
+            100% { box-shadow: none; }
+        }
         .content-bottom-bar {
             position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-panel);
             border-top: 1px solid var(--border); padding: 14px 24px;
@@ -935,6 +975,7 @@
             <span class="subtitle">Product Marketing Autopilot</span>
         </div>
         <div class="topbar-right">
+            <button class="btn-prep-content" onclick="openManualInput()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">+ Add Feature</button>
             <button class="btn-prep-content" onclick="startPrepWorkflow()">Prep Content for...</button>
             <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">&#127769;</button>
             <div style="display:flex;align-items:center;gap:6px;" title="API server connection">
@@ -3007,6 +3048,7 @@ function buildChannelCard(chKey, ch) {
             '<span class="channel-icon">' + icon + '</span>' +
             '<span class="channel-name">' + escHtml(ch.channel_display_name || chKey) + '</span>' +
             '<span class="char-count-badge ' + charClass + '" id="char-' + chKey + '">' + content.length + '/' + maxChars + '</span>' +
+            (charClass === 'over' && maxChars < 9999 ? '<span class="char-over-warning" id="char-warn-' + chKey + '">(over limit)</span>' : '') +
             '<span class="status-badge draft" id="status-' + chKey + '">Draft</span>' +
             (ch.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
             (isArticle ? '<button class="btn-preview-toggle" id="preview-toggle-' + chKey + '" onclick="togglePreview(\'' + chKey + '\')">Preview</button>' : '') +
@@ -3033,6 +3075,18 @@ function buildChannelCard(chKey, ch) {
         if (badge) {
             badge.textContent = len + '/' + max;
             badge.className = 'char-count-badge ' + (len <= max ? 'ok' : 'over');
+            var warn = document.getElementById('char-warn-' + chKey);
+            if (len > max && max < 9999) {
+                if (!warn) {
+                    warn = document.createElement('span');
+                    warn.id = 'char-warn-' + chKey;
+                    warn.className = 'char-over-warning';
+                    warn.textContent = '(over limit)';
+                    badge.parentNode.insertBefore(warn, badge.nextSibling);
+                }
+            } else if (warn) {
+                warn.remove();
+            }
         }
     });
 
@@ -3765,6 +3819,9 @@ function updateChannelStatus(chKey) {
                 if (isEmailCh) {
                     if (ddToggle) ddToggle.textContent = 'Resend or Preview';
                     if (ddItems[0]) ddItems[0].innerHTML = 'Resend Email &#x1F4E7;';
+                } else if (chKey === 'inapp') {
+                    if (ddToggle) ddToggle.textContent = 'Republish or Preview';
+                    if (ddItems[0]) ddItems[0].innerHTML = 'Republish In-App &#x1F4F1;';
                 } else {
                     if (ddToggle) ddToggle.textContent = 'Repost or Preview';
                     if (ddItems[0]) ddItems[0].innerHTML = 'Repost to X &#x2192;';
@@ -3775,6 +3832,15 @@ function updateChannelStatus(chKey) {
             if (publishBtn) publishBtn.style.display = 'none';
             var previewBtn = actionsEl.querySelector('.btn-preview-channel');
             if (previewBtn) previewBtn.style.display = 'none';
+            var oldClipBtn2 = actionsEl.querySelector('.btn-clipboard-publish');
+            if (oldClipBtn2) oldClipBtn2.remove();
+            if (isCopied && !PUBLISHABLE_CHANNELS[chKey]) {
+                var copyAgainBtn = document.createElement('button');
+                copyAgainBtn.className = 'btn-clipboard-publish';
+                copyAgainBtn.textContent = 'Copy Again \uD83D\uDCCB';
+                copyAgainBtn.onclick = function() { clipboardPublish(chKey); };
+                actionsEl.insertBefore(copyAgainBtn, actionsEl.firstChild);
+            }
             var existing = actionsEl.querySelector('.btn-undo-approve');
             if (!existing) {
                 var undo = document.createElement('button');
@@ -3807,9 +3873,12 @@ function updateChannelStatus(chKey) {
                 undo.onclick = function() { undoApproval(chKey); };
                 actionsEl.appendChild(undo);
             }
+            var oldDd = actionsEl.querySelector('.publish-post-preview-dd');
+            if (oldDd) oldDd.remove();
+            var oldClipBtn = actionsEl.querySelector('.btn-clipboard-publish');
+            if (oldClipBtn) oldClipBtn.remove();
+
             if (PUBLISHABLE_CHANNELS[chKey]) {
-                var oldDd = actionsEl.querySelector('.publish-post-preview-dd');
-                if (oldDd) oldDd.remove();
                 var ddId = 'publish-dd-' + chKey;
                 var ddWrapper = document.createElement('div');
                 ddWrapper.className = 'custom-dropdown publish-dropdown publish-post-preview-dd';
@@ -3835,6 +3904,17 @@ function updateChannelStatus(chKey) {
                     ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">' + toggleLabel + '</span><span class="dd-arrow">&#9650;</span></button><div class="custom-dropdown-menu"><div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">' + postLabel + ' &#x2192;</div><div class="custom-dropdown-item" onclick="previewOnX(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview on X &#x2197;</div></div>';
                 }
                 actionsEl.insertBefore(ddWrapper, actionsEl.querySelector('.btn-undo-approve'));
+            } else {
+                var clipBtn = document.createElement('button');
+                clipBtn.className = 'btn-clipboard-publish';
+                var clipLabels = {
+                    linkedin: 'Copy for LinkedIn \uD83D\uDCCB',
+                    notion_monthly: 'Copy for Notion \uD83D\uDCCB',
+                    article_hmc: 'Copy Article \uD83D\uDCCB'
+                };
+                clipBtn.textContent = clipLabels[chKey] || ('Copy \uD83D\uDCCB');
+                clipBtn.onclick = function() { clipboardPublish(chKey); };
+                actionsEl.insertBefore(clipBtn, actionsEl.querySelector('.btn-undo-approve'));
             }
         }
     } else {
@@ -4066,10 +4146,52 @@ function doPublishToChannel(chKey) {
     });
 }
 
+var CLIPBOARD_TOASTS = {
+    linkedin: 'LinkedIn post copied! Paste it at linkedin.com/feed',
+    notion_monthly: 'Notion doc copied! Paste it in your monthly meeting notes',
+    article_hmc: 'Article copied! Paste it into your CMS'
+};
+
+function clipboardPublish(chKey) {
+    var ta = document.getElementById('ta-' + chKey);
+    var content = ta ? ta.value : '';
+    if (!content) { showToast('No content to copy', 'error'); return; }
+
+    function onCopySuccess() {
+        contentViewPublished[chKey] = true;
+        var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+        trackPublish(fid, chKey, 'clipboard');
+        updateChannelStatus(chKey);
+        showToast(CLIPBOARD_TOASTS[chKey] || 'Content copied to clipboard!');
+    }
+
+    function fallbackCopy() {
+        try {
+            var textarea = document.createElement('textarea');
+            textarea.value = content;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            onCopySuccess();
+        } catch(e) {
+            showToast('Copy failed - please copy manually', 'error');
+        }
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(content).then(onCopySuccess).catch(fallbackCopy);
+    } else {
+        fallbackCopy();
+    }
+}
+
 function publishToChannel(chKey, skipConfirm) {
     if (publishingInFlight[chKey]) { showToast('Already posting... please wait', 'warning'); return; }
     var endpoint = PUBLISHABLE_CHANNELS[chKey];
-    if (!endpoint) { showToast('Publishing not yet supported for ' + chKey, 'warning'); return; }
+    if (!endpoint) { clipboardPublish(chKey); return; }
 
     var ta = document.getElementById('ta-' + chKey);
     var content = ta ? ta.value : '';
@@ -4130,17 +4252,38 @@ function publishAllApproved() {
         var pending = allKeys.length;
 
         var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
-        for (var n = 0; n < nonPublishable.length; n++) {
-            var nk = nonPublishable[n];
-            var ta = document.getElementById('ta-' + nk);
-            if (ta && ta.value) {
-                navigator.clipboard.writeText(ta.value).catch(function(){});
+        if (nonPublishable.length > 0) {
+            var allClipTexts = [];
+            for (var n = 0; n < nonPublishable.length; n++) {
+                var nk = nonPublishable[n];
+                var ta = document.getElementById('ta-' + nk);
+                var txt = ta ? ta.value : '';
+                if (txt) {
+                    allClipTexts.push('--- ' + (CHANNEL_DISPLAY_SHORT[nk] || nk).toUpperCase() + ' ---\n' + txt);
+                }
+                contentViewPublished[nk] = true;
+                trackPublish(fid, nk, 'clipboard');
+                updateChannelStatus(nk);
+                results[nk] = { status: 'clipboard' };
+                pending--;
             }
-            contentViewPublished[nk] = true;
-            trackPublish(fid, nk, 'clipboard');
-            updateChannelStatus(nk);
-            results[nk] = { status: 'clipboard' };
-            pending--;
+            if (allClipTexts.length > 0) {
+                var combined = allClipTexts.join('\n\n');
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(combined).catch(function(){});
+                } else {
+                    try {
+                        var tmpTa = document.createElement('textarea');
+                        tmpTa.value = combined;
+                        tmpTa.style.position = 'fixed';
+                        tmpTa.style.opacity = '0';
+                        document.body.appendChild(tmpTa);
+                        tmpTa.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(tmpTa);
+                    } catch(e) {}
+                }
+            }
             if (pending <= 0) showPublishSummary(results);
         }
 
@@ -4271,6 +4414,81 @@ var prepBatchPublished = {};
 var prepBatchInitialDrafts = {};
 var prepBatchRegenFeedback = {};
 var prepDragItem = null;
+
+function openManualInput() {
+    var modal = document.createElement('div');
+    modal.className = 'manual-input-modal';
+    modal.id = 'manual-input-modal';
+    var box = document.createElement('div');
+    box.className = 'manual-input-box';
+    box.innerHTML =
+        '<h3>Add Feature Manually</h3>' +
+        '<label for="mi-title">Feature Title *</label>' +
+        '<input type="text" id="mi-title" placeholder="e.g., New Artist Comparison Tool">' +
+        '<label for="mi-desc">Description *</label>' +
+        '<textarea id="mi-desc" placeholder="Describe what this feature does and why it matters..."></textarea>' +
+        '<label for="mi-cat">Category</label>' +
+        '<select id="mi-cat">' +
+            '<option value="new_feature">New Feature</option>' +
+            '<option value="improvement">Improvement</option>' +
+            '<option value="mobile">Mobile</option>' +
+            '<option value="deprecation">Deprecation</option>' +
+            '<option value="bug_fix">Bug Fix</option>' +
+            '<option value="infrastructure">Infrastructure</option>' +
+        '</select>' +
+        '<div class="mi-btns">' +
+            '<button onclick="closeManualInput()">Cancel</button>' +
+            '<button class="mi-submit" id="mi-submit-btn" onclick="submitManualFeature()">Add Feature</button>' +
+        '</div>';
+    modal.appendChild(box);
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) closeManualInput(); };
+    setTimeout(function() { document.getElementById('mi-title').focus(); }, 100);
+}
+
+function closeManualInput() {
+    var modal = document.getElementById('manual-input-modal');
+    if (modal) modal.remove();
+}
+
+function submitManualFeature() {
+    var title = (document.getElementById('mi-title').value || '').trim();
+    var desc = (document.getElementById('mi-desc').value || '').trim();
+    var cat = document.getElementById('mi-cat').value;
+    if (!title) { showToast('Feature title is required', 'error'); return; }
+    if (!desc) { showToast('Feature description is required', 'error'); return; }
+
+    var btn = document.getElementById('mi-submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+
+    fetch('/api/features/manual', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ title: title, description: desc, category: cat })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { showToast('Error: ' + data.error, 'error'); btn.disabled = false; btn.textContent = 'Add Feature'; return; }
+        closeManualInput();
+        var newFeature = data.feature || data;
+        allFeatures.unshift(newFeature);
+        renderFeatures(allFeatures);
+        showToast('Feature added! You can now generate content for it.');
+        setTimeout(function() {
+            var fCard = document.querySelector('.feature-card[data-fid="' + (newFeature.id || '') + '"]');
+            if (fCard) {
+                fCard.classList.add('feature-highlight');
+                fCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 200);
+    })
+    .catch(function(err) {
+        showToast('Failed to add feature: ' + err.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Add Feature';
+    });
+}
 
 function startPrepWorkflow() {
     var overlay = document.getElementById('prep-overlay');
