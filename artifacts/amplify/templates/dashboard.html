@@ -474,7 +474,7 @@
         .btn-approve {
             background: #00C9A7; color: #0f1923; border: none; padding: 6px 14px;
             border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
-            margin-left: auto; font-family: inherit;
+            font-family: inherit;
         }
         .btn-approve:hover { background: #00e0bb; }
         .btn-approve:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -2275,9 +2275,9 @@ function buildChannelCard(chKey, ch) {
         '</div>' +
         '<div class="channel-card-loading" id="ch-loading-' + chKey + '"><div class="spinner"></div><span>Regenerating...</span></div>' +
         '<div class="channel-card-actions" id="ch-actions-' + chKey + '">' +
-            '<button class="btn-regen" onclick="regenerateChannel(\'' + chKey + '\')">Regenerate</button>' +
-            '<input type="text" class="regen-feedback-input" id="feedback-' + chKey + '" placeholder="Optional: what to change...">' +
             '<button class="btn-approve" id="approve-btn-' + chKey + '" onclick="approveChannel(\'' + chKey + '\')">Approve \u2713</button>' +
+            '<input type="text" class="regen-feedback-input" id="feedback-' + chKey + '" placeholder="Optional: what to change...">' +
+            '<button class="btn-regen" onclick="regenerateChannel(\'' + chKey + '\')">Regenerate</button>' +
         '</div>';
 
     var ta = card.querySelector('textarea');
@@ -2756,9 +2756,9 @@ function buildBatchItem(r, idx) {
         '</div>' +
         '<div class="batch-item-loading" id="batch-loading-' + idx + '" style="display:none;"><div class="spinner"></div><span>Regenerating...</span></div>' +
         '<div class="batch-item-actions" id="batch-actions-' + idx + '">' +
-            '<button class="btn-regen" onclick="batchRegenItem(' + idx + ')">Regenerate</button>' +
-            '<input type="text" class="regen-feedback-input" id="batch-feedback-' + idx + '" placeholder="Optional: what to change...">' +
             '<button class="btn-approve" id="batch-approve-btn-' + idx + '" onclick="batchApproveItem(' + idx + ')">Approve \u2713</button>' +
+            '<input type="text" class="regen-feedback-input" id="batch-feedback-' + idx + '" placeholder="Optional: what to change...">' +
+            '<button class="btn-regen" onclick="batchRegenItem(' + idx + ')">Regenerate</button>' +
         '</div>';
 
     var ta = item.querySelector('textarea');
