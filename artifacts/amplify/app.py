@@ -1437,6 +1437,49 @@ def get_publish_state():
     return jsonify(state), 200
 
 
+@app.route("/api/publish/email", methods=["POST"])
+def publish_email():
+    from integrations.sendgrid_client import send_email
+
+    data = request.get_json() or {}
+    content = data.get("content", "").strip()
+    if not content:
+        return jsonify({"success": False, "error": "content is required"}), 400
+
+    subject = data.get("subject", "").strip()
+    channel = data.get("channel", "email_standalone")
+    to_email = data.get("to_email", "").strip() or None
+    is_test = data.get("is_test", True)
+    feature_id = data.get("feature_id", "")
+
+    if not subject:
+        if channel == "email_newsletter":
+            subject = "Chartmetric Product Update"
+        else:
+            lines = content.split("\n", 1)
+            if lines[0].lower().startswith("subject:"):
+                subject = lines[0][len("subject:"):].strip()
+                content = lines[1].strip() if len(lines) > 1 else content
+            else:
+                subject = "Chartmetric Product Update"
+
+    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test)
+    if result.get("success") and result.get("method") == "sendgrid" and feature_id:
+        mark_published(feature_id, channel)
+    status_code = 200 if result.get("success") else 500
+    return jsonify(result), status_code
+
+
+@app.route("/api/publish/email/preview", methods=["GET"])
+def preview_email():
+    from integrations.sendgrid_client import render_email_html
+
+    content = request.args.get("content", "")
+    subject = request.args.get("subject", "Chartmetric Product Update")
+    html = render_email_html(subject, content)
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
 @app.route("/api/publish/all", methods=["GET"])
 def get_all_published_endpoint():
     return jsonify(get_all_published()), 200

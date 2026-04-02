@@ -1,0 +1,42 @@
+Now add email publishing via SendGrid.
+
+1. CREATE `integrations/sendgrid_client.py`:
+   - Install sendgrid package (add to requirements.txt)
+   - Function `send_email(subject: str, body: str, to_email: str = None, is_test: bool = True) -> dict`:
+     - Check for SENDGRID_API_KEY and SENDGRID_FROM_EMAIL in environment variables
+     - If credentials exist:
+       - If is_test: send to SENDGRID_TEST_EMAIL env var (or to_email if provided), with "[TEST] " prefix on subject
+       - Build email using sendgrid Mail helper
+       - Send via SendGrid API
+       - Return {"success": true, "message_id": "...", "method": "sendgrid", "to": to_email, "is_test": is_test}
+     - If credentials don't exist:
+       - Return fallback: {"success": true, "method": "fallback", "message": "Email draft ready — SendGrid not configured", "subject": subject, "body": body, "preview_html": rendered_preview}
+     - On error: return {"success": false, "error": str(e)}
+   - Function `render_email_html(subject: str, body: str) -> str`:
+     - Takes the plain text body and wraps it in a clean, minimal HTML email template
+     - Chartmetric branded: dark header bar with "Chartmetric" text, white content area, teal CTA button if body contains "Try it here" or similar CTA phrase
+     - Keep the HTML email template simple and inline-styled (email clients don't support external CSS)
+
+2. ADD endpoints:
+   POST /api/publish/email
+   - Body: {"content": "the email body text", "subject": "optional subject line", "to_email": "optional override", "is_test": true}
+   - For email_newsletter channel: extract subject as "Chartmetric Product Update" (since newsletter blocks don't have subjects)
+   - For email_standalone channel: parse the subject from the first line if it starts with "Subject: "
+   - Calls send_email()
+   - Returns the result
+
+   GET /api/publish/email/preview
+   - Query params: ?content=...&subject=...
+   - Returns the rendered HTML email preview (so the marketer can see what it looks like)
+
+3. UPDATE the dashboard UI — on approved Email Newsletter and Standalone Email cards:
+   - Add "Send Test Email 📧" button (appears after approval)
+   - Add a small "to:" input field pre-filled with the user's email (or empty) next to the button
+   - When clicked:
+     - Call POST /api/publish/email with content, subject, and to_email
+     - If SendGrid is configured: show toast "Test email sent to {email}!"
+     - If fallback: show toast "Email draft ready" and open a preview in a new tab (or modal) showing the rendered HTML
+   - Add "Preview HTML" link that opens the rendered email template in a modal or new tab
+   - Wire into "Publish All Approved" flow
+
+Also: after a successful email send, call mark_published(feature_id, channel) from ai.publish_store to track the published state — follow the same pattern used in the /api/publish/twitter endpoint.

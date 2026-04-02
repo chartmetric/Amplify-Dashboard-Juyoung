@@ -386,6 +386,10 @@
         .pub-ch-pill.pub-copied { background: #2a3a4a; color: #8899aa; }
         .pub-ch-pill.pub-full { background: #1a3a2a; color: #4ade80; font-weight: 700; padding: 3px 10px; }
         .pub-prev-note { font-size: 11px; color: var(--text-faint); margin-top: 4px; font-style: italic; }
+        .email-send-extras { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+        .email-to-label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+        .email-to-input { background: var(--input-bg, #1e2128); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 12px; color: var(--text-body); width: 200px; }
+        .email-to-input:focus { border-color: var(--accent); outline: none; }
         .pub-channel-filters { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
         .filter-label-sub { color: var(--text-faint); font-size: 12px; margin: 0 2px; }
         .btn-generate {
@@ -3391,7 +3395,11 @@ function removeBatchImage(idx) {
     if (addBtn) addBtn.style.display = '';
 }
 
-var PUBLISHABLE_CHANNELS = { twitter: '/api/publish/twitter' };
+var PUBLISHABLE_CHANNELS = {
+    twitter: '/api/publish/twitter',
+    email_newsletter: '/api/publish/email',
+    email_standalone: '/api/publish/email'
+};
 var publishingInFlight = {};
 
 function updateChannelStatus(chKey) {
@@ -3414,9 +3422,15 @@ function updateChannelStatus(chKey) {
             var publishDdEl = actionsEl.querySelector('.publish-post-preview-dd');
             if (publishDdEl) {
                 var ddToggle = publishDdEl.querySelector('.dd-label');
-                if (ddToggle) ddToggle.textContent = 'Repost or Preview';
                 var ddItems = publishDdEl.querySelectorAll('.custom-dropdown-item');
-                if (ddItems[0]) ddItems[0].innerHTML = 'Repost to X &#x2192;';
+                var isEmailCh = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+                if (isEmailCh) {
+                    if (ddToggle) ddToggle.textContent = 'Resend or Preview';
+                    if (ddItems[0]) ddItems[0].innerHTML = 'Resend Test Email &#x1F4E7;';
+                } else {
+                    if (ddToggle) ddToggle.textContent = 'Repost or Preview';
+                    if (ddItems[0]) ddItems[0].innerHTML = 'Repost to X &#x2192;';
+                }
                 publishDdEl.style.display = '';
             }
             var publishBtn = actionsEl.querySelector('.btn-publish-channel');
@@ -3460,7 +3474,25 @@ function updateChannelStatus(chKey) {
                 var ddWrapper = document.createElement('div');
                 ddWrapper.className = 'custom-dropdown publish-dropdown publish-post-preview-dd';
                 ddWrapper.id = ddId;
-                ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">Post or Preview</span><span class="dd-arrow">&#9650;</span></button><div class="custom-dropdown-menu"><div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); document.getElementById(\'' + ddId + '\').querySelector(\'.custom-dropdown-menu\').classList.remove(\'open\');">Post to X &#x2192;</div><div class="custom-dropdown-item" onclick="previewOnX(\'' + chKey + '\'); document.getElementById(\'' + ddId + '\').querySelector(\'.custom-dropdown-menu\').classList.remove(\'open\');">Preview on X &#x2197;</div></div>';
+                var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+                if (isEmail) {
+                    var prevPubbed = contentViewPublished[chKey];
+                    var toggleLabel = prevPubbed ? 'Resend or Preview' : 'Send or Preview';
+                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">' + toggleLabel + '</span><span class="dd-arrow">&#9650;</span></button>' +
+                        '<div class="custom-dropdown-menu">' +
+                        '<div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">' + (prevPubbed ? 'Resend' : 'Send') + ' Test Email &#x1F4E7;</div>' +
+                        '<div class="custom-dropdown-item" onclick="previewEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview HTML &#x2197;</div>' +
+                        '</div>';
+                    var emailExtras = document.createElement('div');
+                    emailExtras.className = 'email-send-extras';
+                    emailExtras.innerHTML = '<label class="email-to-label">to:</label><input type="email" class="email-to-input" id="email-to-' + chKey + '" placeholder="test@example.com">';
+                    actionsEl.insertBefore(emailExtras, actionsEl.querySelector('.btn-undo-approve'));
+                } else {
+                    var prevPubbed = contentViewPublished[chKey];
+                    var toggleLabel = prevPubbed ? 'Repost or Preview' : 'Post or Preview';
+                    var postLabel = prevPubbed ? 'Repost to X' : 'Post to X';
+                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">' + toggleLabel + '</span><span class="dd-arrow">&#9650;</span></button><div class="custom-dropdown-menu"><div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">' + postLabel + ' &#x2192;</div><div class="custom-dropdown-item" onclick="previewOnX(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview on X &#x2197;</div></div>';
+                }
                 actionsEl.insertBefore(ddWrapper, actionsEl.querySelector('.btn-undo-approve'));
             }
         }
@@ -3478,6 +3510,8 @@ function updateChannelStatus(chKey) {
             if (publishBtn) publishBtn.remove();
             var previewBtn = actionsEl.querySelector('.btn-preview-channel');
             if (previewBtn) previewBtn.remove();
+            var emailExtras = actionsEl.querySelector('.email-send-extras');
+            if (emailExtras) emailExtras.remove();
         }
     }
 }
@@ -3507,21 +3541,62 @@ function previewOnX(chKey) {
     }
 }
 
-function showPublishConfirm(message, onConfirm) {
+function showPublishConfirm(message, onConfirm, opts) {
+    opts = opts || {};
     var modal = document.createElement('div');
     modal.className = 'publish-confirm-modal';
-    modal.innerHTML = '<div class="publish-confirm-box">' +
-        '<div class="pc-icon">\uD83D\uDCE8</div>' +
-        '<h3>Post to X</h3>' +
-        '<p>' + message + '</p>' +
-        '<div class="pc-btns">' +
-        '<button class="pc-btn-cancel">Cancel</button>' +
-        '<button class="pc-btn-confirm">Yes, post it</button>' +
-        '</div></div>';
+    var box = document.createElement('div');
+    box.className = 'publish-confirm-box';
+    var iconEl = document.createElement('div');
+    iconEl.className = 'pc-icon';
+    iconEl.textContent = opts.icon || '\uD83D\uDCE8';
+    var h3 = document.createElement('h3');
+    h3.textContent = opts.title || 'Confirm';
+    var p = document.createElement('p');
+    p.textContent = message;
+    var btns = document.createElement('div');
+    btns.className = 'pc-btns';
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'pc-btn-cancel';
+    cancelBtn.textContent = 'Cancel';
+    var confirmBtn = document.createElement('button');
+    confirmBtn.className = 'pc-btn-confirm';
+    confirmBtn.textContent = opts.confirmText || 'Yes, do it';
+    btns.appendChild(cancelBtn);
+    btns.appendChild(confirmBtn);
+    box.appendChild(iconEl);
+    box.appendChild(h3);
+    box.appendChild(p);
+    box.appendChild(btns);
+    modal.appendChild(box);
     document.body.appendChild(modal);
-    modal.querySelector('.pc-btn-cancel').onclick = function() { modal.remove(); };
-    modal.querySelector('.pc-btn-confirm').onclick = function() { modal.remove(); onConfirm(); };
+    cancelBtn.onclick = function() { modal.remove(); };
+    confirmBtn.onclick = function() { modal.remove(); onConfirm(); };
     modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
+function closeDropdown(ddId) {
+    var dd = document.getElementById(ddId);
+    if (dd) {
+        var menu = dd.querySelector('.custom-dropdown-menu');
+        if (menu) menu.classList.remove('open');
+    }
+}
+
+function previewEmailHtml(chKey) {
+    var ta = document.getElementById('ta-' + chKey);
+    var content = ta ? ta.value : '';
+    if (!content) { showToast('No content to preview', 'error'); return; }
+    var subject = 'Chartmetric Product Update';
+    if (chKey === 'email_standalone') {
+        var lines = content.split('\n');
+        if (lines[0].toLowerCase().startsWith('subject:')) {
+            subject = lines[0].substring(8).trim();
+            content = lines.slice(1).join('\n').trim();
+        }
+    }
+    var url = '/api/publish/email/preview?content=' + encodeURIComponent(content) + '&subject=' + encodeURIComponent(subject);
+    window.open(url, '_blank');
 }
 
 function doPublishToChannel(chKey) {
@@ -3538,10 +3613,21 @@ function doPublishToChannel(chKey) {
     }
 
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
     var payload = { content: content, feature_id: fid };
-    var imgData = contentViewImages[chKey];
-    if (imgData && imgData.dataUrl) {
-        payload.image = imgData.dataUrl.split(',')[1];
+
+    if (isEmail) {
+        payload.channel = chKey;
+        payload.is_test = true;
+        var toInput = document.getElementById('email-to-' + chKey);
+        if (toInput && toInput.value.trim()) {
+            payload.to_email = toInput.value.trim();
+        }
+    } else {
+        var imgData = contentViewImages[chKey];
+        if (imgData && imgData.dataUrl) {
+            payload.image = imgData.dataUrl.split(',')[1];
+        }
     }
 
     fetch(endpoint, {
@@ -3554,7 +3640,22 @@ function doPublishToChannel(chKey) {
         publishingInFlight[chKey] = false;
         if (!data.success) {
             var errMsg = data.hint || data.error || 'Unknown error';
-            showToast('Post failed: ' + errMsg, 'error');
+            showToast('Send failed: ' + errMsg, 'error');
+            return;
+        }
+        if (isEmail) {
+            if (data.method === 'fallback') {
+                showToast('Email draft ready. SendGrid not configured.', 'warning');
+                if (data.preview_html) {
+                    var w = window.open('', '_blank');
+                    if (w) { w.document.write(data.preview_html); w.document.close(); }
+                }
+                return;
+            }
+            contentViewPublished[chKey] = true;
+            trackPublish(fid, chKey, 'posted');
+            updateChannelStatus(chKey);
+            showToast('Test email sent to ' + (data.to || 'configured address') + '! \u2705');
             return;
         }
         if (data.method === 'fallback') {
@@ -3570,8 +3671,8 @@ function doPublishToChannel(chKey) {
             return;
         }
         contentViewPublished[chKey] = true;
-        var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
-        trackPublish(fid, chKey, 'posted');
+        var fid2 = contentViewFeature ? (contentViewFeature.id || '') : '';
+        trackPublish(fid2, chKey, 'posted');
         updateChannelStatus(chKey);
         var hasImg = !!(contentViewImages[chKey] && contentViewImages[chKey].dataUrl);
         var tweetLink = data.tweet_url ? ' <a href="' + data.tweet_url + '" target="_blank" style="color:#1DA1F2;text-decoration:underline">View tweet</a>' : '';
@@ -3579,8 +3680,12 @@ function doPublishToChannel(chKey) {
     })
     .catch(function(err) {
         publishingInFlight[chKey] = false;
-        showToast('Error: ' + err.message + ' - opening preview instead', 'error');
-        previewOnX(chKey);
+        if (isEmail) {
+            showToast('Error sending email: ' + err.message, 'error');
+        } else {
+            showToast('Error: ' + err.message + ' - opening preview instead', 'error');
+            previewOnX(chKey);
+        }
     });
 }
 
@@ -3593,15 +3698,24 @@ function publishToChannel(chKey, skipConfirm) {
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to publish', 'error'); return; }
 
+    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+
     if (skipConfirm) {
         doPublishToChannel(chKey);
+    } else if (isEmail) {
+        var toInput = document.getElementById('email-to-' + chKey);
+        var toAddr = toInput ? toInput.value.trim() : '';
+        var msg = 'Send a test email' + (toAddr ? ' to ' + toAddr : '') + '?';
+        showPublishConfirm(msg, function() {
+            doPublishToChannel(chKey);
+        }, { title: 'Send Test Email', icon: '\uD83D\uDCE7', confirmText: 'Yes, send it' });
     } else {
         var hasImg = !!(contentViewImages[chKey] && contentViewImages[chKey].dataUrl);
         var msg = 'Do you want to post this on X? It will be directly posted to your account.';
         if (hasImg) msg += ' Your attached image will be uploaded with the tweet.';
         showPublishConfirm(msg, function() {
             doPublishToChannel(chKey);
-        });
+        }, { title: 'Post to X', confirmText: 'Yes, post it' });
     }
 }
 
@@ -3634,11 +3748,17 @@ function publishAllApproved() {
 
     if (publishableKeys.length === 0) return;
 
-    showPublishConfirm('Post all ' + publishableKeys.length + ' approved channel(s) to X? They will be directly posted to your account.', function() {
+    var twitterKeys = publishableKeys.filter(function(k) { return k === 'twitter'; });
+    var emailKeys = publishableKeys.filter(function(k) { return k === 'email_newsletter' || k === 'email_standalone'; });
+    var parts = [];
+    if (twitterKeys.length > 0) parts.push('post ' + twitterKeys.length + ' to X');
+    if (emailKeys.length > 0) parts.push('send ' + emailKeys.length + ' test email(s)');
+    var msg = 'Publish all ' + publishableKeys.length + ' approved channel(s)? This will ' + parts.join(' and ') + '.';
+    showPublishConfirm(msg, function() {
         for (var j = 0; j < publishableKeys.length; j++) {
             publishToChannel(publishableKeys[j], true);
         }
-    });
+    }, { title: 'Publish All', confirmText: 'Yes, publish all' });
 }
 
 function updateApprovalCounter() {
