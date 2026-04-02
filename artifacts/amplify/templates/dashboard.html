@@ -1149,13 +1149,6 @@ function renderFunnelBar(data, activeStep) {
             clickable: true,
         },
         {
-            id: 'classified',
-            count: classifiedCount,
-            label: 'Classified',
-            tooltip: 'Tasks that received a classification from Claude, including pre-filtered tasks with assigned scores. Click to reset category filter to All.',
-            clickable: true,
-        },
-        {
             id: 'showing',
             count: showingCount,
             label: 'Showing',
@@ -1206,9 +1199,6 @@ function onFunnelClick(stepId) {
         manualRefresh();
     } else if (stepId === 'claude') {
         loadFeaturesSentToClaude();
-    } else if (stepId === 'classified') {
-        setCategoryFilter('all', document.querySelector('#category-filter-row .cat-filter-pill[data-cat="all"]'));
-        if (currentFunnelData) renderFunnelBar(currentFunnelData, 'classified');
     }
 }
 
