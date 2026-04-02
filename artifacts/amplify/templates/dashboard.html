@@ -3235,7 +3235,8 @@ function doPublishToChannel(chKey) {
     .then(function(data) {
         publishingInFlight[chKey] = false;
         if (!data.success) {
-            showToast('Post failed: ' + (data.error || 'Unknown error'), 'error');
+            showToast('Post failed: ' + (data.error || 'Unknown error') + ' - opening preview instead', 'error');
+            previewOnX(chKey);
             return;
         }
         if (data.method === 'fallback') {
@@ -3257,7 +3258,8 @@ function doPublishToChannel(chKey) {
     })
     .catch(function(err) {
         publishingInFlight[chKey] = false;
-        showToast('Error: ' + err.message, 'error');
+        showToast('Error: ' + err.message + ' - opening preview instead', 'error');
+        previewOnX(chKey);
     });
 }
 
