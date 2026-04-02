@@ -379,6 +379,7 @@
         .card-bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .channel-pills { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
         .channel-pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-muted); }
+        .channel-pill.ch-published { border-color: #4ade80; color: #4ade80; background: rgba(74,222,128,0.1); }
         .published-channels-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; padding-left: 56px; }
         .pub-ch-pill { font-size: 10px; padding: 2px 7px; border-radius: 99px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
         .pub-ch-pill.pub-posted { background: #1a3a2a; color: #4ade80; }
@@ -2197,10 +2198,13 @@ function buildCard(f, isAutoSkippedCard) {
 
     var channelHtml = '';
     if (!isAutoSkippedCard) {
-        channels.forEach(function(ch) { channelHtml += '<span class="channel-pill">' + escHtml(ch) + '</span>'; });
+        var pubChs = getFeaturePublishedChannels(fid);
+        channels.forEach(function(ch) {
+            var isPub = pubChs.indexOf(ch) !== -1;
+            channelHtml += '<span class="channel-pill' + (isPub ? ' ch-published' : '') + '" data-ch="' + escAttr(ch) + '">' +
+                (isPub ? '&#10003; ' : '') + escHtml(ch) + '</span>';
+        });
     }
-
-    var publishedPillsHtml = buildPublishedPillsHtml(fid, channels);
 
     var actionBtn;
     if (isAutoSkippedCard) {
@@ -2235,7 +2239,6 @@ function buildCard(f, isAutoSkippedCard) {
                 '</div>' +
             '</div>' +
         '</div>' +
-        publishedPillsHtml +
         '<div class="card-expanded-content">' +
             buildDescBlock(f) +
             buildMetaPills(f) +
@@ -2734,28 +2737,24 @@ function buildPublishedPillsHtml(fid, recommendedChannels) {
 function refreshFeatureCardPublishStatus(fid) {
     var card = document.querySelector('.feature-card[data-fid="' + fid + '"]');
     if (!card) return;
-    var existing = card.querySelector('.published-channels-row');
-    if (existing) existing.remove();
-
-    var f = null;
-    for (var i = 0; i < allFeatures.length; i++) {
-        if (allFeatures[i].id === fid) { f = allFeatures[i]; break; }
-    }
-    var recCh = f && f.classification ? (f.classification.recommended_channels || []) : [];
-    var hasPub = getFeaturePublishedChannels(fid).length > 0;
-    if (hasPub) {
+    var pubChs = getFeaturePublishedChannels(fid);
+    if (pubChs.length > 0) {
         card.classList.add('published-card');
     } else {
         card.classList.remove('published-card');
     }
-    var pillsHtml = buildPublishedPillsHtml(fid, recCh);
-    if (!pillsHtml) return;
-
-    var bottomRow = card.querySelector('.card-bottom-row');
-    if (bottomRow) {
-        var wrapper = document.createElement('div');
-        wrapper.innerHTML = pillsHtml;
-        bottomRow.parentNode.insertBefore(wrapper.firstChild, bottomRow.nextSibling);
+    var pills = card.querySelectorAll('.channel-pill');
+    for (var i = 0; i < pills.length; i++) {
+        var ch = pills[i].getAttribute('data-ch');
+        if (ch && pubChs.indexOf(ch) !== -1) {
+            if (!pills[i].classList.contains('ch-published')) {
+                pills[i].classList.add('ch-published');
+                pills[i].innerHTML = '&#10003; ' + escHtml(ch);
+            }
+        } else {
+            pills[i].classList.remove('ch-published');
+            if (ch) pills[i].textContent = ch;
+        }
     }
 }
 
