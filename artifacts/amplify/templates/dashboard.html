@@ -617,6 +617,20 @@
         .img-meta .img-remove { color: #ef4444; }
         .img-meta .img-remove:hover { color: #f87171; }
         .channel-card.drag-highlight { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,201,167,0.15); }
+        .publish-dropdown .custom-dropdown-menu { top: auto; bottom: calc(100% + 4px); left: 0; }
+        .publish-dropdown .custom-dropdown-toggle { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+        .publish-dropdown .custom-dropdown-toggle:hover { background: #00b898; border-color: #00b898; }
+        .publish-dropdown .custom-dropdown-toggle .dd-arrow { color: rgba(255,255,255,0.7); }
+        .img-warning-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); }
+        .img-warning-modal-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 28px 32px; max-width: 420px; width: 90%; box-shadow: 0 16px 48px var(--shadow-strong); text-align: center; }
+        .img-warning-modal-box .img-warn-icon { font-size: 36px; margin-bottom: 12px; }
+        .img-warning-modal-box h3 { margin: 0 0 10px; font-size: 17px; color: var(--text-primary); }
+        .img-warning-modal-box p { margin: 0 0 20px; font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+        .img-warning-modal-box .img-warn-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .img-warning-modal-box .img-warn-btns button { padding: 9px 20px; border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--bg-panel); color: var(--text-body); transition: background 0.15s; }
+        .img-warning-modal-box .img-warn-btns .warn-btn-continue { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .img-warning-modal-box .img-warn-btns .warn-btn-continue:hover { background: #00b898; }
+        .img-warning-modal-box .img-warn-btns button:hover { background: var(--border); }
         .content-bottom-bar {
             position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-panel);
             border-top: 1px solid var(--border); padding: 14px 24px;
@@ -3078,6 +3092,7 @@ function removeBatchImage(idx) {
 }
 
 var PUBLISHABLE_CHANNELS = { twitter: '/api/publish/twitter' };
+var publishingInFlight = {};
 
 function updateChannelStatus(chKey) {
     var card = document.getElementById('ch-card-' + chKey);
@@ -3090,6 +3105,8 @@ function updateChannelStatus(chKey) {
         if (actionsEl) {
             var approveBtn = actionsEl.querySelector('.btn-approve');
             if (approveBtn) approveBtn.style.display = 'none';
+            var publishDdEl = actionsEl.querySelector('.publish-post-preview-dd');
+            if (publishDdEl) publishDdEl.style.display = 'none';
             var publishBtn = actionsEl.querySelector('.btn-publish-channel');
             if (publishBtn) publishBtn.style.display = 'none';
             var previewBtn = actionsEl.querySelector('.btn-preview-channel');
@@ -3117,19 +3134,13 @@ function updateChannelStatus(chKey) {
                 undo.onclick = function() { undoApproval(chKey); };
                 actionsEl.appendChild(undo);
             }
-            if (PUBLISHABLE_CHANNELS[chKey] && !actionsEl.querySelector('.btn-publish-channel')) {
-                var pubBtn = document.createElement('button');
-                pubBtn.className = 'btn-publish-channel';
-                pubBtn.id = 'publish-btn-' + chKey;
-                pubBtn.textContent = 'Post to X \u2192';
-                pubBtn.onclick = function() { publishToChannel(chKey); };
-                actionsEl.insertBefore(pubBtn, actionsEl.querySelector('.btn-undo-approve'));
-
-                var prevBtn = document.createElement('button');
-                prevBtn.className = 'btn-preview-channel';
-                prevBtn.textContent = 'Preview on X \u2197';
-                prevBtn.onclick = function() { previewOnX(chKey); };
-                actionsEl.insertBefore(prevBtn, actionsEl.querySelector('.btn-undo-approve'));
+            if (PUBLISHABLE_CHANNELS[chKey] && !actionsEl.querySelector('.publish-post-preview-dd')) {
+                var ddId = 'publish-dd-' + chKey;
+                var ddWrapper = document.createElement('div');
+                ddWrapper.className = 'custom-dropdown publish-dropdown publish-post-preview-dd';
+                ddWrapper.id = ddId;
+                ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">Post or Preview</span><span class="dd-arrow">&#9650;</span></button><div class="custom-dropdown-menu"><div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); document.getElementById(\'' + ddId + '\').querySelector(\'.custom-dropdown-menu\').classList.remove(\'open\');">Post to X &#x2192;</div><div class="custom-dropdown-item" onclick="previewOnX(\'' + chKey + '\'); document.getElementById(\'' + ddId + '\').querySelector(\'.custom-dropdown-menu\').classList.remove(\'open\');">Preview on X &#x2197;</div></div>';
+                actionsEl.insertBefore(ddWrapper, actionsEl.querySelector('.btn-undo-approve'));
             }
         }
     } else {
@@ -3140,6 +3151,8 @@ function updateChannelStatus(chKey) {
             if (approveBtn) { approveBtn.style.display = ''; approveBtn.textContent = 'Approve \u2713'; approveBtn.disabled = false; }
             var undo = actionsEl.querySelector('.btn-undo-approve');
             if (undo) undo.remove();
+            var publishDd = actionsEl.querySelector('.publish-post-preview-dd');
+            if (publishDd) publishDd.remove();
             var publishBtn = actionsEl.querySelector('.btn-publish-channel');
             if (publishBtn) publishBtn.remove();
             var previewBtn = actionsEl.querySelector('.btn-preview-channel');
@@ -3148,19 +3161,33 @@ function updateChannelStatus(chKey) {
     }
 }
 
+function showImageWarningModal(message, onContinue) {
+    var modal = document.createElement('div');
+    modal.className = 'img-warning-modal';
+    modal.innerHTML = '<div class="img-warning-modal-box"><div class="img-warn-icon">\uD83D\uDDBC\uFE0F</div><h3>Image Cannot Be Sent Automatically</h3><p>' + message + '</p><div class="img-warn-btns"><button class="warn-btn-cancel">Cancel</button><button class="warn-btn-continue">Continue Anyway</button></div></div>';
+    document.body.appendChild(modal);
+    modal.querySelector('.warn-btn-cancel').onclick = function() { modal.remove(); };
+    modal.querySelector('.warn-btn-continue').onclick = function() { modal.remove(); onContinue(); };
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
 function previewOnX(chKey) {
     var ta = document.getElementById('ta-' + chKey);
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to preview', 'error'); return; }
     var encoded = encodeURIComponent(content);
     var url = 'https://twitter.com/intent/tweet?text=' + encoded;
-    window.open(url, '_blank');
     if (contentViewImages[chKey]) {
-        showToast('Remember to paste your image in the Twitter compose box');
+        showImageWarningModal('X\'s compose link cannot carry images. Your tweet text has been pre-filled, but you\'ll need to attach the image manually in the X compose box before posting.', function() {
+            window.open(url, '_blank');
+        });
+    } else {
+        window.open(url, '_blank');
     }
 }
 
 function publishToChannel(chKey) {
+    if (publishingInFlight[chKey]) { showToast('Already posting\u2026 please wait', 'warning'); return; }
     var endpoint = PUBLISHABLE_CHANNELS[chKey];
     if (!endpoint) { showToast('Publishing not yet supported for ' + chKey, 'warning'); return; }
 
@@ -3168,8 +3195,7 @@ function publishToChannel(chKey) {
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to publish', 'error'); return; }
 
-    var btn = document.getElementById('publish-btn-' + chKey);
-    if (btn) { btn.textContent = 'Posting...'; btn.disabled = true; }
+    publishingInFlight[chKey] = true;
 
     var payload = { content: content };
     var imgData = contentViewImages[chKey];
@@ -3184,10 +3210,22 @@ function publishToChannel(chKey) {
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
+        publishingInFlight[chKey] = false;
         if (!data.success) {
             showToast('Post failed: ' + (data.error || 'Unknown error') + ' - opening preview instead', 'error');
-            if (btn) { btn.textContent = 'Post to X \u2192'; btn.disabled = false; }
             previewOnX(chKey);
+            return;
+        }
+        if (data.method === 'fallback') {
+            var tweetUrl = data.tweet_url;
+            if (data.has_image_reminder) {
+                showImageWarningModal('No Twitter API credentials are configured, so your tweet text has been pre-filled via the X compose link. You\'ll need to attach your image manually in the X compose box before posting.', function() {
+                    window.open(tweetUrl, '_blank');
+                });
+            } else {
+                window.open(tweetUrl, '_blank');
+                showToast('Tweet text pre-filled \u2014 click Post in the X compose window');
+            }
             return;
         }
         contentViewPublished[chKey] = true;
@@ -3196,8 +3234,8 @@ function publishToChannel(chKey) {
         showToast('Posted to X! \u2705' + tweetLink);
     })
     .catch(function(err) {
+        publishingInFlight[chKey] = false;
         showToast('Error: ' + err.message + ' - opening preview instead', 'error');
-        if (btn) { btn.textContent = 'Post to X \u2192'; btn.disabled = false; }
         previewOnX(chKey);
     });
 }
