@@ -1126,6 +1126,125 @@
             border-top: 1px solid var(--footer-border); margin-top: 40px;
         }
 
+        .btn-generate-all-top {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+            color: #fff; border: none; padding: 6px 14px; border-radius: 8px;
+            font-size: 12px; font-weight: 600; cursor: pointer;
+            transition: all 0.2s; margin-left: 8px; white-space: nowrap;
+        }
+        .btn-generate-all-top:hover { background: linear-gradient(135deg, #6d28d9, #9333ea); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(124,58,237,0.3); }
+        .btn-generate-all-top svg { flex-shrink: 0; }
+
+        .generate-all-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg-primary); z-index: 100; overflow-y: auto;
+        }
+        .generate-all-progress {
+            display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; padding: 40px 20px;
+        }
+        .generate-all-progress-inner {
+            max-width: 520px; width: 100%; text-align: center;
+        }
+        .generate-all-progress-title {
+            font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 20px;
+        }
+        .genall-progress-text {
+            font-size: 14px; color: var(--text-muted); margin-top: 12px; margin-bottom: 20px;
+        }
+        .genall-feature-checks {
+            text-align: left; margin-top: 16px;
+        }
+        .genall-check-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 12px; border-radius: 8px;
+            font-size: 14px; color: var(--text-muted);
+            transition: all 0.3s;
+        }
+        .genall-check-item.done { color: var(--text-primary); }
+        .genall-check-item.done .genall-check-icon { color: #00C9A7; }
+        .genall-check-item.error .genall-check-icon { color: #ef4444; }
+        .genall-check-icon { font-size: 18px; width: 24px; text-align: center; }
+        .genall-check-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .generate-all-summary {
+            display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; padding: 40px 20px;
+        }
+        .generate-all-summary-inner {
+            max-width: 480px; width: 100%; text-align: center;
+        }
+        .genall-summary-icon { font-size: 48px; margin-bottom: 12px; }
+        .genall-summary-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+        .genall-summary-text { font-size: 15px; color: var(--text-muted); margin-bottom: 20px; }
+        .btn-review-all {
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+            color: #fff; border: none; padding: 10px 28px; border-radius: 8px;
+            font-size: 15px; font-weight: 600; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-review-all:hover { background: linear-gradient(135deg, #6d28d9, #9333ea); transform: translateY(-1px); }
+
+        .generate-all-review { padding: 20px 24px 120px; max-width: 900px; margin: 0 auto; }
+        .generate-all-review-header {
+            display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+            position: sticky; top: 0; background: var(--bg-primary); z-index: 10; padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .genall-review-title { flex: 1; font-size: 20px; font-weight: 700; color: var(--text-primary); }
+        .genall-approve-everything {
+            background: linear-gradient(135deg, #00C9A7, #00b894);
+            color: #fff; border: none; padding: 8px 18px; border-radius: 8px;
+            font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+        }
+        .genall-approve-everything:hover { filter: brightness(1.1); }
+
+        .genall-feature-section {
+            border: 1px solid var(--border); border-radius: 12px;
+            margin-bottom: 16px; overflow: hidden;
+            background: var(--bg-card);
+        }
+        .genall-feature-section-header {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 16px; background: var(--bg-card);
+            border-bottom: 1px solid var(--border); flex-wrap: wrap;
+        }
+        .genall-collapse-btn {
+            background: none; border: none; cursor: pointer; padding: 4px;
+            color: var(--text-muted); font-size: 14px;
+        }
+        .genall-collapse-arrow { transition: transform 0.2s; display: inline-block; }
+        .genall-feature-name {
+            flex: 1; min-width: 0; font-weight: 600; font-size: 15px;
+            color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .genall-approve-feature {
+            background: var(--accent); color: #fff; border: none;
+            padding: 5px 12px; border-radius: 6px; font-size: 11px;
+            font-weight: 600; cursor: pointer; white-space: nowrap;
+        }
+        .genall-approve-feature:hover { filter: brightness(1.1); }
+        .genall-feature-section-body { padding: 12px 16px; }
+        .genall-channel-card { margin-bottom: 12px; }
+        .genall-channel-card:last-child { margin-bottom: 0; }
+
+        .genall-review-bottom {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            display: flex; align-items: center; justify-content: center; gap: 16px;
+            padding: 14px 24px; background: var(--bg-card);
+            border-top: 1px solid var(--border);
+            box-shadow: 0 -2px 12px rgba(0,0,0,0.1); z-index: 20;
+        }
+        .genall-approved-count { font-size: 14px; color: var(--text-muted); font-weight: 600; }
+        .genall-publish-all {
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+            color: #fff; border: none; padding: 10px 24px; border-radius: 8px;
+            font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .genall-publish-all:hover { filter: brightness(1.1); }
+        .genall-publish-all:disabled { opacity: 0.5; cursor: not-allowed; }
+
         @media (max-width: 768px) {
             .topbar { padding: 12px 16px; }
             .main { padding: 20px 12px; }
@@ -1142,6 +1261,9 @@
             .category-filter-row { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
             .funnel-bar { overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; }
             .content-bottom-bar, .picker-bottom-bar, .batch-bottom-bar { padding: 10px 12px; }
+            .btn-generate-all-top { font-size: 11px; padding: 5px 10px; }
+            .generate-all-review { padding: 12px 12px 120px; }
+            .genall-feature-section-header { flex-direction: column; align-items: flex-start; }
         }
     </style>
 </head>
@@ -1214,6 +1336,10 @@
                         </div>
                     </div>
                     <input type="hidden" id="importance-filter" value="3">
+                    <button class="btn-generate-all-top" id="btn-generate-all-top" onclick="generateAllTopFeatures()" title="Generate content for top 5 features across Twitter, Email &amp; In-App">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                        Generate All Top Features
+                    </button>
                 </div>
                 <span id="dyk-toggle" style="display:none;"></span>
             </div>
@@ -1390,6 +1516,40 @@
                     <div class="analytics-subtitle" id="fb-subtitle">marketer edits learned from</div>
                     <div class="analytics-feedback-list" id="fb-examples"></div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="generate-all-overlay" class="generate-all-overlay" style="display:none;">
+        <div id="generate-all-progress" class="generate-all-progress" style="display:none;">
+            <div class="generate-all-progress-inner">
+                <h2 class="generate-all-progress-title">Generating content...</h2>
+                <div class="progress-bar-track"><div class="progress-bar-fill" id="genall-progress-fill" style="width:0%"></div></div>
+                <div class="genall-progress-text" id="genall-progress-text">Generating content... 0/0 features done</div>
+                <div class="genall-feature-checks" id="genall-feature-checks"></div>
+            </div>
+        </div>
+
+        <div id="generate-all-summary" class="generate-all-summary" style="display:none;">
+            <div class="generate-all-summary-inner">
+                <div class="genall-summary-icon">&#9889;</div>
+                <h2 class="genall-summary-title" id="genall-summary-title">Generation Complete</h2>
+                <p class="genall-summary-text" id="genall-summary-text"></p>
+                <button class="btn-review-all" id="btn-review-all" onclick="showGenerateAllReview()">Review All &rarr;</button>
+                <button class="btn-back" onclick="closeGenerateAllOverlay()" style="margin-top:8px;">Back to Dashboard</button>
+            </div>
+        </div>
+
+        <div id="generate-all-review" class="generate-all-review" style="display:none;">
+            <div class="generate-all-review-header">
+                <button class="btn-back" onclick="closeGenerateAllOverlay()">&larr; Back to Dashboard</button>
+                <h2 class="genall-review-title">Batch Review</h2>
+                <button class="btn-approve genall-approve-everything" id="btn-approve-everything" onclick="genallApproveEverything()">Approve Everything</button>
+            </div>
+            <div class="genall-review-list" id="genall-review-list"></div>
+            <div class="genall-review-bottom" id="genall-review-bottom" style="display:none;">
+                <span class="genall-approved-count" id="genall-approved-count">0/0 approved</span>
+                <button class="btn-publish genall-publish-all" id="btn-genall-publish" onclick="genallPublishAllApproved()">Publish All Approved &rarr;</button>
             </div>
         </div>
     </div>
@@ -5862,6 +6022,565 @@ function batchPreviewAllOnX() {
     } else {
         window.open(url, '_blank');
     }
+}
+
+var genallResults = [];
+var genallApproved = {};
+var genallPublishedState = {};
+var genallInitialDrafts = {};
+var genallRegenFeedback = {};
+var genallCollapsed = {};
+var GENALL_CHANNELS = ['twitter', 'email_standalone', 'inapp'];
+var GENALL_CHANNEL_NAMES = { twitter: 'Twitter / X', email_standalone: 'Email', inapp: 'In-App' };
+
+function generateAllTopFeatures() {
+    var filtered = getFilteredFeatures();
+    filtered.sort(function(a, b) {
+        return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
+    });
+    var top = filtered.slice(0, 5);
+    if (top.length === 0) { showToast('No features available to generate', 'warning'); return; }
+
+    genallResults = [];
+    genallApproved = {};
+    genallPublishedState = {};
+    genallInitialDrafts = {};
+    genallRegenFeedback = {};
+    genallCollapsed = {};
+
+    var overlay = document.getElementById('generate-all-overlay');
+    overlay.style.display = 'block';
+    document.getElementById('generate-all-progress').style.display = 'flex';
+    document.getElementById('generate-all-summary').style.display = 'none';
+    document.getElementById('generate-all-review').style.display = 'none';
+    document.querySelector('.main').style.display = 'none';
+
+    var checksHtml = top.map(function(f, i) {
+        return '<div class="genall-check-item" id="genall-check-' + i + '">' +
+            '<span class="genall-check-icon">&#9744;</span>' +
+            '<span class="genall-check-title">' + escHtml(f.title) + '</span>' +
+        '</div>';
+    }).join('');
+    document.getElementById('genall-feature-checks').innerHTML = checksHtml;
+    document.getElementById('genall-progress-fill').style.width = '0%';
+    document.getElementById('genall-progress-text').textContent = 'Generating content... 0/' + top.length + ' features done';
+
+    var animatedCount = 0;
+    var progressInterval = setInterval(function() {
+        if (animatedCount < top.length - 1) {
+            animatedCount++;
+            var pct = Math.round((animatedCount / top.length) * 90);
+            document.getElementById('genall-progress-fill').style.width = pct + '%';
+            document.getElementById('genall-progress-text').textContent =
+                'Generating content... ' + animatedCount + '/' + top.length + ' features done';
+            var checkEl = document.getElementById('genall-check-' + (animatedCount - 1));
+            if (checkEl) {
+                checkEl.querySelector('.genall-check-icon').innerHTML = '&#9745;';
+                checkEl.classList.add('done');
+            }
+        }
+    }, 8000);
+
+    fetch('/api/generate/batch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ features: top, channels: GENALL_CHANNELS, min_importance: 1 })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        clearInterval(progressInterval);
+        if (data.error) {
+            document.getElementById('generate-all-progress').style.display = 'none';
+            document.getElementById('generate-all-summary').style.display = 'flex';
+            document.getElementById('genall-summary-text').textContent = 'Batch generation failed: ' + data.error;
+            return;
+        }
+
+        var results = data.results || [];
+        var totalDrafts = 0;
+        var featureMap = {};
+        top.forEach(function(f, i) { featureMap[f.id] = i; });
+
+        var matchedIds = {};
+        results.forEach(function(r) {
+            var fIdx = featureMap[r.feature_id];
+            if (fIdx === undefined) return;
+            matchedIds[r.feature_id] = true;
+            var feature = top[fIdx];
+            var content = r.generated_content || {};
+            var channelCount = 0;
+            GENALL_CHANNELS.forEach(function(ch) { if (content[ch]) channelCount++; });
+            totalDrafts += channelCount;
+            genallResults.push({ feature: feature, channels: content });
+
+            var checkEl = document.getElementById('genall-check-' + fIdx);
+            if (checkEl) {
+                checkEl.querySelector('.genall-check-icon').innerHTML = '&#9745;';
+                checkEl.classList.add('done');
+                checkEl.classList.remove('error');
+            }
+        });
+
+        var failedCount = 0;
+        top.forEach(function(f, i) {
+            if (!matchedIds[f.id]) {
+                failedCount++;
+                genallResults.push({ feature: f, channels: {}, error: 'Not in batch response' });
+                var checkEl = document.getElementById('genall-check-' + i);
+                if (checkEl) {
+                    checkEl.querySelector('.genall-check-icon').innerHTML = '&#10060;';
+                    checkEl.classList.add('error');
+                    checkEl.classList.remove('done');
+                }
+            }
+        });
+
+        document.getElementById('genall-progress-fill').style.width = '100%';
+        document.getElementById('genall-progress-text').textContent =
+            'Done! ' + results.length + '/' + top.length + ' features completed';
+
+        setTimeout(function() {
+            document.getElementById('generate-all-progress').style.display = 'none';
+            document.getElementById('generate-all-summary').style.display = 'flex';
+            var successCount = results.length;
+            var summaryText = 'Generated content for ' + successCount + ' feature' + (successCount !== 1 ? 's' : '') +
+                ' across ' + GENALL_CHANNELS.length + ' channels (' + totalDrafts + ' drafts total)';
+            if (failedCount > 0) summaryText += '. ' + failedCount + ' feature' + (failedCount !== 1 ? 's' : '') + ' failed.';
+            document.getElementById('genall-summary-text').textContent = summaryText;
+        }, 800);
+    })
+    .catch(function(err) {
+        clearInterval(progressInterval);
+        document.getElementById('generate-all-progress').style.display = 'none';
+        document.getElementById('generate-all-summary').style.display = 'flex';
+        document.getElementById('genall-summary-text').textContent = 'Batch generation failed: ' + err.message;
+    });
+}
+
+function closeGenerateAllOverlay() {
+    document.getElementById('generate-all-overlay').style.display = 'none';
+    document.querySelector('.main').style.display = '';
+    window.scrollTo(0, 0);
+}
+
+function showGenerateAllReview() {
+    document.getElementById('generate-all-progress').style.display = 'none';
+    document.getElementById('generate-all-summary').style.display = 'none';
+    document.getElementById('generate-all-review').style.display = 'block';
+
+    var list = document.getElementById('genall-review-list');
+    list.innerHTML = '';
+
+    genallResults.forEach(function(result, fIdx) {
+        if (result.error) return;
+        var feature = result.feature;
+        var cl = feature.classification || {};
+        var score = cl.importance_score || 0;
+        var cats = cl.categories || [cl.category || 'unclassified'];
+        var catBadges = cats.map(function(c) {
+            return '<span class="cat-badge cat-' + c + '" style="font-size:10px;padding:1px 6px;">' + (CAT_LABELS[c] || c) + '</span>';
+        }).join('');
+
+        var section = document.createElement('div');
+        section.className = 'genall-feature-section';
+        section.id = 'genall-section-' + fIdx;
+
+        var headerDiv = document.createElement('div');
+        headerDiv.className = 'genall-feature-section-header';
+        headerDiv.innerHTML =
+            '<button class="genall-collapse-btn" id="genall-collapse-btn-' + fIdx + '" onclick="toggleGenallSection(' + fIdx + ')">' +
+                '<span class="genall-collapse-arrow" id="genall-arrow-' + fIdx + '">&#9660;</span>' +
+            '</button>' +
+            '<span class="score-badge score-' + score + '" style="width:26px;height:26px;font-size:13px;">' + score + '</span>' +
+            '<span class="genall-feature-name">' + escHtml(feature.title) + '</span>' +
+            catBadges +
+            '<button class="btn-approve genall-approve-feature" onclick="genallApproveAllForFeature(' + fIdx + ')">Approve All for ' + escHtml(feature.title).substring(0, 30) + '</button>';
+        section.appendChild(headerDiv);
+
+        var bodyDiv = document.createElement('div');
+        bodyDiv.className = 'genall-feature-section-body';
+        bodyDiv.id = 'genall-body-' + fIdx;
+
+        GENALL_CHANNELS.forEach(function(chKey) {
+            var ch = result.channels[chKey];
+            if (!ch) return;
+            var cardKey = fIdx + '-' + chKey;
+            genallApproved[cardKey] = false;
+            genallInitialDrafts[cardKey] = ch.content || '';
+            genallRegenFeedback[cardKey] = '';
+
+            var card = document.createElement('div');
+            card.className = 'channel-card genall-channel-card';
+            card.id = 'genall-card-' + cardKey;
+            var icon = CHANNEL_ICONS[chKey] || '\uD83D\uDCE2';
+            var content = ch.content || '';
+            var maxChars = ch.max_chars || 9999;
+            var charClass = content.length <= maxChars ? 'ok' : 'over';
+
+            card.innerHTML =
+                '<div class="channel-card-header">' +
+                    '<span class="channel-icon">' + icon + '</span>' +
+                    '<span class="channel-name">' + escHtml(GENALL_CHANNEL_NAMES[chKey] || ch.channel_display_name || chKey) + '</span>' +
+                    '<span class="char-count-badge ' + charClass + '" id="genall-char-' + cardKey + '">' + content.length + '/' + maxChars + '</span>' +
+                    '<span class="status-badge draft" id="genall-status-' + cardKey + '">Draft</span>' +
+                    (ch.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
+                '</div>' +
+                '<div class="channel-card-body">' +
+                    '<textarea class="channel-textarea" id="genall-ta-' + cardKey + '" data-key="' + cardKey + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(content) + '</textarea>' +
+                    '<div class="md-preview" id="genall-md-' + cardKey + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(content) + '</div>' +
+                '</div>' +
+                '<div class="channel-card-loading" id="genall-loading-' + cardKey + '" style="display:none;"><div class="spinner"></div><span>Regenerating...</span></div>' +
+                '<div class="channel-card-actions" id="genall-actions-' + cardKey + '">' +
+                    '<button class="btn-approve" id="genall-approve-btn-' + cardKey + '" onclick="genallApproveItem(\'' + cardKey + '\')">Approve &#10003;</button>' +
+                    '<input type="text" class="regen-feedback-input" id="genall-feedback-' + cardKey + '" placeholder="Optional: what to change...">' +
+                    '<button class="btn-regen" onclick="genallRegenItem(\'' + cardKey + '\')">Regenerate</button>' +
+                '</div>';
+
+            var ta = card.querySelector('textarea');
+            ta.addEventListener('input', function() {
+                var len = this.value.length;
+                var max = parseInt(this.getAttribute('data-max'));
+                var badge = document.getElementById('genall-char-' + cardKey);
+                if (badge) {
+                    badge.textContent = len + '/' + max;
+                    badge.className = 'char-count-badge ' + (len <= max ? 'ok' : 'over');
+                }
+            });
+            setTimeout(function() { autoResizeTextarea(ta); }, 0);
+            ta.addEventListener('input', function() { autoResizeTextarea(this); });
+
+            var mdPreview = card.querySelector('.md-preview');
+            if (mdPreview) {
+                mdPreview.addEventListener('click', function(e) {
+                    if (e.target.closest && e.target.closest('a')) return;
+                    if (e.target.tagName === 'A') return;
+                    genallSwitchToEdit(cardKey);
+                });
+            }
+            ta.addEventListener('blur', function() { genallSwitchToPreview(cardKey); });
+
+            var fbInput = card.querySelector('.regen-feedback-input');
+            var regenBtn = card.querySelector('.btn-regen');
+            if (fbInput && regenBtn) {
+                fbInput.addEventListener('input', function() {
+                    if (this.value.trim()) regenBtn.classList.add('has-feedback');
+                    else regenBtn.classList.remove('has-feedback');
+                });
+            }
+
+            bodyDiv.appendChild(card);
+        });
+
+        section.appendChild(bodyDiv);
+        list.appendChild(section);
+    });
+
+    document.getElementById('genall-review-bottom').style.display = 'flex';
+    updateGenallApprovalCount();
+}
+
+function toggleGenallSection(fIdx) {
+    var body = document.getElementById('genall-body-' + fIdx);
+    var arrow = document.getElementById('genall-arrow-' + fIdx);
+    if (!body) return;
+    if (genallCollapsed[fIdx]) {
+        body.style.display = '';
+        arrow.innerHTML = '&#9660;';
+        genallCollapsed[fIdx] = false;
+    } else {
+        body.style.display = 'none';
+        arrow.innerHTML = '&#9654;';
+        genallCollapsed[fIdx] = true;
+    }
+}
+
+function genallSwitchToEdit(cardKey) {
+    var ta = document.getElementById('genall-ta-' + cardKey);
+    var preview = document.getElementById('genall-md-' + cardKey);
+    if (!ta || !preview) return;
+    preview.style.display = 'none';
+    ta.style.display = 'block';
+    autoResizeTextarea(ta);
+    ta.focus();
+}
+
+function genallSwitchToPreview(cardKey) {
+    var ta = document.getElementById('genall-ta-' + cardKey);
+    var preview = document.getElementById('genall-md-' + cardKey);
+    if (!ta || !preview) return;
+    preview.innerHTML = simpleMarkdown(ta.value);
+    preview.style.display = 'block';
+    ta.style.display = 'none';
+}
+
+function genallApproveItem(cardKey) {
+    var parts = cardKey.split('-');
+    var fIdx = parseInt(parts[0]);
+    var chKey = parts.slice(1).join('-');
+    var ta = document.getElementById('genall-ta-' + cardKey);
+    var currentContent = ta ? ta.value : '';
+    var initialContent = genallInitialDrafts[cardKey] || '';
+    var feedbackParts = [];
+    if (genallRegenFeedback[cardKey]) feedbackParts.push('Regenerated with feedback: ' + genallRegenFeedback[cardKey]);
+    if (currentContent !== initialContent) feedbackParts.push('Marketer edited the draft');
+    var feedbackNote = feedbackParts.join('. ');
+
+    var feature = genallResults[fIdx] ? genallResults[fIdx].feature : {};
+    var approveBtn = document.getElementById('genall-approve-btn-' + cardKey);
+    if (approveBtn) { approveBtn.textContent = 'Saving...'; approveBtn.disabled = true; }
+
+    fetch('/api/approve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            feature: feature, channel: chKey,
+            original_draft: initialContent, approved_draft: currentContent, feedback_note: feedbackNote
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            showToast('Approve failed: ' + data.error, 'error');
+            if (approveBtn) { approveBtn.textContent = 'Approve \u2713'; approveBtn.disabled = false; }
+            return;
+        }
+        genallApproved[cardKey] = true;
+        updateGenallCardStatus(cardKey);
+        updateGenallApprovalCount();
+        showToast('Approved!');
+    })
+    .catch(function(err) {
+        showToast('Error: ' + err.message, 'error');
+        if (approveBtn) { approveBtn.textContent = 'Approve \u2713'; approveBtn.disabled = false; }
+    });
+}
+
+function updateGenallCardStatus(cardKey) {
+    var card = document.getElementById('genall-card-' + cardKey);
+    var status = document.getElementById('genall-status-' + cardKey);
+    var approveBtn = document.getElementById('genall-approve-btn-' + cardKey);
+
+    if (genallPublishedState[cardKey]) {
+        if (card) { card.classList.add('approved'); card.classList.add('published'); }
+        if (status) { status.className = 'status-badge published-badge'; status.textContent = 'Published \u2713'; }
+        if (approveBtn) approveBtn.style.display = 'none';
+    } else if (genallApproved[cardKey]) {
+        if (card) { card.classList.add('approved'); card.classList.remove('published'); }
+        if (status) { status.className = 'status-badge approved-badge'; status.textContent = 'Approved \u2713'; }
+        if (approveBtn) { approveBtn.style.display = 'none'; }
+        var actions = document.getElementById('genall-actions-' + cardKey);
+        if (actions && !actions.querySelector('.btn-undo-approve')) {
+            var undo = document.createElement('button');
+            undo.className = 'btn-undo-approve';
+            undo.textContent = 'Undo';
+            undo.onclick = function() { genallUndoApprove(cardKey); };
+            actions.insertBefore(undo, actions.firstChild);
+        }
+    } else {
+        if (card) { card.classList.remove('approved'); card.classList.remove('published'); }
+        if (status) { status.className = 'status-badge draft'; status.textContent = 'Draft'; }
+        if (approveBtn) { approveBtn.style.display = ''; approveBtn.textContent = 'Approve \u2713'; approveBtn.disabled = false; }
+        var actions = document.getElementById('genall-actions-' + cardKey);
+        if (actions) { var u = actions.querySelector('.btn-undo-approve'); if (u) u.remove(); }
+    }
+}
+
+function genallUndoApprove(cardKey) {
+    genallApproved[cardKey] = false;
+    genallPublishedState[cardKey] = false;
+    updateGenallCardStatus(cardKey);
+    updateGenallApprovalCount();
+}
+
+function updateGenallApprovalCount() {
+    var total = 0, approved = 0;
+    var keys = Object.keys(genallApproved);
+    for (var i = 0; i < keys.length; i++) { total++; if (genallApproved[keys[i]]) approved++; }
+    var txt = approved + '/' + total + ' approved';
+    var el = document.getElementById('genall-approved-count');
+    if (el) el.textContent = txt;
+    var btn = document.getElementById('btn-genall-publish');
+    if (btn) btn.disabled = approved === 0;
+}
+
+function genallApproveAllForFeature(fIdx) {
+    GENALL_CHANNELS.forEach(function(chKey) {
+        var cardKey = fIdx + '-' + chKey;
+        if (genallApproved[cardKey] === false) genallApproveItem(cardKey);
+    });
+}
+
+function genallApproveEverything() {
+    var keys = Object.keys(genallApproved);
+    for (var i = 0; i < keys.length; i++) {
+        if (!genallApproved[keys[i]]) genallApproveItem(keys[i]);
+    }
+}
+
+function genallRegenItem(cardKey) {
+    var parts = cardKey.split('-');
+    var fIdx = parseInt(parts[0]);
+    var chKey = parts.slice(1).join('-');
+    var feedbackInput = document.getElementById('genall-feedback-' + cardKey);
+    var feedback = feedbackInput ? feedbackInput.value.trim() : '';
+    var bodyEl = document.getElementById('genall-card-' + cardKey);
+    var cardBody = bodyEl ? bodyEl.querySelector('.channel-card-body') : null;
+    var actionsEl = document.getElementById('genall-actions-' + cardKey);
+    var loadingEl = document.getElementById('genall-loading-' + cardKey);
+
+    if (cardBody) cardBody.style.display = 'none';
+    if (actionsEl) actionsEl.style.display = 'none';
+    if (loadingEl) loadingEl.style.display = 'flex';
+
+    var feature = genallResults[fIdx] ? genallResults[fIdx].feature : {};
+
+    fetch('/api/generate/single', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ feature: feature, channel: chKey, feedback: feedback })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (cardBody) cardBody.style.display = '';
+        if (actionsEl) actionsEl.style.display = 'flex';
+        if (data.error) { showToast('Regeneration failed: ' + data.error, 'error'); return; }
+
+        var ta = document.getElementById('genall-ta-' + cardKey);
+        if (ta) { ta.value = data.content || ''; autoResizeTextarea(ta); ta.dispatchEvent(new Event('input')); }
+        genallRegenFeedback[cardKey] = feedback;
+        if (feedbackInput) feedbackInput.value = '';
+        if (genallApproved[cardKey]) {
+            genallApproved[cardKey] = false;
+            updateGenallCardStatus(cardKey);
+            updateGenallApprovalCount();
+        }
+        genallSwitchToPreview(cardKey);
+    })
+    .catch(function(err) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (cardBody) cardBody.style.display = '';
+        if (actionsEl) actionsEl.style.display = 'flex';
+        showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function genallPublishAllApproved() {
+    var approvedKeys = [];
+    var keys = Object.keys(genallApproved);
+    for (var i = 0; i < keys.length; i++) {
+        if (genallApproved[keys[i]] && !genallPublishedState[keys[i]]) {
+            approvedKeys.push(keys[i]);
+        }
+    }
+    if (approvedKeys.length === 0) { showToast('No approved items to publish', 'warning'); return; }
+
+    var publishableCount = 0;
+    var nonPublishable = [];
+    approvedKeys.forEach(function(cardKey) {
+        var chKey = cardKey.split('-').slice(1).join('-');
+        if (PUBLISHABLE_CHANNELS[chKey]) publishableCount++;
+        else nonPublishable.push(cardKey);
+    });
+
+    var parts = [];
+    var twitterCount = approvedKeys.filter(function(k) { return k.split('-').slice(1).join('-') === 'twitter'; }).length;
+    var emailCount = approvedKeys.filter(function(k) { var ch = k.split('-').slice(1).join('-'); return ch === 'email_standalone' || ch === 'email_newsletter'; }).length;
+    var inappCount = approvedKeys.filter(function(k) { return k.split('-').slice(1).join('-') === 'inapp'; }).length;
+    if (twitterCount > 0) parts.push('post ' + twitterCount + ' to X');
+    if (emailCount > 0) parts.push('send ' + emailCount + ' email(s)');
+    if (inappCount > 0) parts.push('publish ' + inappCount + ' in-app');
+    if (nonPublishable.length > 0) parts.push('copy ' + nonPublishable.length + ' to clipboard');
+    var msg = 'Publish all ' + approvedKeys.length + ' approved draft(s)? This will ' + parts.join(', ') + '.';
+
+    showPublishConfirm(msg, function() {
+        var btn = document.getElementById('btn-genall-publish');
+        if (btn) { btn.disabled = true; btn.textContent = 'Publishing...'; }
+        var pending = approvedKeys.length;
+        var results = {};
+
+        approvedKeys.forEach(function(cardKey) {
+            var cardParts = cardKey.split('-');
+            var fIdx = parseInt(cardParts[0]);
+            var chKey = cardParts.slice(1).join('-');
+            var endpoint = PUBLISHABLE_CHANNELS[chKey];
+            var ta = document.getElementById('genall-ta-' + cardKey);
+            var content = ta ? ta.value : '';
+            var feature = genallResults[fIdx] ? genallResults[fIdx].feature : {};
+            var fid = feature.id || '';
+
+            if (!endpoint) {
+                if (content) navigator.clipboard.writeText(content).catch(function(){});
+                genallPublishedState[cardKey] = true;
+                trackPublish(fid, chKey, 'clipboard');
+                updateGenallCardStatus(cardKey);
+                results[cardKey] = { status: 'clipboard' };
+                pending--;
+                if (pending <= 0) genallShowPublishDone(results, btn);
+                return;
+            }
+
+            if (!content) {
+                results[cardKey] = { status: 'failed', error: 'No content' };
+                pending--;
+                if (pending <= 0) genallShowPublishDone(results, btn);
+                return;
+            }
+
+            var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+            var isInapp = (chKey === 'inapp');
+            var payload = { content: content, feature_id: fid };
+            if (isEmail) { payload.channel = chKey; payload.is_test = true; }
+            else if (isInapp) { payload.feature_title = feature.title || ''; payload.category = feature.category || ''; }
+
+            fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    if (isEmail && data.method === 'fallback') {
+                        results[cardKey] = { status: 'draft' };
+                    } else if (!isEmail && !isInapp && data.method === 'fallback') {
+                        results[cardKey] = { status: 'fallback', url: data.tweet_url };
+                        if (data.tweet_url) window.open(data.tweet_url, '_blank');
+                    } else {
+                        genallPublishedState[cardKey] = true;
+                        trackPublish(fid, chKey, 'posted');
+                        updateGenallCardStatus(cardKey);
+                        results[cardKey] = { status: 'published' };
+                    }
+                } else {
+                    results[cardKey] = { status: 'failed', error: data.error || data.hint || 'Unknown error' };
+                }
+            })
+            .catch(function(err) { results[cardKey] = { status: 'failed', error: err.message }; })
+            .finally(function() {
+                pending--;
+                if (pending <= 0) genallShowPublishDone(results, btn);
+            });
+        });
+    }, { title: 'Publish All', confirmText: 'Yes, publish all' });
+}
+
+function genallShowPublishDone(results, btn) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Publish All Approved \u2192'; }
+    var published = 0, clipboard = 0, failed = 0, draft = 0, fallback = 0;
+    var keys = Object.keys(results);
+    for (var i = 0; i < keys.length; i++) {
+        var s = results[keys[i]].status;
+        if (s === 'published') published++;
+        else if (s === 'clipboard') clipboard++;
+        else if (s === 'draft') draft++;
+        else if (s === 'fallback') fallback++;
+        else failed++;
+    }
+    updateGenallApprovalCount();
+    var parts = [];
+    if (published > 0) parts.push(published + ' published');
+    if (clipboard > 0) parts.push(clipboard + ' copied to clipboard');
+    if (draft > 0) parts.push(draft + ' saved as draft (SendGrid not configured)');
+    if (fallback > 0) parts.push(fallback + ' opened in browser');
+    if (failed > 0) parts.push(failed + ' failed');
+    showToast(parts.join(', '), failed > 0 ? 'warning' : 'success');
 }
 
 function escHtml(str) {
