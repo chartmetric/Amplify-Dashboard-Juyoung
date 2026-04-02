@@ -3235,7 +3235,8 @@ function doPublishToChannel(chKey) {
     .then(function(data) {
         publishingInFlight[chKey] = false;
         if (!data.success) {
-            showToast('Post failed: ' + (data.error || 'Unknown error') + ' - opening preview instead', 'error');
+            var errMsg = data.hint || data.error || 'Unknown error';
+            showToast('Post failed: ' + errMsg, 'error');
             previewOnX(chKey);
             return;
         }
