@@ -36,8 +36,8 @@
             --score-opt-3: #3a2f0a;
             --score-opt-2: #3d2008;
             --score-opt-1: #1e2328;
-            --unclassified-bg: #16212d;
-            --unclassified-border: #1e2d3a;
+            --autoskipped-bg: #1a1a0d;
+            --autoskipped-border: #2d2d1a;
         }
         body.light {
             --bg-primary: #f5f7fa;
@@ -70,8 +70,8 @@
             --score-opt-3: rgba(234,179,8,0.12);
             --score-opt-2: rgba(249,115,22,0.12);
             --score-opt-1: rgba(107,114,128,0.12);
-            --unclassified-bg: #f0f2f5;
-            --unclassified-border: #e2e8f0;
+            --autoskipped-bg: #fefce8;
+            --autoskipped-border: #fde68a;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
@@ -227,8 +227,8 @@
         }
         .feature-card:hover { border-color: var(--border-hover); box-shadow: 0 4px 20px var(--shadow); transform: scale(1.01); }
         .feature-card.expanded { border-color: var(--accent); box-shadow: 0 4px 24px rgba(0,201,167,0.1); }
-        .feature-card.unclassified-card { border-color: var(--unclassified-border); background: var(--unclassified-bg); opacity: 0.85; }
-        .feature-card.unclassified-card:hover { border-color: var(--border); opacity: 1; }
+        .feature-card.autoskipped-card { border-color: var(--autoskipped-border); background: var(--autoskipped-bg); opacity: 0.85; }
+        .feature-card.autoskipped-card:hover { border-color: var(--border); opacity: 1; }
         .feature-card.just-classified { animation: fadeInClassified 0.5s ease-out; }
         @keyframes fadeInClassified {
             from { opacity: 0.5; transform: translateY(4px); border-color: rgba(0,201,167,0.5); }
@@ -247,7 +247,7 @@
         .score-2 { background: rgba(249,115,22,0.15); color: #f97316; }
         .score-1 { background: rgba(107,114,128,0.15); color: #6b7280; }
         .score-0 { background: rgba(107,114,128,0.1); color: #4b5563; }
-        .score-unclassified { background: rgba(75,85,99,0.12); color: #4b5563; font-size: 16px; font-weight: 700; }
+        .score-autoskipped { background: rgba(234,179,8,0.12); color: #eab308; font-size: 16px; font-weight: 700; }
         .override-indicator {
             position: absolute; top: -4px; right: -4px; font-size: 10px;
             background: var(--bg-card); border-radius: 50%; width: 16px; height: 16px;
@@ -290,7 +290,7 @@
         .cat-mobile { background: rgba(168,85,247,0.15); color: #a855f7; }
         .cat-deprecation { background: rgba(249,115,22,0.15); color: #f97316; }
         .cat-default { background: rgba(107,114,128,0.15); color: var(--text-muted); }
-        .cat-unclassified { background: rgba(75,85,99,0.12); color: #6b7280; font-style: italic; }
+        .cat-autoskipped { background: rgba(234,179,8,0.12); color: #eab308; font-style: italic; }
         .cat-badge { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.5px; }
         .cat-badge.cat-new_feature { background: rgba(0,201,167,0.15); color: #00C9A7; }
         .cat-badge.cat-improvement { background: rgba(59,130,246,0.15); color: #3b82f6; }
@@ -298,7 +298,7 @@
         .cat-badge.cat-infrastructure { background: rgba(107,114,128,0.15); color: #6b7280; }
         .cat-badge.cat-mobile { background: rgba(168,85,247,0.15); color: #a855f7; }
         .cat-badge.cat-deprecation { background: rgba(249,115,22,0.15); color: #f97316; }
-        .cat-badge.cat-unknown, .cat-badge.cat-unclassified { background: rgba(107,114,128,0.15); color: var(--text-muted); }
+        .cat-badge.cat-unknown, .cat-badge.cat-autoskipped { background: rgba(234,179,8,0.15); color: #eab308; }
         .pre-filter-badge { font-size: 10px; padding: 2px 8px; border-radius: 99px; background: rgba(107,114,128,0.15); color: #6b7280; }
         .auto-classified-pill {
             font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
@@ -1128,7 +1128,7 @@ function renderFunnelBar(data, activeStep) {
         }
     }
     var result = getFilteredFeatures();
-    var showingCount = result.classified.length + result.unclassified.length + result.asanaOnly.length;
+    var showingCount = result.classified.length + result.autoSkipped.length + result.asanaOnly.length;
 
     var steps = [
         {
@@ -1671,7 +1671,7 @@ function toggleSourceFilter(source, btn) {
 function updateFunnelAfterFilter() {
     if (currentFunnelData) {
         var result = getFilteredFeatures();
-        currentFunnelData.filtered = result.classified.length + result.unclassified.length + result.asanaOnly.length;
+        currentFunnelData.filtered = result.classified.length + result.autoSkipped.length + result.asanaOnly.length;
         renderFunnelBar(currentFunnelData, 'showing');
     }
 }
@@ -1687,28 +1687,30 @@ function getFilteredFeatures() {
     var showAnnounced = srcFilters.indexOf('announced') !== -1;
     var showNotAnnounced = srcFilters.indexOf('not_announced') !== -1;
     var classified = [];
-    var unclassified = [];
+    var autoSkipped = [];
     var asanaOnly = [];
 
     for (var i = 0; i < allFeatures.length; i++) {
         var f = allFeatures[i];
         var cl = f.classification;
         var isAsanaOnly = f.source === 'asana_only';
-        var isReallyUnclassified = !cl || cl.unclassified;
         var isAutoSkipped = cl && cl.classification_method === 'quick_keyword';
 
         if (isAsanaOnly && !showNotAnnounced) continue;
         if (!isAsanaOnly && !showAnnounced) continue;
 
-        if (isReallyUnclassified) {
+        if (isAutoSkipped) {
+            if (!isAllCats && !hasAutoSkippedCat) continue;
             if (isAsanaOnly) { asanaOnly.push(f); }
-            else { unclassified.push(f); }
-        } else if (isAutoSkipped) {
-            if (hasAutoSkippedCat) {
-                if (isAsanaOnly) { asanaOnly.push(f); }
-                else { classified.push(f); }
-            }
+            else { autoSkipped.push(f); }
         } else {
+            var isReallyUnclassified = !cl || cl.unclassified;
+            if (isReallyUnclassified) {
+                if (isAllCats) {
+                    if (isAsanaOnly) { asanaOnly.push(f); }
+                }
+                continue;
+            }
             var score = cl.importance_score || 0;
             if (!isAllCats && hasAutoSkippedCat && catFilters.length === 1) continue;
             if (!isAllCats) {
@@ -1736,7 +1738,7 @@ function getFilteredFeatures() {
         }
         return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
     });
-    unclassified.sort(function(a, b) {
+    autoSkipped.sort(function(a, b) {
         var aAdded = a._justAdded ? 1 : 0;
         var bAdded = b._justAdded ? 1 : 0;
         if (aAdded !== bAdded) return bAdded - aAdded;
@@ -1744,7 +1746,7 @@ function getFilteredFeatures() {
     });
     asanaOnly.sort(function(a, b) { return (a.title || '').localeCompare(b.title || ''); });
 
-    return { classified: classified, unclassified: unclassified, asanaOnly: asanaOnly };
+    return { classified: classified, autoSkipped: autoSkipped, asanaOnly: asanaOnly };
 }
 
 function renderAll() {
@@ -1756,11 +1758,11 @@ function renderAll() {
     });
     var result = getFilteredFeatures();
     var classified = result.classified;
-    var unclassified = result.unclassified;
+    var autoSkipped = result.autoSkipped;
     var asanaOnly = result.asanaOnly;
     var prevExpanded = expandedId;
 
-    var allFiltered = classified.concat(unclassified).concat(asanaOnly);
+    var allFiltered = classified.concat(autoSkipped).concat(asanaOnly);
     var totalFiltered = allFiltered.length;
 
     list.innerHTML = '';
@@ -1779,19 +1781,19 @@ function renderAll() {
     var endIdx = perPage === 0 ? totalFiltered : Math.min(startIdx + perPage, totalFiltered);
 
     var classifiedEnd = classified.length;
-    var unclassifiedEnd = classifiedEnd + unclassified.length;
-    var addedUnclDivider = false;
+    var autoSkippedEnd = classifiedEnd + autoSkipped.length;
+    var addedAutoSkippedDivider = false;
     var addedAoDivider = false;
 
     for (var idx = startIdx; idx < endIdx; idx++) {
-        if (!addedUnclDivider && unclassified.length > 0 && idx >= classifiedEnd && idx < unclassifiedEnd) {
-            addedUnclDivider = true;
+        if (!addedAutoSkippedDivider && autoSkipped.length > 0 && idx >= classifiedEnd && idx < autoSkippedEnd) {
+            addedAutoSkippedDivider = true;
             var divider = document.createElement('div');
             divider.className = 'section-divider';
-            divider.innerHTML = '<span class="section-divider-label">Needs Classification (' + unclassified.length + ')</span><div class="section-divider-line"></div>';
+            divider.innerHTML = '<span class="section-divider-label">Auto-skipped (' + autoSkipped.length + ')</span><div class="section-divider-line"></div>';
             list.appendChild(divider);
         }
-        if (!addedAoDivider && asanaOnly.length > 0 && idx >= unclassifiedEnd) {
+        if (!addedAoDivider && asanaOnly.length > 0 && idx >= autoSkippedEnd) {
             addedAoDivider = true;
             var aoDivider = document.createElement('div');
             aoDivider.className = 'section-divider';
@@ -1800,9 +1802,9 @@ function renderAll() {
         }
 
         var f = allFiltered[idx];
-        var isUncl = idx >= classifiedEnd && idx < unclassifiedEnd;
-        var isAo = idx >= unclassifiedEnd;
-        var card = buildCard(f, isUncl || (isAo && !f.classification));
+        var isAutoSkippedItem = idx >= classifiedEnd && idx < autoSkippedEnd;
+        var isAo = idx >= autoSkippedEnd;
+        var card = buildCard(f, isAutoSkippedItem || (isAo && !f.classification));
         if (f.id === prevExpanded) card.classList.add('expanded');
         if (idx - startIdx < 20) {
             card.classList.add('fade-in-up');
@@ -1862,7 +1864,7 @@ function renderPagination(total, startNum, endNum) {
 
 function goToPage(page) {
     var result = getFilteredFeatures();
-    var total = result.classified.length + result.unclassified.length + result.asanaOnly.length;
+    var total = result.classified.length + result.autoSkipped.length + result.asanaOnly.length;
     var totalPages = perPage === 0 ? 1 : Math.ceil(total / perPage);
     if (page < 1 || page > totalPages) return;
     currentPage = page;
@@ -1875,7 +1877,7 @@ function changePerPage(val) {
     var v = parseInt(val);
     if (v === 0) {
         var result = getFilteredFeatures();
-        var total = result.classified.length + result.unclassified.length + result.asanaOnly.length;
+        var total = result.classified.length + result.autoSkipped.length + result.asanaOnly.length;
         if (total > 100) {
             if (!confirm('Loading all ' + total + ' features on one page may be slow. Continue?')) {
                 document.getElementById('perpage-select').value = perPage.toString();
@@ -1890,7 +1892,7 @@ function changePerPage(val) {
     listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function buildCard(f, isUnclassified) {
+function buildCard(f, isAutoSkippedCard) {
     var c = f.classification || {};
     var score = c.importance_score || 0;
     var summary = c.marketing_summary || '';
@@ -1902,21 +1904,21 @@ function buildCard(f, isUnclassified) {
     var fid = f.id || '';
 
     var card = document.createElement('div');
-    card.className = 'feature-card' + (isUnclassified ? ' unclassified-card' : '') + (f._justAdded ? ' just-added' : '');
+    card.className = 'feature-card' + (isAutoSkippedCard ? ' autoskipped-card' : '') + (f._justAdded ? ' just-added' : '');
     card.dataset.fid = fid;
 
     var scoreBadgeClass, scoreBadgeContent;
-    if (isUnclassified) {
-        scoreBadgeClass = 'score-badge score-unclassified';
-        scoreBadgeContent = '&mdash;';
+    if (isAutoSkippedCard) {
+        scoreBadgeClass = 'score-badge score-autoskipped';
+        scoreBadgeContent = score || '&mdash;';
     } else {
         scoreBadgeClass = 'score-badge score-' + Math.min(score, 5);
         scoreBadgeContent = score + (isOverridden ? '<span class="override-indicator" title="Manually overridden">&#9998;</span>' : '');
     }
 
     var catBadgesHtml = '';
-    if (isUnclassified) {
-        catBadgesHtml = '<span class="category-pill cat-unclassified">Unclassified</span>';
+    if (isAutoSkippedCard) {
+        catBadgesHtml = '<span class="category-pill cat-autoskipped">Auto-skipped</span>';
     } else {
         var cats = getCategories(f);
         catBadgesHtml = cats.map(function(cat) {
@@ -1951,8 +1953,8 @@ function buildCard(f, isUnclassified) {
     }
 
     var summaryHtml;
-    if (isUnclassified) {
-        summaryHtml = '<div class="card-summary awaiting">Awaiting AI classification\u2026</div>';
+    if (isAutoSkippedCard) {
+        summaryHtml = '<div class="card-summary awaiting">Auto-skipped by keyword filter</div>';
     } else if (summary) {
         summaryHtml = '<div class="card-summary">' + escHtml(summary) + '</div>';
     } else {
@@ -1960,12 +1962,12 @@ function buildCard(f, isUnclassified) {
     }
 
     var channelHtml = '';
-    if (!isUnclassified) {
+    if (!isAutoSkippedCard) {
         channels.forEach(function(ch) { channelHtml += '<span class="channel-pill">' + escHtml(ch) + '</span>'; });
     }
 
     var actionBtn;
-    if (isUnclassified) {
+    if (isAutoSkippedCard) {
         actionBtn = '<button class="btn-classify-now" data-fid="' + escAttr(fid) + '">' +
             '<span class="btn-spinner"></span><span class="btn-label">Classify</span></button>';
     } else {
@@ -2010,7 +2012,7 @@ function buildCard(f, isUnclassified) {
         toggleCard(card, fid);
     });
 
-    if (!isUnclassified) {
+    if (!isAutoSkippedCard) {
         var scoreBadgeEl = card.querySelector('.score-badge');
         scoreBadgeEl.addEventListener('click', function(e) {
             e.stopPropagation();
