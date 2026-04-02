@@ -2661,26 +2661,48 @@ function enterContentView(feature) {
             orderedKeys.push(chKey);
         });
 
-        var idx = 0;
-        function revealNext() {
-            if (idx >= orderedKeys.length) {
-                document.getElementById('content-loading').style.display = 'none';
-                document.getElementById('content-bottom-bar').style.display = 'flex';
-                updateApprovalCounter();
-                return;
+        fetch('/api/publish/state?feature_id=' + encodeURIComponent(fid) + '&channels=' + encodeURIComponent(orderedKeys.join(',')))
+        .then(function(r) { return r.json(); })
+        .then(function(savedState) {
+            orderedKeys.forEach(function(chKey) {
+                var s = savedState[chKey] || {};
+                if (s.published) {
+                    contentViewPublished[chKey] = true;
+                }
+                if (s.image) {
+                    contentViewImages[chKey] = s.image;
+                }
+            });
+            revealChannelCards(orderedKeys, results, grid);
+        })
+        .catch(function() {
+            revealChannelCards(orderedKeys, results, grid);
+        });
+
+        function revealChannelCards(keys, results, grid) {
+            var idx = 0;
+            function revealNext() {
+                if (idx >= keys.length) {
+                    document.getElementById('content-loading').style.display = 'none';
+                    document.getElementById('content-bottom-bar').style.display = 'flex';
+                    updateApprovalCounter();
+                    return;
+                }
+                var chKey = keys[idx];
+                var ch = results[chKey];
+                tickChannel(ch.channel_display_name || chKey);
+                var card = buildChannelCard(chKey, ch);
+                card.classList.add('fade-in-up');
+                card.style.animationDelay = (idx * 100) + 'ms';
+                grid.appendChild(card);
+                if (contentViewApproved[chKey]) updateChannelStatus(chKey);
+                if (contentViewPublished[chKey]) updateChannelStatus(chKey);
+                if (contentViewImages[chKey]) renderChannelImagePreview(chKey);
+                idx++;
+                setTimeout(revealNext, 100);
             }
-            var chKey = orderedKeys[idx];
-            var ch = results[chKey];
-            tickChannel(ch.channel_display_name || chKey);
-            var card = buildChannelCard(chKey, ch);
-            card.classList.add('fade-in-up');
-            card.style.animationDelay = (idx * 100) + 'ms';
-            grid.appendChild(card);
-            if (contentViewApproved[chKey]) updateChannelStatus(chKey);
-            idx++;
-            setTimeout(revealNext, 100);
+            revealNext();
         }
-        revealNext();
     })
     .catch(function(err) {
         clearTimeout(slowTimer);
@@ -2982,6 +3004,14 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
         } else {
             contentViewImages[chKey] = imgData;
             renderChannelImagePreview(chKey);
+            var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+            if (fid) {
+                fetch('/api/publish/image', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ feature_id: fid, channel: chKey, dataUrl: imgData.dataUrl, name: imgData.name, size: imgData.size })
+                }).catch(function() {});
+            }
         }
     };
     reader.readAsDataURL(file);
@@ -3017,6 +3047,14 @@ function removeChannelImage(chKey) {
     if (wrap) { wrap.innerHTML = ''; wrap.style.display = 'none'; }
     var addBtn = document.getElementById('add-img-btn-' + chKey);
     if (addBtn) addBtn.style.display = '';
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    if (fid) {
+        fetch('/api/publish/image', {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ feature_id: fid, channel: chKey })
+        }).catch(function() {});
+    }
 }
 
 function triggerImagePicker(chKey, isBatch, batchIdx) {
@@ -3226,7 +3264,8 @@ function doPublishToChannel(chKey) {
         return;
     }
 
-    var payload = { content: content };
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    var payload = { content: content, feature_id: fid };
     var imgData = contentViewImages[chKey];
     if (imgData && imgData.dataUrl) {
         payload.image = imgData.dataUrl.split(',')[1];

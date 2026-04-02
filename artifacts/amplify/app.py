@@ -27,6 +27,7 @@ from ai.pre_filter import pre_filter_batch  # kept for backward compat, not used
 from ai.generator import generate_for_channel, generate_all_channels
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
+from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state
 from ai.classification_overrides import save_override as save_classification_override, get_overrides as get_classification_overrides
 from datetime import datetime, timezone
 
@@ -1416,10 +1417,55 @@ def publish_twitter():
     if not content:
         return jsonify({"success": False, "error": "content is required"}), 400
 
+    feature_id = data.get("feature_id", "")
     image_base64 = data.get("image")
     result = publish_tweet(content, image_base64=image_base64)
+    if result.get("success") and feature_id:
+        mark_published(feature_id, "twitter", tweet_url=result.get("tweet_url"))
     status_code = 200 if result.get("success") else 500
     return jsonify(result), status_code
+
+
+@app.route("/api/publish/state", methods=["GET"])
+def get_publish_state():
+    feature_id = request.args.get("feature_id", "")
+    channels_str = request.args.get("channels", "")
+    if not feature_id or not channels_str:
+        return jsonify({}), 200
+    channels = [c.strip() for c in channels_str.split(",") if c.strip()]
+    state = get_feature_state(feature_id, channels)
+    return jsonify(state), 200
+
+
+@app.route("/api/publish/image", methods=["POST"])
+def save_image_endpoint():
+    data = request.get_json() or {}
+    feature_id = data.get("feature_id", "")
+    channel = data.get("channel", "")
+    data_url = data.get("dataUrl", "")
+    filename = data.get("name", "image.png")
+    file_size = data.get("size", 0)
+    if not feature_id or not channel or not data_url:
+        return jsonify({"success": False, "error": "feature_id, channel, dataUrl required"}), 400
+    try:
+        save_publish_image(feature_id, channel, data_url, filename, file_size)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    return jsonify({"success": True}), 200
+
+
+@app.route("/api/publish/image", methods=["DELETE"])
+def delete_image_endpoint():
+    data = request.get_json() or {}
+    feature_id = data.get("feature_id", "")
+    channel = data.get("channel", "")
+    if not feature_id or not channel:
+        return jsonify({"success": False, "error": "feature_id, channel required"}), 400
+    try:
+        remove_publish_image(feature_id, channel)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    return jsonify({"success": True}), 200
 
 
 @app.route("/api/generate", methods=["POST"])
