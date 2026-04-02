@@ -3285,8 +3285,11 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
             window.prepBatchImages[batchIdx] = imgData;
             renderBatchImagePreview(batchIdx);
         } else {
-            contentViewImages[chKey] = imgData;
-            renderChannelImagePreview(chKey);
+            var allChKeys = Object.keys(contentViewChannels);
+            for (var i = 0; i < allChKeys.length; i++) {
+                contentViewImages[allChKeys[i]] = imgData;
+                renderChannelImagePreview(allChKeys[i]);
+            }
             insertImageMarkerAtCursor(chKey, imgData);
             var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
             if (fid) {
@@ -3343,17 +3346,20 @@ function renderChannelImagePreview(chKey) {
 }
 
 function removeChannelImage(chKey) {
-    delete contentViewImages[chKey];
-    var wrap = document.getElementById('img-wrap-' + chKey);
-    if (wrap) { wrap.innerHTML = ''; wrap.style.display = 'none'; }
-    var addBtn = document.getElementById('add-img-btn-' + chKey);
-    if (addBtn) addBtn.style.display = '';
+    var allChKeys = Object.keys(contentViewChannels);
+    for (var i = 0; i < allChKeys.length; i++) {
+        delete contentViewImages[allChKeys[i]];
+        var wrap = document.getElementById('img-wrap-' + allChKeys[i]);
+        if (wrap) { wrap.innerHTML = ''; wrap.style.display = 'none'; }
+        var addBtn = document.getElementById('add-img-btn-' + allChKeys[i]);
+        if (addBtn) addBtn.style.display = '';
+    }
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
     if (fid) {
         fetch('/api/publish/image', {
             method: 'DELETE',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ feature_id: fid, channel: chKey })
+            body: JSON.stringify({ feature_id: fid })
         }).catch(function() {});
     }
 }

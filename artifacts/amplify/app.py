@@ -1502,8 +1502,8 @@ def save_image_endpoint():
     data_url = data.get("dataUrl", "")
     filename = data.get("name", "image.png")
     file_size = data.get("size", 0)
-    if not feature_id or not channel or not data_url:
-        return jsonify({"success": False, "error": "feature_id, channel, dataUrl required"}), 400
+    if not feature_id or not data_url:
+        return jsonify({"success": False, "error": "feature_id, dataUrl required"}), 400
     try:
         save_publish_image(feature_id, channel, data_url, filename, file_size)
     except ValueError as e:
@@ -1516,8 +1516,8 @@ def delete_image_endpoint():
     data = request.get_json() or {}
     feature_id = data.get("feature_id", "")
     channel = data.get("channel", "")
-    if not feature_id or not channel:
-        return jsonify({"success": False, "error": "feature_id, channel required"}), 400
+    if not feature_id:
+        return jsonify({"success": False, "error": "feature_id required"}), 400
     try:
         remove_publish_image(feature_id, channel)
     except ValueError as e:
