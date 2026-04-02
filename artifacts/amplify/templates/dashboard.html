@@ -179,8 +179,6 @@
         .progress-bar-track { height: 3px; background: var(--bg-card); border-radius: 99px; overflow: hidden; }
         .progress-bar-fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.4s ease; }
         .progress-bar-wrap.fading { opacity: 0; transition: opacity 0.6s ease; }
-        .stats-row { display: flex; gap: 8px; margin-bottom: 20px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
-        .stats-row span { background: var(--bg-card); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); transition: background-color 0.2s, border-color 0.2s; }
         .funnel-bar { display: flex; align-items: center; gap: 0; margin-bottom: 20px; flex-wrap: wrap; }
         .funnel-step { display: flex; align-items: center; position: relative; }
         .funnel-btn {
@@ -913,7 +911,6 @@
                 <div class="progress-bar-fill" id="progress-bar-fill" style="width:0%"></div>
             </div>
         </div>
-        <div class="stats-row" id="stats-row" style="display:none;"></div>
 
         <div class="paste-bar" id="paste-bar">
             <input type="text" id="paste-input" class="paste-input" placeholder="Paste Slack thread, Asana task, or GitHub PR URL... (or type a feature title)">
@@ -1505,16 +1502,7 @@ function countTiers() {
     return { autoSkipped: autoSkipped, aiClassified: aiClassified, unclassified: unclassified, total: total };
 }
 
-function updateTierStats() {
-    var stats = document.getElementById('stats-row');
-    if (!stats) return;
-    var tierCounts = countTiers();
-    stats.innerHTML =
-        '<span>Features: ' + tierCounts.total + ' total</span>' +
-        '<span id="stat-auto-skipped" class="tier-stat tier-auto">' + tierCounts.autoSkipped + ' auto-skipped</span>' +
-        '<span id="stat-ai-classified" class="tier-stat tier-ai">' + tierCounts.aiClassified + ' AI-classified</span>' +
-        '<span id="stat-unclassified" class="tier-stat tier-pending">' + tierCounts.unclassified + ' pending</span>';
-}
+function updateTierStats() {}
 
 function startBatchClassification() {
     fetch('/api/features/classify-batch-async', { method: 'POST' })
