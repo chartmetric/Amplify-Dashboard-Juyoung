@@ -2354,6 +2354,29 @@ var contentViewInitialDrafts = {};
 var contentViewApproved = {};
 var contentViewRegenFeedback = {};
 
+function _approvalKey(fid, ch) { return 'ampApproved:' + fid + ':' + ch; }
+function _draftKey(fid, ch) { return 'ampDraft:' + fid + ':' + ch; }
+
+function persistApproval(fid, chKey, approved, draftText) {
+    try {
+        if (approved) {
+            localStorage.setItem(_approvalKey(fid, chKey), '1');
+            if (draftText !== undefined) localStorage.setItem(_draftKey(fid, chKey), draftText);
+        } else {
+            localStorage.removeItem(_approvalKey(fid, chKey));
+            localStorage.removeItem(_draftKey(fid, chKey));
+        }
+    } catch(e) {}
+}
+
+function isPersistedApproved(fid, chKey) {
+    try { return localStorage.getItem(_approvalKey(fid, chKey)) === '1'; } catch(e) { return false; }
+}
+
+function getPersistedDraft(fid, chKey) {
+    try { return localStorage.getItem(_draftKey(fid, chKey)); } catch(e) { return null; }
+}
+
 function generateContent(fid) {
     var feature = null;
     for (var i = 0; i < allFeatures.length; i++) {
@@ -2434,13 +2457,19 @@ function enterContentView(feature) {
         grid.innerHTML = '';
 
         var orderedKeys = [];
+        var fid = feature.id || '';
         channels.forEach(function(chKey) {
             var ch = results[chKey];
             if (!ch) return;
+            var wasApproved = isPersistedApproved(fid, chKey);
+            var savedDraft = getPersistedDraft(fid, chKey);
+            if (wasApproved && savedDraft !== null) {
+                ch.content = savedDraft;
+            }
             contentViewChannels[chKey] = ch;
             contentViewOriginals[chKey] = ch.content || '';
             contentViewInitialDrafts[chKey] = ch.content || '';
-            contentViewApproved[chKey] = false;
+            contentViewApproved[chKey] = wasApproved;
             contentViewRegenFeedback[chKey] = '';
             orderedKeys.push(chKey);
         });
@@ -2460,6 +2489,7 @@ function enterContentView(feature) {
             card.classList.add('fade-in-up');
             card.style.animationDelay = (idx * 100) + 'ms';
             grid.appendChild(card);
+            if (contentViewApproved[chKey]) updateChannelStatus(chKey);
             idx++;
             setTimeout(revealNext, 100);
         }
@@ -2664,6 +2694,9 @@ function approveChannel(chKey) {
             return;
         }
         contentViewApproved[chKey] = true;
+        var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+        var ta = document.getElementById('ta-' + chKey);
+        persistApproval(fid, chKey, true, ta ? ta.value : currentContent);
         updateChannelStatus(chKey);
         updateApprovalCounter();
         showToast('Approved!');
@@ -2676,6 +2709,8 @@ function approveChannel(chKey) {
 
 function undoApproval(chKey) {
     contentViewApproved[chKey] = false;
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    persistApproval(fid, chKey, false);
     updateChannelStatus(chKey);
     updateApprovalCounter();
 }
