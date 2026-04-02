@@ -1155,6 +1155,8 @@
                 <div class="combined-preview" id="combined-preview"></div>
             </div>
             <div class="publish-actions" id="publish-actions">
+                <button class="btn-publish-all-batch" onclick="batchPublishAllApproved()" style="background:#1DA1F2;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Publish All Approved</button>
+                <button class="btn-preview-all-batch" onclick="batchPreviewAllOnX()" style="background:transparent;color:#1DA1F2;border:1.5px solid #1DA1F2;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Preview on X &#x2197;</button>
                 <button class="btn-copy-all" onclick="copyAllCombined()">Copy All Combined</button>
                 <button class="btn-done" onclick="exitPrepWorkflow()">Done - Back to Dashboard</button>
             </div>
@@ -3817,6 +3819,7 @@ var prepChannel = null;
 var prepSelectedIds = {};
 var prepBatchResults = [];
 var prepBatchApproved = {};
+var prepBatchPublished = {};
 var prepBatchInitialDrafts = {};
 var prepBatchRegenFeedback = {};
 var prepDragItem = null;
@@ -3837,6 +3840,7 @@ function exitPrepWorkflow() {
     prepSelectedIds = {};
     prepBatchResults = [];
     prepBatchApproved = {};
+    prepBatchPublished = {};
     prepBatchInitialDrafts = {};
     prepBatchRegenFeedback = {};
     window.prepBatchImages = {};
@@ -3999,6 +4003,7 @@ function startBatchGeneration() {
 
     prepBatchResults = [];
     prepBatchApproved = {};
+    prepBatchPublished = {};
     prepBatchInitialDrafts = {};
     prepBatchRegenFeedback = {};
     window.prepBatchImages = {};
@@ -4194,12 +4199,41 @@ function updateBatchItemStatus(idx) {
     var item = document.getElementById('batch-item-' + idx);
     var status = document.getElementById('batch-status-' + idx);
     var actions = document.getElementById('batch-actions-' + idx);
-    if (prepBatchApproved[idx]) {
-        if (item) item.classList.add('approved');
+    if (prepBatchPublished[idx]) {
+        if (item) { item.classList.add('published'); item.classList.add('approved'); }
+        if (status) { status.className = 'status-badge published-badge'; status.textContent = 'Published \u2713'; }
+        if (actions) {
+            var btn = actions.querySelector('.btn-approve');
+            if (btn) btn.style.display = 'none';
+            var dd = actions.querySelector('.batch-publish-dd');
+            if (dd) {
+                var ddLabel = dd.querySelector('.dd-label');
+                if (ddLabel) ddLabel.textContent = 'Repost or Preview';
+                var ddItems = dd.querySelectorAll('.custom-dropdown-item');
+                if (ddItems[0]) ddItems[0].innerHTML = 'Repost to X &#x2192;';
+            }
+            if (!actions.querySelector('.btn-undo-approve')) {
+                var undo = document.createElement('button');
+                undo.className = 'btn-undo-approve';
+                undo.textContent = 'Undo';
+                undo.onclick = function() { batchUndoApprove(idx); };
+                actions.appendChild(undo);
+            }
+        }
+    } else if (prepBatchApproved[idx]) {
+        if (item) { item.classList.add('approved'); item.classList.remove('published'); }
         if (status) { status.className = 'status-badge approved-badge'; status.textContent = 'Approved \u2713'; }
         if (actions) {
             var btn = actions.querySelector('.btn-approve');
             if (btn) btn.style.display = 'none';
+            if (PUBLISHABLE_CHANNELS[prepChannel] && !actions.querySelector('.batch-publish-dd')) {
+                var ddId = 'batch-publish-dd-' + idx;
+                var ddWrapper = document.createElement('div');
+                ddWrapper.className = 'custom-dropdown publish-dropdown batch-publish-dd';
+                ddWrapper.id = ddId;
+                ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">Post or Preview</span><span class="dd-arrow">&#9650;</span></button><div class="custom-dropdown-menu"><div class="custom-dropdown-item" onclick="batchPublishItem(' + idx + '); document.getElementById(\'' + ddId + '\').querySelector(\'.custom-dropdown-menu\').classList.remove(\'open\');">Post to X &#x2192;</div><div class="custom-dropdown-item" onclick="batchPreviewItem(' + idx + '); document.getElementById(\'' + ddId + '\').querySelector(\'.custom-dropdown-menu\').classList.remove(\'open\');">Preview on X &#x2197;</div></div>';
+                actions.insertBefore(ddWrapper, actions.querySelector('.btn-undo-approve'));
+            }
             if (!actions.querySelector('.btn-undo-approve')) {
                 var undo = document.createElement('button');
                 undo.className = 'btn-undo-approve';
@@ -4209,19 +4243,22 @@ function updateBatchItemStatus(idx) {
             }
         }
     } else {
-        if (item) item.classList.remove('approved');
+        if (item) { item.classList.remove('approved'); item.classList.remove('published'); }
         if (status) { status.className = 'status-badge draft'; status.textContent = 'Draft'; }
         if (actions) {
             var btn = actions.querySelector('.btn-approve');
             if (btn) { btn.style.display = ''; btn.textContent = 'Approve \u2713'; btn.disabled = false; }
             var undo = actions.querySelector('.btn-undo-approve');
             if (undo) undo.remove();
+            var dd = actions.querySelector('.batch-publish-dd');
+            if (dd) dd.remove();
         }
     }
 }
 
 function batchUndoApprove(idx) {
     prepBatchApproved[idx] = false;
+    prepBatchPublished[idx] = false;
     updateBatchItemStatus(idx);
     updateBatchApprovalCount();
 }
@@ -4270,6 +4307,12 @@ function initBatchDragDrop() {
 function renderCombinedPreview() {
     var uc = USE_CASES.find(function(u) { return u.key === prepChannel; });
     document.getElementById('step4-title').textContent = (uc ? uc.name : prepChannel) + ' - Combined Preview';
+
+    var publishBtn = document.querySelector('.btn-publish-all-batch');
+    var previewBtn = document.querySelector('.btn-preview-all-batch');
+    var isPublishable = !!PUBLISHABLE_CHANNELS[prepChannel];
+    if (publishBtn) publishBtn.style.display = isPublishable ? '' : 'none';
+    if (previewBtn) previewBtn.style.display = isPublishable ? '' : 'none';
 
     var items = [];
     var list = document.getElementById('batch-results-list');
@@ -4325,6 +4368,140 @@ function copyAllCombined() {
         document.body.removeChild(ta);
         showToast('Copied to clipboard!');
     });
+}
+
+function batchPreviewItem(idx) {
+    var ta = document.getElementById('batch-ta-' + idx);
+    var content = ta ? ta.value : '';
+    if (!content) { showToast('No content to preview', 'error'); return; }
+    var encoded = encodeURIComponent(content);
+    var url = 'https://twitter.com/intent/tweet?text=' + encoded;
+    var img = (window.prepBatchImages || {})[idx];
+    if (img) {
+        showImageWarningModal('X\'s compose link cannot carry images. Your tweet text has been pre-filled, but you\'ll need to attach the image manually in the X compose box before posting.', function() {
+            window.open(url, '_blank');
+        });
+    } else {
+        window.open(url, '_blank');
+    }
+}
+
+var batchPublishInFlight = {};
+
+function batchPublishItem(idx, skipConfirm) {
+    if (batchPublishInFlight[idx]) { showToast('Already posting item ' + (idx + 1) + '... please wait', 'warning'); return; }
+    var endpoint = PUBLISHABLE_CHANNELS[prepChannel];
+    if (!endpoint) { showToast('Publishing not supported for ' + prepChannel, 'warning'); return; }
+    var ta = document.getElementById('batch-ta-' + idx);
+    var content = ta ? ta.value : '';
+    if (!content) { showToast('No content to publish', 'error'); return; }
+
+    function doPublish() {
+        batchPublishInFlight[idx] = true;
+        var r = prepBatchResults[idx] || {};
+        var fid = r.feature_id || '';
+        var payload = { content: content, feature_id: fid };
+        var img = (window.prepBatchImages || {})[idx];
+        if (img && img.dataUrl) {
+            payload.image = img.dataUrl.split(',')[1];
+        }
+        fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            batchPublishInFlight[idx] = false;
+            if (!data.success) {
+                var errMsg = data.hint || data.error || 'Unknown error';
+                showToast('Post failed: ' + errMsg, 'error');
+                return;
+            }
+            if (data.method === 'fallback') {
+                var tweetUrl = data.tweet_url;
+                if (data.has_image_reminder) {
+                    showImageWarningModal('Twitter API returned a fallback response. Your tweet text has been pre-filled via the X compose link. You will need to attach your image manually.', function() {
+                        window.open(tweetUrl, '_blank');
+                    });
+                } else {
+                    window.open(tweetUrl, '_blank');
+                    showToast('Tweet text pre-filled. Click Post in the X compose window.');
+                }
+                return;
+            }
+            prepBatchPublished[idx] = true;
+            updateBatchItemStatus(idx);
+            var hasImg = !!(img && img.dataUrl);
+            var tweetLink = data.tweet_url ? ' <a href="' + data.tweet_url + '" target="_blank" style="color:#1DA1F2;text-decoration:underline">View tweet</a>' : '';
+            showToast('Posted to X' + (hasImg ? ' with image' : '') + '! \u2705' + tweetLink);
+        })
+        .catch(function(err) {
+            batchPublishInFlight[idx] = false;
+            showToast('Error: ' + err.message + ' - opening preview instead', 'error');
+            batchPreviewItem(idx);
+        });
+    }
+
+    if (skipConfirm) {
+        doPublish();
+    } else {
+        var hasImg = !!((window.prepBatchImages || {})[idx] && (window.prepBatchImages[idx] || {}).dataUrl);
+        var msg = 'Do you want to post this on X? It will be directly posted to your account.';
+        if (hasImg) msg += ' Your attached image will be uploaded with the tweet.';
+        showPublishConfirm(msg, doPublish);
+    }
+}
+
+function batchPublishAllApproved() {
+    var approvedIndices = [];
+    for (var i = 0; i < prepBatchResults.length; i++) {
+        if (prepBatchApproved[i] && !prepBatchPublished[i] && !batchPublishInFlight[i]) {
+            approvedIndices.push(i);
+        }
+    }
+    if (approvedIndices.length === 0) { showToast('No approved items to publish', 'warning'); return; }
+    if (!PUBLISHABLE_CHANNELS[prepChannel]) { showToast('Publishing not supported for ' + prepChannel, 'warning'); return; }
+
+    showPublishConfirm('Post all ' + approvedIndices.length + ' approved item(s) to X? They will be directly posted to your account.', function() {
+        var btn = document.querySelector('.btn-publish-all-batch');
+        if (btn) { btn.disabled = true; btn.textContent = 'Publishing...'; }
+        for (var j = 0; j < approvedIndices.length; j++) {
+            batchPublishItem(approvedIndices[j], true);
+        }
+        var checkDone = setInterval(function() {
+            var allDone = true;
+            for (var k = 0; k < approvedIndices.length; k++) {
+                if (batchPublishInFlight[approvedIndices[k]]) { allDone = false; break; }
+            }
+            if (allDone) {
+                clearInterval(checkDone);
+                if (btn) { btn.disabled = false; btn.textContent = 'Publish All Approved'; }
+            }
+        }, 500);
+    });
+}
+
+function batchPreviewAllOnX() {
+    var preview = document.getElementById('combined-preview');
+    var combined = preview ? (preview.innerText || preview.textContent || '') : '';
+    if (!combined.trim()) { showToast('No approved content to preview', 'error'); return; }
+    var hasImages = false;
+    var list = document.getElementById('batch-results-list');
+    var orderedItems = list ? list.querySelectorAll('.batch-item') : [];
+    orderedItems.forEach(function(el) {
+        var idx = parseInt(el.getAttribute('data-idx'));
+        if (prepBatchApproved[idx] && (window.prepBatchImages || {})[idx]) hasImages = true;
+    });
+    var encoded = encodeURIComponent(combined);
+    var url = 'https://twitter.com/intent/tweet?text=' + encoded;
+    if (hasImages) {
+        showImageWarningModal('X\'s compose link cannot carry images. Your tweet text has been pre-filled, but you\'ll need to attach images manually in the X compose box before posting.', function() {
+            window.open(url, '_blank');
+        });
+    } else {
+        window.open(url, '_blank');
+    }
 }
 
 function escHtml(str) {
