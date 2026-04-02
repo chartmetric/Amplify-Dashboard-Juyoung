@@ -9,6 +9,28 @@ def _esc(text: str) -> str:
     return html_mod.escape(text, quote=True)
 
 
+def _inline_markdown(text: str) -> str:
+    import re
+    placeholders = {}
+    counter = [0]
+    def _stash_link(m):
+        link_text = _esc(m.group(1))
+        url = m.group(2)
+        if re.match(r'^https?://', url, re.IGNORECASE) or url.startswith('mailto:'):
+            key = f'\x00LINK{counter[0]}\x00'
+            counter[0] += 1
+            placeholders[key] = f'<a href="{_esc(url)}" target="_blank" rel="noopener noreferrer" style="color:#00C9A7;text-decoration:underline;">{link_text}</a>'
+            return key
+        return m.group(1)
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', _stash_link, text)
+    safe = _esc(text)
+    safe = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', safe)
+    safe = re.sub(r'\*(.+?)\*', r'<em>\1</em>', safe)
+    for key, val in placeholders.items():
+        safe = safe.replace(key, val)
+    return safe
+
+
 def render_email_html(subject: str, body: str, images: dict = None) -> str:
     import re
     safe_subject = _esc(subject)
@@ -26,8 +48,16 @@ def render_email_html(subject: str, body: str, images: dict = None) -> str:
                 body_html += f'<div style="margin:16px 0;"><img src="{_esc(img_src)}" alt="{_esc(img_name)}" style="max-width:100%;height:auto;border-radius:6px;display:block;"></div>'
             else:
                 body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Image: {_esc(img_name)}]</p>'
+        elif re.match(r'^#{1,3}\s+', stripped):
+            hm = re.match(r'^(#{1,3})\s+(.+)$', stripped)
+            if hm:
+                level = len(hm.group(1))
+                sizes = {1: '24px', 2: '20px', 3: '17px'}
+                body_html += f'<h{level} style="margin:0 0 12px 0;color:#1a1d23;font-size:{sizes[level]};font-weight:700;">{_inline_markdown(hm.group(2))}</h{level}>'
+            else:
+                body_html += f'<p style="margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(stripped)}</p>'
         elif stripped.startswith("- "):
-            body_html += f'<li style="margin-bottom:6px;color:#333333;font-size:15px;line-height:1.6;">{_esc(stripped[2:])}</li>'
+            body_html += f'<li style="margin-bottom:6px;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(stripped[2:])}</li>'
         else:
             cta_phrases = ["try it here", "check it out", "learn more", "get started", "see it in action", "explore now"]
             is_cta = any(p in stripped.lower() for p in cta_phrases)
@@ -37,7 +67,7 @@ def render_email_html(subject: str, body: str, images: dict = None) -> str:
                 label = _esc(re.sub(r'https?://\S+', '', stripped).strip().rstrip(':').strip() or "Try it now")
                 body_html += f'<div style="text-align:center;margin:24px 0;"><a href="{url}" style="display:inline-block;background:#00C9A7;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:700;font-size:15px;">{label}</a></div>'
             else:
-                body_html += f'<p style="margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.6;">{_esc(stripped)}</p>'
+                body_html += f'<p style="margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(stripped)}</p>'
 
     return f"""<!DOCTYPE html>
 <html>
