@@ -641,6 +641,10 @@
             border-radius: 8px; font-size: 14px; cursor: pointer; font-family: inherit;
         }
         .btn-done:hover { color: #e0e0e0; border-color: #4a5a6a; }
+        .cached-badge {
+            font-size: 10px; padding: 2px 6px; border-radius: 99px; font-weight: 600;
+            background: rgba(59,130,246,0.15); color: #3b82f6;
+        }
     </style>
 </head>
 <body>
@@ -2262,6 +2266,7 @@ function buildChannelCard(chKey, ch) {
             '<span class="channel-name">' + escHtml(ch.channel_display_name || chKey) + '</span>' +
             '<span class="char-count-badge ' + charClass + '" id="char-' + chKey + '">' + content.length + '/' + maxChars + '</span>' +
             '<span class="status-badge draft" id="status-' + chKey + '">Draft</span>' +
+            (ch.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
             (isArticle ? '<button class="btn-preview-toggle" id="preview-toggle-' + chKey + '" onclick="togglePreview(\'' + chKey + '\')">Preview</button>' : '') +
         '</div>' +
         '<div class="channel-card-body">' +
@@ -2744,6 +2749,7 @@ function buildBatchItem(r, idx) {
             '<span class="batch-item-title">' + escHtml(r.feature_title || '') + '</span>' +
             '<span class="char-count-badge ' + charClass + '" id="batch-char-' + idx + '">' + content.length + '/' + maxChars + '</span>' +
             '<span class="status-badge draft" id="batch-status-' + idx + '">Draft</span>' +
+            (r.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
         '</div>' +
         '<div class="batch-item-body" id="batch-body-' + idx + '">' +
             '<textarea class="channel-textarea" id="batch-ta-' + idx + '" data-idx="' + idx + '" data-max="' + maxChars + '">' + escHtml(content) + '</textarea>' +

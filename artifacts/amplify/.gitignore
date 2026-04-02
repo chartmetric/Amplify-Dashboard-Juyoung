@@ -2,3 +2,4 @@
 .features_cache*.json
 .manual_overrides.json
 .override_history.json
+.content_cache.json

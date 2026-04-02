@@ -1,4 +1,7 @@
+import json
 import logging
+import os
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ai.channel_configs import CHANNEL_CONFIGS
@@ -7,6 +10,58 @@ from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import get_feedback_history
 
 logger = logging.getLogger("amplify.generator")
+
+_content_cache = {}
+_content_cache_lock = threading.Lock()
+_CONTENT_CACHE_FILE = ".content_cache.json"
+
+
+def _load_content_cache():
+    global _content_cache
+    if os.path.exists(_CONTENT_CACHE_FILE):
+        try:
+            with open(_CONTENT_CACHE_FILE, "r") as f:
+                _content_cache = json.load(f)
+            logger.info(f"[content-cache] Loaded {len(_content_cache)} cached entries from disk")
+        except Exception as e:
+            logger.warning(f"[content-cache] Failed to load cache: {e}")
+            _content_cache = {}
+
+
+def _save_content_cache():
+    try:
+        import tempfile
+        fd, tmp = tempfile.mkstemp(dir=".", suffix=".tmp")
+        with os.fdopen(fd, "w") as f:
+            json.dump(_content_cache, f)
+        os.replace(tmp, _CONTENT_CACHE_FILE)
+    except Exception as e:
+        logger.warning(f"[content-cache] Failed to save cache: {e}")
+
+
+def _cache_key(feature_id, channel):
+    return f"{feature_id}:{channel}"
+
+
+def get_cached_content(feature_id, channel):
+    key = _cache_key(feature_id, channel)
+    with _content_cache_lock:
+        return _content_cache.get(key)
+
+
+def set_cached_content(feature_id, channel, result):
+    key = _cache_key(feature_id, channel)
+    with _content_cache_lock:
+        _content_cache[key] = result
+        _save_content_cache()
+
+
+def get_content_cache_stats():
+    with _content_cache_lock:
+        return {"total_cached": len(_content_cache)}
+
+
+_load_content_cache()
 
 
 def _truncate_to_last_sentence(text: str, max_chars: int) -> str:
@@ -88,7 +143,17 @@ EXPECTED OUTPUT FORMAT: {example_output_format}
 Generate the content now. Output ONLY the final content, nothing else."""
 
 
-def generate_for_channel(feature_data: dict, channel_key: str, custom_instructions: str = None, feedback: str = None) -> dict:
+def generate_for_channel(feature_data: dict, channel_key: str, custom_instructions: str = None, feedback: str = None, skip_cache: bool = False) -> dict:
+    feature_id = feature_data.get("id", "")
+
+    if not skip_cache and not feedback and not custom_instructions and feature_id:
+        cached = get_cached_content(feature_id, channel_key)
+        if cached:
+            logger.info(f"[{channel_key}] Cache hit for feature {feature_id}")
+            cached_copy = dict(cached)
+            cached_copy["from_cache"] = True
+            return cached_copy
+
     if channel_key not in CHANNEL_CONFIGS:
         return {
             "channel": channel_key,
@@ -205,7 +270,7 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
             content = truncated
             was_trimmed = True
 
-    return {
+    gen_result = {
         "channel": channel_key,
         "channel_display_name": config["display_name"],
         "max_chars": char_limit,
@@ -215,6 +280,11 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
         "success": result["success"],
         "error": result.get("error"),
     }
+
+    if result["success"] and feature_id:
+        set_cached_content(feature_id, channel_key, gen_result)
+
+    return gen_result
 
 
 def generate_all_channels(feature_data: dict, channels: list[str] = None, custom_instructions: str = None) -> dict:

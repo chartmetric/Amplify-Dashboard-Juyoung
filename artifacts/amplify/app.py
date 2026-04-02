@@ -1478,6 +1478,7 @@ def generate_single_endpoint():
             feature, channel,
             custom_instructions=custom_instructions or None,
             feedback=feedback or None,
+            skip_cache=True,
         )
         return jsonify(result)
     except Exception as e:
