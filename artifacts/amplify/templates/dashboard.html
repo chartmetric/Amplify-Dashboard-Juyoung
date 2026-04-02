@@ -566,11 +566,16 @@
         }
         .channel-card.ch-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
         .btn-publish-channel {
-            background: #1DA1F2; color: #fff; border: none; padding: 6px 14px;
+            background: var(--accent); color: var(--cta-text); border: none; padding: 6px 14px;
             border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
         }
-        .btn-publish-channel:hover { background: #1a91da; }
+        .btn-publish-channel:hover { background: var(--accent-hover); }
         .btn-publish-channel:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-preview-channel {
+            background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 5px 12px;
+            border-radius: 6px; font-size: 11px; cursor: pointer; font-family: inherit;
+        }
+        .btn-preview-channel:hover { border-color: var(--border-hover); color: var(--text-body); }
         .status-badge.published-badge { background: rgba(29,161,242,0.15); color: #1DA1F2; }
         .channel-card.published { border-left: 3px solid #1DA1F2; }
         .btn-add-image {
@@ -3087,6 +3092,8 @@ function updateChannelStatus(chKey) {
             if (approveBtn) approveBtn.style.display = 'none';
             var publishBtn = actionsEl.querySelector('.btn-publish-channel');
             if (publishBtn) publishBtn.style.display = 'none';
+            var previewBtn = actionsEl.querySelector('.btn-preview-channel');
+            if (previewBtn) previewBtn.style.display = 'none';
             var existing = actionsEl.querySelector('.btn-undo-approve');
             if (!existing) {
                 var undo = document.createElement('button');
@@ -3114,9 +3121,15 @@ function updateChannelStatus(chKey) {
                 var pubBtn = document.createElement('button');
                 pubBtn.className = 'btn-publish-channel';
                 pubBtn.id = 'publish-btn-' + chKey;
-                pubBtn.textContent = 'Publish to X \u2192';
+                pubBtn.textContent = 'Post to X \u2192';
                 pubBtn.onclick = function() { publishToChannel(chKey); };
                 actionsEl.insertBefore(pubBtn, actionsEl.querySelector('.btn-undo-approve'));
+
+                var prevBtn = document.createElement('button');
+                prevBtn.className = 'btn-preview-channel';
+                prevBtn.textContent = 'Preview on X \u2197';
+                prevBtn.onclick = function() { previewOnX(chKey); };
+                actionsEl.insertBefore(prevBtn, actionsEl.querySelector('.btn-undo-approve'));
             }
         }
     } else {
@@ -3129,7 +3142,21 @@ function updateChannelStatus(chKey) {
             if (undo) undo.remove();
             var publishBtn = actionsEl.querySelector('.btn-publish-channel');
             if (publishBtn) publishBtn.remove();
+            var previewBtn = actionsEl.querySelector('.btn-preview-channel');
+            if (previewBtn) previewBtn.remove();
         }
+    }
+}
+
+function previewOnX(chKey) {
+    var ta = document.getElementById('ta-' + chKey);
+    var content = ta ? ta.value : '';
+    if (!content) { showToast('No content to preview', 'error'); return; }
+    var encoded = encodeURIComponent(content);
+    var url = 'https://twitter.com/intent/tweet?text=' + encoded;
+    window.open(url, '_blank');
+    if (contentViewImages[chKey]) {
+        showToast('Remember to paste your image in the Twitter compose box');
     }
 }
 
@@ -3142,7 +3169,7 @@ function publishToChannel(chKey) {
     if (!content) { showToast('No content to publish', 'error'); return; }
 
     var btn = document.getElementById('publish-btn-' + chKey);
-    if (btn) { btn.textContent = 'Publishing...'; btn.disabled = true; }
+    if (btn) { btn.textContent = 'Posting...'; btn.disabled = true; }
 
     var payload = { content: content };
     var imgData = contentViewImages[chKey];
@@ -3158,28 +3185,20 @@ function publishToChannel(chKey) {
     .then(function(r) { return r.json(); })
     .then(function(data) {
         if (!data.success) {
-            showToast('Publish failed: ' + (data.error || 'Unknown error'), 'error');
-            if (btn) { btn.textContent = 'Publish to X \u2192'; btn.disabled = false; }
+            showToast('Post failed: ' + (data.error || 'Unknown error') + ' - opening preview instead', 'error');
+            if (btn) { btn.textContent = 'Post to X \u2192'; btn.disabled = false; }
+            previewOnX(chKey);
             return;
         }
-        if (data.method === 'api') {
-            contentViewPublished[chKey] = true;
-            updateChannelStatus(chKey);
-            showToast('Published to X!');
-            if (data.tweet_url) window.open(data.tweet_url, '_blank');
-        } else if (data.method === 'fallback') {
-            window.open(data.tweet_url, '_blank');
-            contentViewPublished[chKey] = true;
-            updateChannelStatus(chKey);
-            var fallbackMsg = data.has_image_reminder
-                ? 'Tweet pre-filled - paste your image manually in the compose box'
-                : 'Tweet pre-filled - click Post in the new tab';
-            showToast(fallbackMsg);
-        }
+        contentViewPublished[chKey] = true;
+        updateChannelStatus(chKey);
+        var tweetLink = data.tweet_url ? ' <a href="' + data.tweet_url + '" target="_blank" style="color:#1DA1F2;text-decoration:underline">View tweet</a>' : '';
+        showToast('Posted to X! \u2705' + tweetLink);
     })
     .catch(function(err) {
-        showToast('Error: ' + err.message, 'error');
-        if (btn) { btn.textContent = 'Publish to X \u2192'; btn.disabled = false; }
+        showToast('Error: ' + err.message + ' - opening preview instead', 'error');
+        if (btn) { btn.textContent = 'Post to X \u2192'; btn.disabled = false; }
+        previewOnX(chKey);
     });
 }
 
@@ -3822,7 +3841,11 @@ function showToast(msg, typeOrWarning) {
     var container = document.getElementById('toast-container');
     var item = document.createElement('div');
     item.className = 'toast-item toast-' + type;
-    item.textContent = msg;
+    if (msg.indexOf('<a ') !== -1) {
+        item.innerHTML = msg;
+    } else {
+        item.textContent = msg;
+    }
     container.appendChild(item);
     requestAnimationFrame(function() {
         requestAnimationFrame(function() { item.classList.add('visible'); });
