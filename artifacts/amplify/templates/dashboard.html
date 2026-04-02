@@ -63,10 +63,17 @@
         .controls-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
         .filter-row { display: flex; align-items: center; gap: 10px; }
         .filter-label { font-size: 13px; color: #8899aa; }
-        select { background: #1a2733; color: #e0e0e0; border: 1px solid #2a3a4a; border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; outline: none; position: relative; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); -webkit-appearance: none; -moz-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238899aa' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 28px; }
+        select { background: #1a2733; color: #e0e0e0; border: 1px solid #2a3a4a; border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; outline: none; }
         select:focus { border-color: #00C9A7; }
-        select option { background: #1a2733; color: #e0e0e0; padding: 8px 12px; }
-        select option:hover, select option:checked { background: #2a3a4a; }
+        .custom-dropdown { position: relative; display: inline-block; z-index: 100; }
+        .custom-dropdown-toggle { background: #1a2733; color: #e0e0e0; border: 1px solid #2a3a4a; border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; outline: none; display: flex; align-items: center; gap: 8px; white-space: nowrap; user-select: none; min-width: 80px; }
+        .custom-dropdown-toggle:hover { border-color: #3a4a5a; }
+        .custom-dropdown-toggle .dd-arrow { font-size: 10px; color: #8899aa; margin-left: auto; }
+        .custom-dropdown-menu { display: none; position: absolute; top: calc(100% + 4px); left: 0; background: #1a2733; border: 1px solid #2a3a4a; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); min-width: 100%; overflow: hidden; z-index: 200; }
+        .custom-dropdown-menu.open { display: block; }
+        .custom-dropdown-item { padding: 8px 14px; font-size: 13px; color: #c0c8d0; cursor: pointer; white-space: nowrap; background: #1a2733; }
+        .custom-dropdown-item:hover { background: #2a3a4a; color: #ffffff; }
+        .custom-dropdown-item.active { color: #00C9A7; background: #0d1f2d; }
         .toggle-label {
             display: flex; align-items: center; gap: 8px; cursor: pointer;
             font-size: 13px; color: #8899aa; user-select: none;
@@ -776,18 +783,30 @@
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 18.37-4.5M21.5 12.5a10 10 0 0 1-18.37 4.5"/></svg>
                     </button>
                     <span class="filter-label">Sort by</span>
-                    <select id="sort-by" onchange="applyFilters()">
-                        <option value="importance" selected>Importance</option>
-                        <option value="recency">Recency</option>
-                    </select>
+                    <div class="custom-dropdown" id="sort-by-dropdown">
+                        <div class="custom-dropdown-toggle" onclick="toggleCustomDropdown('sort-by-dropdown')">
+                            <span class="dd-label">Importance</span><span class="dd-arrow">&#9662;</span>
+                        </div>
+                        <div class="custom-dropdown-menu">
+                            <div class="custom-dropdown-item active" data-value="importance" onclick="selectDropdownItem('sort-by-dropdown', this)">Importance</div>
+                            <div class="custom-dropdown-item" data-value="recency" onclick="selectDropdownItem('sort-by-dropdown', this)">Recency</div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="sort-by" value="importance">
                     <span class="filter-label">Min importance</span>
-                    <select id="importance-filter" onchange="applyFilters()">
-                        <option value="5">5 only</option>
-                        <option value="4">4+</option>
-                        <option value="3" selected>3+</option>
-                        <option value="2">2+</option>
-                        <option value="1">1+</option>
-                    </select>
+                    <div class="custom-dropdown" id="importance-filter-dropdown">
+                        <div class="custom-dropdown-toggle" onclick="toggleCustomDropdown('importance-filter-dropdown')">
+                            <span class="dd-label">3+</span><span class="dd-arrow">&#9662;</span>
+                        </div>
+                        <div class="custom-dropdown-menu">
+                            <div class="custom-dropdown-item" data-value="5" onclick="selectDropdownItem('importance-filter-dropdown', this)">5 only</div>
+                            <div class="custom-dropdown-item" data-value="4" onclick="selectDropdownItem('importance-filter-dropdown', this)">4+</div>
+                            <div class="custom-dropdown-item active" data-value="3" onclick="selectDropdownItem('importance-filter-dropdown', this)">3+</div>
+                            <div class="custom-dropdown-item" data-value="2" onclick="selectDropdownItem('importance-filter-dropdown', this)">2+</div>
+                            <div class="custom-dropdown-item" data-value="1" onclick="selectDropdownItem('importance-filter-dropdown', this)">1+</div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="importance-filter" value="3">
                 </div>
             </div>
         </div>
@@ -3324,6 +3343,34 @@ function escAttr(str) {
     if (!str) return '';
     return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+function toggleCustomDropdown(dropdownId) {
+    var dd = document.getElementById(dropdownId);
+    var menu = dd.querySelector('.custom-dropdown-menu');
+    var isOpen = menu.classList.contains('open');
+    document.querySelectorAll('.custom-dropdown-menu.open').forEach(function(m) { m.classList.remove('open'); });
+    if (!isOpen) menu.classList.add('open');
+}
+
+function selectDropdownItem(dropdownId, item) {
+    var dd = document.getElementById(dropdownId);
+    var menu = dd.querySelector('.custom-dropdown-menu');
+    var label = dd.querySelector('.dd-label');
+    menu.querySelectorAll('.custom-dropdown-item').forEach(function(it) { it.classList.remove('active'); });
+    item.classList.add('active');
+    label.textContent = item.textContent;
+    menu.classList.remove('open');
+    var hiddenId = dropdownId.replace('-dropdown', '');
+    var hidden = document.getElementById(hiddenId);
+    if (hidden) hidden.value = item.getAttribute('data-value');
+    applyFilters();
+}
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.custom-dropdown')) {
+        document.querySelectorAll('.custom-dropdown-menu.open').forEach(function(m) { m.classList.remove('open'); });
+    }
+});
 
 function showToast(msg, typeOrWarning) {
     var type = 'success';
