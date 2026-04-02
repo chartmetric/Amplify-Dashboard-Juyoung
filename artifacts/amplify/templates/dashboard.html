@@ -1700,7 +1700,7 @@ function getFilteredFeatures() {
         if (!isAsanaOnly && !showAnnounced) continue;
 
         if (isAutoSkipped) {
-            if (!isAllCats && !hasAutoSkippedCat) continue;
+            if (!hasAutoSkippedCat) continue;
             if (isAsanaOnly) { asanaOnly.push(f); }
             else { autoSkipped.push(f); }
         } else {
