@@ -1280,6 +1280,11 @@
                     <span style="font-size:13px;font-weight:600;">Lab</span>
                 </button>
                 <div class="lab-dropdown" id="lab-dropdown">
+                    <button class="lab-dropdown-item" onclick="labGenerateAll()">
+                        <span class="lab-item-icon">&#9889;</span>
+                        <span class="lab-item-label">Generate All Top Features</span>
+                    </button>
+                    <div class="lab-dropdown-divider"></div>
                     <button class="lab-dropdown-item" onclick="labToggleAnalytics()">
                         <span class="lab-item-icon">&#128202;</span>
                         <span class="lab-item-label">Analytics</span>
@@ -1336,10 +1341,7 @@
                         </div>
                     </div>
                     <input type="hidden" id="importance-filter" value="3">
-                    <button class="btn-generate-all-top" id="btn-generate-all-top" onclick="generateAllTopFeatures()" title="Generate content for top 5 features across Twitter, Email &amp; In-App">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                        Generate All Top Features
-                    </button>
+                    <span id="btn-generate-all-top" style="display:none;"></span>
                 </div>
                 <span id="dyk-toggle" style="display:none;"></span>
             </div>
@@ -6785,6 +6787,11 @@ function labToggleAnalytics() {
 function labToggleDyk() {
     closeLabDropdown();
     toggleDidYouKnow();
+}
+
+function labGenerateAll() {
+    closeLabDropdown();
+    generateAllTopFeatures();
 }
 
 function toggleAnalytics() {
