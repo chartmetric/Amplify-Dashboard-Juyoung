@@ -2803,6 +2803,7 @@ function enterContentView(feature) {
     contentViewImages = {};
     contentViewImageMap = {};
     contentViewRegenFeedback = {};
+    imageUndoStack = [];
 
     document.querySelector('.main').style.display = 'none';
     var contentView = document.getElementById('content-view');
@@ -3275,6 +3276,68 @@ function getImagePreviewClass(chKey) {
     return 'img-preview-container img-preview-' + layout;
 }
 
+function snapshotImageState() {
+    var snap = { images: {}, imageMap: {}, textareas: {} };
+    var allChKeys = Object.keys(contentViewChannels);
+    for (var i = 0; i < allChKeys.length; i++) {
+        var k = allChKeys[i];
+        snap.images[k] = contentViewImages[k] ? JSON.parse(JSON.stringify(contentViewImages[k])) : null;
+        snap.imageMap[k] = contentViewImageMap[k] ? JSON.parse(JSON.stringify(contentViewImageMap[k])) : null;
+        var ta = document.getElementById('ta-' + k);
+        if (ta) snap.textareas[k] = ta.value;
+    }
+    return snap;
+}
+
+function restoreImageState(snap) {
+    var allChKeys = Object.keys(contentViewChannels);
+    for (var i = 0; i < allChKeys.length; i++) {
+        var k = allChKeys[i];
+        if (snap.images[k]) {
+            contentViewImages[k] = snap.images[k];
+        } else {
+            delete contentViewImages[k];
+        }
+        if (snap.imageMap[k]) {
+            contentViewImageMap[k] = snap.imageMap[k];
+        } else {
+            delete contentViewImageMap[k];
+        }
+        if (snap.textareas[k] !== undefined) {
+            var ta = document.getElementById('ta-' + k);
+            if (ta) {
+                ta.value = snap.textareas[k];
+                ta.dispatchEvent(new Event('input'));
+            }
+            var preview = document.getElementById('md-preview-' + k);
+            if (preview && preview.style.display !== 'none') {
+                preview.innerHTML = simpleMarkdown(snap.textareas[k]);
+            }
+        }
+        renderChannelImagePreview(k);
+    }
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    if (fid) {
+        var anyImg = null;
+        for (var j = 0; j < allChKeys.length; j++) {
+            if (contentViewImages[allChKeys[j]]) { anyImg = contentViewImages[allChKeys[j]]; break; }
+        }
+        if (anyImg) {
+            fetch('/api/publish/image', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ feature_id: fid, dataUrl: anyImg.dataUrl, name: anyImg.name, size: anyImg.size })
+            }).catch(function() {});
+        } else {
+            fetch('/api/publish/image', {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ feature_id: fid })
+            }).catch(function() {});
+        }
+    }
+}
+
 function handleImageFile(file, chKey, isBatch, batchIdx) {
     if (!file || !file.type.startsWith('image/')) return;
     var reader = new FileReader();
@@ -3285,6 +3348,9 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
             window.prepBatchImages[batchIdx] = imgData;
             renderBatchImagePreview(batchIdx);
         } else {
+            imageUndoStack.push(snapshotImageState());
+            if (imageUndoStack.length > 20) imageUndoStack.shift();
+            lastImageChangeTime = Date.now();
             var allChKeys = Object.keys(contentViewChannels);
             for (var i = 0; i < allChKeys.length; i++) {
                 contentViewImages[allChKeys[i]] = imgData;
@@ -3320,6 +3386,7 @@ function insertImageMarkerAtCursor(chKey, imgData) {
 }
 
 var contentViewImageMap = {};
+var imageUndoStack = [];
 
 function formatFileSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
@@ -3346,6 +3413,9 @@ function renderChannelImagePreview(chKey) {
 }
 
 function removeChannelImage(chKey) {
+    imageUndoStack.push(snapshotImageState());
+    if (imageUndoStack.length > 20) imageUndoStack.shift();
+    lastImageChangeTime = Date.now();
     var allChKeys = Object.keys(contentViewChannels);
     for (var i = 0; i < allChKeys.length; i++) {
         delete contentViewImages[allChKeys[i]];
@@ -3363,6 +3433,23 @@ function removeChannelImage(chKey) {
         }).catch(function() {});
     }
 }
+
+var lastImageChangeTime = 0;
+document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        if (imageUndoStack.length === 0) return;
+        var cv = document.getElementById('content-view');
+        if (!cv || cv.style.display === 'none') return;
+        var timeSinceImageChange = Date.now() - lastImageChangeTime;
+        if (timeSinceImageChange < 5000) {
+            e.preventDefault();
+            e.stopPropagation();
+            var snap = imageUndoStack.pop();
+            restoreImageState(snap);
+            showToast('Image change undone', 'info');
+        }
+    }
+});
 
 function triggerImagePicker(chKey, isBatch, batchIdx) {
     var input = document.createElement('input');
@@ -3867,6 +3954,7 @@ function exitContentView() {
     contentViewImages = {};
     contentViewImageMap = {};
     contentViewRegenFeedback = {};
+    imageUndoStack = [];
 }
 
 var USE_CASES = [
