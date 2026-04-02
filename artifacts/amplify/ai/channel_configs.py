@@ -2,9 +2,9 @@ CHANNEL_CONFIGS = {
     "twitter": {
         "display_name": "X / Twitter",
         "description": "Short-form social media post paired with a Chartmetric data visual",
-        "max_chars": 280,
-        "tone": "Punchy, relatable, scroll-stopping. Write short lines with breathing room between them. Mix up your openers: sometimes a sharp pain point, sometimes a tension or contrast, sometimes a direct question, sometimes a bold capability statement. Keep each line short and punchy. Never make unverified claims about what artists or the industry are doing.",
-        "format_rules": "Use line breaks between short punchy thoughts (2-3 lines, not a single run-on paragraph). Vary the opening style naturally. The goal is awareness of what Chartmetric makes possible, creating desire to try it. NEVER claim users are already doing something unless we have data proving it. Include 2-3 relevant hashtags at the end. No links in tweet body (added separately). Max 1 emoji if natural. STRICT: must be under 280 characters total including hashtags and line breaks. This is a hard X/Twitter API limit.",
+        "max_chars": 600,
+        "tone": "Punchy, relatable, scroll-stopping. Write short lines with breathing room between them. Mix up your openers: sometimes a sharp pain point ('70% of your week is manual research'), sometimes a tension or contrast ('Your data is everywhere... but your strategy shouldn't be'), sometimes a direct question ('Are you checking where your listeners are actually based?'), sometimes a bold capability statement. Keep each line short and punchy. Never make unverified claims about what artists or the industry are doing.",
+        "format_rules": "Use line breaks between short punchy thoughts (2-4 lines, not a single run-on paragraph). Vary the opening style naturally. The goal is awareness of what Chartmetric makes possible, creating desire to try it. NEVER claim users are already doing something unless we have data proving it. Include 2-4 relevant hashtags at the end. No links in tweet body (added separately). Max 1-2 emoji if natural. STRICT: must be under 600 characters total including hashtags and line breaks.",
         "audience": "Music industry professionals, artists, managers, data analysts, A&R, and music fans who follow data trends on X/Twitter",
         "example_output_format": "[Punchy opening line]\n\n[Value prop or detail]\n\n#Hashtag1 #Hashtag2 #Hashtag3",
         "enabled": True,

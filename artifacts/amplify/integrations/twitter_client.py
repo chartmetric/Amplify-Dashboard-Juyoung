@@ -93,6 +93,8 @@ def publish_tweet(content: str, image_base64: str = None) -> dict:
                 error_type = "forbidden"
                 if "duplicate" in error_str.lower():
                     hint = "This tweet may be a duplicate. Try editing the text slightly before posting."
+                elif "not permitted" in error_str.lower():
+                    hint = "Your X/Twitter API plan may not support this action (e.g. long tweets or media). Check your developer portal plan tier, or try using Preview mode instead."
                 else:
                     hint = "Your app may not have write permissions, or the tweet was rejected by X. Try editing the text and posting again."
             elif "401" in error_str:

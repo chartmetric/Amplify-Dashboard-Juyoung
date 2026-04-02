@@ -3243,7 +3243,6 @@ function doPublishToChannel(chKey) {
         if (!data.success) {
             var errMsg = data.hint || data.error || 'Unknown error';
             showToast('Post failed: ' + errMsg, 'error');
-            previewOnX(chKey);
             return;
         }
         if (data.method === 'fallback') {
