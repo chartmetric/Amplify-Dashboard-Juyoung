@@ -801,8 +801,7 @@
             .content-view { padding: 12px 12px 100px; }
             .prep-step { padding: 12px 12px 100px; }
             .feature-card { padding: 14px; }
-            .paste-bar { flex-direction: column; padding: 8px; }
-            .paste-bar .btn-prep-content { width: 100%; text-align: center; }
+            .paste-bar { padding: 8px; }
             .picker-controls { flex-direction: column; align-items: stretch; }
             .picker-quick-btns { flex-wrap: wrap; }
             .category-filter-row { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
@@ -818,6 +817,7 @@
             <span class="subtitle">Product Marketing Autopilot</span>
         </div>
         <div class="topbar-right">
+            <button class="btn-prep-content" onclick="startPrepWorkflow()">Prep Content for...</button>
             <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">&#127769;</button>
             <div style="display:flex;align-items:center;gap:6px;" title="API server connection">
                 <span class="health-dot" id="health-dot"></span>
@@ -917,7 +917,6 @@
 
         <div class="paste-bar" id="paste-bar">
             <input type="text" id="paste-input" class="paste-input" placeholder="Paste Slack thread, Asana task, or GitHub PR URL... (or type a feature title)">
-            <button class="btn-prep-content" onclick="startPrepWorkflow()">Prep Content for...</button>
         </div>
         <div class="paste-status" id="paste-status" style="display:none;"></div>
 
