@@ -1507,7 +1507,7 @@ def publish_twitter():
     feature_id = data.get("feature_id", "")
     image_base64 = data.get("image")
     result = publish_tweet(content, image_base64=image_base64)
-    if result.get("success") and feature_id:
+    if result.get("success") and result.get("method") == "api" and feature_id:
         mark_published(feature_id, "twitter", tweet_url=result.get("tweet_url"))
     status_code = 200 if result.get("success") else 500
     return jsonify(result), status_code

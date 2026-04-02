@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import base64
 import logging
 import urllib.parse
@@ -7,7 +8,32 @@ import urllib.parse
 logger = logging.getLogger(__name__)
 
 
+def _strip_markdown_links(text: str) -> str:
+    return re.sub(r'\[([^\]]*)\]\((https?://[^)]+)\)', r'\2', text)
+
+
+def _make_fallback(content: str, image_base64: str = None, api_error: str = None) -> dict:
+    encoded = urllib.parse.quote(content, safe="")
+    intent_url = f"https://twitter.com/intent/tweet?text={encoded}"
+    result = {
+        "success": True,
+        "tweet_url": intent_url,
+        "method": "fallback",
+        "message": "Open this link to post the tweet",
+    }
+    if api_error:
+        result["api_error"] = api_error
+    if image_base64:
+        result["message"] = (
+            "Tweet text pre-filled. Paste your image manually in the compose box."
+        )
+        result["has_image_reminder"] = True
+    return result
+
+
 def publish_tweet(content: str, image_base64: str = None) -> dict:
+    content = _strip_markdown_links(content)
+
     api_key = os.environ.get("TWITTER_API_KEY")
     api_secret = os.environ.get("TWITTER_API_SECRET")
     access_token = os.environ.get("TWITTER_ACCESS_TOKEN")
@@ -59,11 +85,8 @@ def publish_tweet(content: str, image_base64: str = None) -> dict:
                     logger.info(f"[twitter] Image uploaded, media_id={media_id}")
                 except Exception as img_err:
                     logger.error(f"[twitter] Image upload failed: {img_err}")
-                    return {
-                        "success": False,
-                        "error": f"Image upload failed: {img_err}",
-                        "error_type": "image_upload",
-                    }
+                    logger.info("[twitter] Falling back to intent URL after image upload failure")
+                    return _make_fallback(content, image_base64, api_error=str(img_err))
 
             kwargs = {"text": content}
             if media_id:
@@ -87,32 +110,19 @@ def publish_tweet(content: str, image_base64: str = None) -> dict:
             error_str = str(e)
             logger.error(f"[twitter] Tweet failed: {error_str}")
 
-            error_type = "unknown"
-            hint = ""
-            if "403" in error_str:
-                error_type = "forbidden"
-                if "duplicate" in error_str.lower():
-                    hint = "This tweet may be a duplicate. Try editing the text slightly before posting."
-                elif "not permitted" in error_str.lower():
-                    hint = "Your X/Twitter API plan may not support this action (e.g. long tweets or media). Check your developer portal plan tier, or try using Preview mode instead."
-                else:
-                    hint = "Your app may not have write permissions, or the tweet was rejected by X. Try editing the text and posting again."
-            elif "401" in error_str:
-                error_type = "auth"
-                hint = "Authentication failed. Your API keys may be invalid or expired."
-            elif "429" in error_str:
-                error_type = "rate_limit"
-                hint = "Rate limit reached. Wait a few minutes and try again."
-            elif "402" in error_str:
-                error_type = "payment"
-                hint = "Your X developer account needs API credits. Check your X developer portal billing."
+            if "403" in error_str or "401" in error_str:
+                logger.info("[twitter] API rejected request, falling back to intent URL")
+                return _make_fallback(content, image_base64, api_error=error_str)
 
-            return {
-                "success": False,
-                "error": error_str,
-                "error_type": error_type,
-                "hint": hint,
-            }
+            if "429" in error_str:
+                return {
+                    "success": False,
+                    "error": error_str,
+                    "error_type": "rate_limit",
+                    "hint": "Rate limit reached. Wait a few minutes and try again.",
+                }
+
+            return _make_fallback(content, image_base64, api_error=error_str)
     else:
         missing = []
         if not api_key:
@@ -125,18 +135,6 @@ def publish_tweet(content: str, image_base64: str = None) -> dict:
             missing.append("TWITTER_ACCESS_SECRET")
         logger.warning(f"[twitter] Missing credentials: {missing}")
 
-        encoded = urllib.parse.quote(content, safe="")
-        intent_url = f"https://twitter.com/intent/tweet?text={encoded}"
-        result = {
-            "success": True,
-            "tweet_url": intent_url,
-            "method": "fallback",
-            "message": "Open this link to post the tweet",
-            "missing_creds": missing,
-        }
-        if image_base64:
-            result["message"] = (
-                "Tweet text pre-filled. Paste your image manually in the compose box."
-            )
-            result["has_image_reminder"] = True
+        result = _make_fallback(content, image_base64)
+        result["missing_creds"] = missing
         return result

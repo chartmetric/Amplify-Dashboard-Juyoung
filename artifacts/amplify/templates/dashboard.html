@@ -4729,6 +4729,7 @@ function previewOnX(chKey) {
     var ta = document.getElementById('ta-' + chKey);
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to preview', 'error'); return; }
+    content = stripMarkdownLinks(content);
     var encoded = encodeURIComponent(content);
     var url = 'https://twitter.com/intent/tweet?text=' + encoded;
     if (contentViewFeatureImage && contentViewImageInclude[chKey]) {
@@ -4892,13 +4893,14 @@ function doPublishToChannel(chKey) {
         }
         if (data.method === 'fallback') {
             var tweetUrl = data.tweet_url;
+            var fallbackMsg = data.api_error ? 'API unavailable - opening X compose instead.' : 'Tweet text pre-filled. Click Post in the X compose window.';
             if (data.has_image_reminder) {
-                showImageWarningModal('Twitter API returned a fallback response. Your tweet text has been pre-filled via the X compose link. You will need to attach your image manually in the X compose box before posting.', function() {
+                showImageWarningModal('Your tweet text has been pre-filled via the X compose link. You will need to attach your image manually in the X compose box before posting.', function() {
                     window.open(tweetUrl, '_blank');
                 });
             } else {
                 window.open(tweetUrl, '_blank');
-                showToast('Tweet text pre-filled. Click Post in the X compose window.');
+                showToast(fallbackMsg);
             }
             return;
         }
@@ -5896,6 +5898,7 @@ function batchPreviewItem(idx) {
     var ta = document.getElementById('batch-ta-' + idx);
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to preview', 'error'); return; }
+    content = stripMarkdownLinks(content);
     var encoded = encodeURIComponent(content);
     var url = 'https://twitter.com/intent/tweet?text=' + encoded;
     var img = (window.prepBatchImages || {})[idx];
@@ -6015,6 +6018,7 @@ function batchPreviewAllOnX() {
         var idx = parseInt(el.getAttribute('data-idx'));
         if (prepBatchApproved[idx] && (window.prepBatchImages || {})[idx]) hasImages = true;
     });
+    combined = stripMarkdownLinks(combined);
     var encoded = encodeURIComponent(combined);
     var url = 'https://twitter.com/intent/tweet?text=' + encoded;
     if (hasImages) {
@@ -6584,6 +6588,11 @@ function genallShowPublishDone(results, btn) {
     if (fallback > 0) parts.push(fallback + ' opened in browser');
     if (failed > 0) parts.push(failed + ' failed');
     showToast(parts.join(', '), failed > 0 ? 'warning' : 'success');
+}
+
+function stripMarkdownLinks(text) {
+    if (!text) return '';
+    return text.replace(/\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '$2');
 }
 
 function escHtml(str) {
