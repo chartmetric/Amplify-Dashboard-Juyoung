@@ -27,7 +27,7 @@ from ai.pre_filter import pre_filter_batch  # kept for backward compat, not used
 from ai.generator import generate_for_channel, generate_all_channels
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
-from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state
+from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published
 from ai.classification_overrides import save_override as save_classification_override, get_overrides as get_classification_overrides
 from datetime import datetime, timezone
 
@@ -1435,6 +1435,11 @@ def get_publish_state():
     channels = [c.strip() for c in channels_str.split(",") if c.strip()]
     state = get_feature_state(feature_id, channels)
     return jsonify(state), 200
+
+
+@app.route("/api/publish/all", methods=["GET"])
+def get_all_published_endpoint():
+    return jsonify(get_all_published()), 200
 
 
 @app.route("/api/publish/image", methods=["POST"])

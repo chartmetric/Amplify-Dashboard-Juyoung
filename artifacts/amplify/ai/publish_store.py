@@ -96,6 +96,22 @@ def get_publish_info(feature_id, channel):
     return data.get(_key(feature_id, channel), {})
 
 
+def get_all_published():
+    data = _load()
+    result = {}
+    for k, v in data.items():
+        if not v.get("published"):
+            continue
+        parts = k.split(":", 1)
+        if len(parts) != 2:
+            continue
+        fid, ch = parts
+        if fid not in result:
+            result[fid] = []
+        result[fid].append(ch)
+    return result
+
+
 MAX_IMAGE_SIZE = 10 * 1024 * 1024
 
 

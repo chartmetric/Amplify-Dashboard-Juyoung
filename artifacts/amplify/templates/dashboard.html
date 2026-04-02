@@ -383,6 +383,8 @@
         .pub-ch-pill.pub-copied { background: #2a3a4a; color: #8899aa; }
         .pub-ch-pill.pub-full { background: #1a3a2a; color: #4ade80; font-weight: 700; padding: 3px 10px; }
         .pub-prev-note { font-size: 11px; color: var(--text-faint); margin-top: 4px; font-style: italic; }
+        .pub-channel-filters { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+        .filter-label-sub { color: var(--text-faint); font-size: 12px; margin: 0 2px; }
         .btn-generate {
             background: var(--accent); color: var(--cta-text); border: none; padding: 10px 20px;
             border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;
@@ -996,6 +998,40 @@
             </button>
         </div>
 
+        <div class="category-filter-row" id="publish-filter-row">
+            <span class="filter-label">Published:</span>
+            <button class="cat-filter-pill" data-pub="any_published" onclick="togglePublishFilter('any_published', this)">
+                <span class="cat-pill-dot" style="background:#4ade80;"></span>Published
+            </button>
+            <button class="cat-filter-pill" data-pub="not_published" onclick="togglePublishFilter('not_published', this)">
+                <span class="cat-pill-dot" style="background:#6b7280;"></span>Not Published
+            </button>
+            <span class="pub-channel-filters" id="pub-channel-filters" style="display:none;">
+                <span class="filter-label-sub">&rarr;</span>
+                <button class="cat-filter-pill pub-ch-filter" data-pub-ch="twitter" onclick="togglePublishChannelFilter('twitter', this)">
+                    <span class="cat-pill-dot" style="background:#1DA1F2;"></span>Twitter
+                </button>
+                <button class="cat-filter-pill pub-ch-filter" data-pub-ch="email_newsletter" onclick="togglePublishChannelFilter('email_newsletter', this)">
+                    <span class="cat-pill-dot" style="background:#f97316;"></span>Newsletter
+                </button>
+                <button class="cat-filter-pill pub-ch-filter" data-pub-ch="email_standalone" onclick="togglePublishChannelFilter('email_standalone', this)">
+                    <span class="cat-pill-dot" style="background:#ef4444;"></span>Email
+                </button>
+                <button class="cat-filter-pill pub-ch-filter" data-pub-ch="inapp" onclick="togglePublishChannelFilter('inapp', this)">
+                    <span class="cat-pill-dot" style="background:#a855f7;"></span>In-App
+                </button>
+                <button class="cat-filter-pill pub-ch-filter" data-pub-ch="linkedin" onclick="togglePublishChannelFilter('linkedin', this)">
+                    <span class="cat-pill-dot" style="background:#0a66c2;"></span>LinkedIn
+                </button>
+                <button class="cat-filter-pill pub-ch-filter" data-pub-ch="notion_monthly" onclick="togglePublishChannelFilter('notion_monthly', this)">
+                    <span class="cat-pill-dot" style="background:#eab308;"></span>Notion
+                </button>
+                <button class="cat-filter-pill pub-ch-filter" data-pub-ch="article_hmc" onclick="togglePublishChannelFilter('article_hmc', this)">
+                    <span class="cat-pill-dot" style="background:#3b82f6;"></span>HMC
+                </button>
+            </span>
+        </div>
+
         <div class="progress-bar-wrap" id="progress-bar-wrap">
             <div class="progress-bar-label" id="progress-bar-label">Classifying features...</div>
             <div class="progress-bar-track">
@@ -1145,6 +1181,9 @@ var expandedId = null;
 var categoryFilter = 'all';
 var activeCategoryFilters = ['all'];
 var activeSourceFilters = ['announced'];
+var activePublishFilter = null;
+var activePublishChannelFilters = [];
+var serverPublishedMap = {};
 var pollInterval = null;
 var classificationTotal = 0;
 var classificationDone = 0;
@@ -1762,6 +1801,87 @@ function toggleSourceFilter(source, btn) {
     updateFunnelAfterFilter();
 }
 
+function loadPublishedMap() {
+    fetch('/api/publish/all')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        serverPublishedMap = data || {};
+        Object.keys(serverPublishedMap).forEach(function(fid) {
+            if (!publishedFeatureState[fid]) publishedFeatureState[fid] = {};
+            serverPublishedMap[fid].forEach(function(ch) {
+                if (!publishedFeatureState[fid][ch]) {
+                    publishedFeatureState[fid][ch] = { mode: 'posted', ts: null };
+                }
+            });
+        });
+        if (activePublishFilter) renderAll();
+    })
+    .catch(function() {});
+}
+
+function getFeaturePublishedChannels(fid) {
+    var channels = [];
+    var serverChs = serverPublishedMap[fid] || [];
+    for (var i = 0; i < serverChs.length; i++) {
+        if (channels.indexOf(serverChs[i]) === -1) channels.push(serverChs[i]);
+    }
+    var memState = publishedFeatureState[fid];
+    if (memState) {
+        Object.keys(memState).forEach(function(ch) {
+            if (channels.indexOf(ch) === -1) channels.push(ch);
+        });
+    }
+    return channels;
+}
+
+function togglePublishFilter(val, btn) {
+    if (activePublishFilter === val) {
+        activePublishFilter = null;
+        activePublishChannelFilters = [];
+    } else {
+        activePublishFilter = val;
+        activePublishChannelFilters = [];
+    }
+    refreshPublishFilterUI();
+    currentPage = 1;
+    renderAll();
+    updateFunnelAfterFilter();
+}
+
+function togglePublishChannelFilter(ch, btn) {
+    var idx = activePublishChannelFilters.indexOf(ch);
+    if (idx !== -1) {
+        activePublishChannelFilters.splice(idx, 1);
+    } else {
+        activePublishChannelFilters.push(ch);
+    }
+    refreshPublishFilterUI();
+    currentPage = 1;
+    renderAll();
+    updateFunnelAfterFilter();
+}
+
+function refreshPublishFilterUI() {
+    var pills = document.querySelectorAll('#publish-filter-row > .cat-filter-pill');
+    for (var i = 0; i < pills.length; i++) {
+        var pv = pills[i].getAttribute('data-pub');
+        pills[i].classList.remove('active');
+        if (activePublishFilter === pv) pills[i].classList.add('active');
+    }
+    var chWrap = document.getElementById('pub-channel-filters');
+    if (activePublishFilter === 'any_published') {
+        chWrap.style.display = 'inline-flex';
+    } else {
+        chWrap.style.display = 'none';
+    }
+    var chPills = document.querySelectorAll('.pub-ch-filter');
+    for (var j = 0; j < chPills.length; j++) {
+        var c = chPills[j].getAttribute('data-pub-ch');
+        chPills[j].classList.remove('active');
+        if (activePublishChannelFilters.indexOf(c) !== -1) chPills[j].classList.add('active');
+    }
+}
+
 function updateFunnelAfterFilter() {
     if (currentFunnelData) {
         var result = getFilteredFeatures();
@@ -1792,6 +1912,23 @@ function getFilteredFeatures() {
 
         if (isAsanaOnly && !showNotAnnounced) continue;
         if (!isAsanaOnly && !showAnnounced) continue;
+
+        if (activePublishFilter) {
+            var fid = f.feature_id || f.id || '';
+            var pubChs = getFeaturePublishedChannels(fid);
+            if (activePublishFilter === 'any_published') {
+                if (pubChs.length === 0) continue;
+                if (activePublishChannelFilters.length > 0) {
+                    var matchesCh = false;
+                    for (var pi = 0; pi < activePublishChannelFilters.length; pi++) {
+                        if (pubChs.indexOf(activePublishChannelFilters[pi]) !== -1) { matchesCh = true; break; }
+                    }
+                    if (!matchesCh) continue;
+                }
+            } else if (activePublishFilter === 'not_published') {
+                if (pubChs.length > 0) continue;
+            }
+        }
 
         if (isAutoSkipped) {
             if (!hasAutoSkippedCat) continue;
@@ -2556,6 +2693,10 @@ function trackPublish(fid, chKey, mode) {
     if (!fid) return;
     if (!publishedFeatureState[fid]) publishedFeatureState[fid] = {};
     publishedFeatureState[fid][chKey] = { mode: mode || 'posted', ts: new Date().toISOString() };
+    if (mode === 'posted' || !mode) {
+        if (!serverPublishedMap[fid]) serverPublishedMap[fid] = [];
+        if (serverPublishedMap[fid].indexOf(chKey) === -1) serverPublishedMap[fid].push(chKey);
+    }
     refreshFeatureCardPublishStatus(fid);
 }
 
@@ -4234,6 +4375,7 @@ document.addEventListener('keydown', function(e) {
 
 checkHealth();
 loadFeatures();
+loadPublishedMap();
 </script>
 </body>
 </html>
