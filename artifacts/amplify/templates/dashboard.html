@@ -1024,25 +1024,37 @@ function renderFunnelBar(data, activeStep) {
     var bar = document.getElementById('funnel-bar');
     if (!data) { bar.style.display = 'none'; return; }
     var feats = data.features || data.classified_features || allFeatures || [];
-    var totalAsana = data.total || data.total_enriched || data.total_from_asana || feats.length;
-    var classifiedCount = 0;
+    var srcFilters = activeSourceFilters;
+    var showAnnounced = srcFilters.indexOf('announced') !== -1;
+    var showNotAnnounced = srcFilters.indexOf('not_announced') !== -1;
+
+    var totalFiltered = 0, classifiedCount = 0, sentToClaudeCount = 0;
     for (var i = 0; i < feats.length; i++) {
-        if (feats[i].classification && !feats[i].classification.unclassified) classifiedCount++;
+        var f = feats[i];
+        var isAsanaOnly = f.source === 'asana_only';
+        if (isAsanaOnly && !showNotAnnounced) continue;
+        if (!isAsanaOnly && !showAnnounced) continue;
+        totalFiltered++;
+        var cl = f.classification;
+        if (cl && !cl.unclassified) {
+            classifiedCount++;
+            if (cl.classification_method !== 'quick_keyword') sentToClaudeCount++;
+        }
     }
-    var sentToClaude = data.sent_to_claude || data.sent_to_claude_count || classifiedCount;
-    var showingCount = data.filtered || data.showing_count || feats.length;
+    var result = getFilteredFeatures();
+    var showingCount = result.classified.length + result.unclassified.length + result.asanaOnly.length;
 
     var steps = [
         {
             id: 'total',
-            count: totalAsana,
+            count: totalFiltered,
             label: 'Total Features Released in the last 30 days',
             tooltip: 'Total number of features released in the last 30 days. Click to load every feature unclassified.',
             clickable: true,
         },
         {
             id: 'claude',
-            count: sentToClaude,
+            count: sentToClaudeCount,
             label: 'Sent to Claude',
             tooltip: 'Tasks that passed the pre-filter and were sent to Claude for AI classification. Pre-filter excludes tasks matching bug/fix/refactor/internal keywords or with no keyword signal.',
             clickable: true,
@@ -1564,6 +1576,7 @@ function toggleCategoryFilter(cat, btn) {
     }
     currentPage = 1;
     renderAll();
+    updateTierStats();
     updateFunnelAfterFilter();
 }
 
@@ -1584,6 +1597,7 @@ function toggleSourceFilter(source, btn) {
     }
     currentPage = 1;
     renderAll();
+    updateTierStats();
     updateFunnelAfterFilter();
 }
 
@@ -1595,56 +1609,7 @@ function updateFunnelAfterFilter() {
     }
 }
 
-function toggleCategoryFilter(cat, btn) {
-    currentPage = 1;
-    if (cat === 'all') {
-        activeCategoryFilters = ['all'];
-    } else {
-        var idx = activeCategoryFilters.indexOf(cat);
-        if (idx !== -1) {
-            activeCategoryFilters.splice(idx, 1);
-            if (activeCategoryFilters.length === 0 || (activeCategoryFilters.length === 1 && activeCategoryFilters[0] === 'all')) {
-                activeCategoryFilters = ['all'];
-            }
-        } else {
-            var allIdx = activeCategoryFilters.indexOf('all');
-            if (allIdx !== -1) activeCategoryFilters.splice(allIdx, 1);
-            activeCategoryFilters.push(cat);
-        }
-    }
-    categoryFilter = activeCategoryFilters.length === 1 ? activeCategoryFilters[0] : 'all';
-    var pills = document.querySelectorAll('#category-filter-row .cat-filter-pill');
-    for (var i = 0; i < pills.length; i++) {
-        var d = pills[i].getAttribute('data-cat');
-        pills[i].classList.remove('active', 'active-unclassified');
-        if (activeCategoryFilters.indexOf(d) !== -1) {
-            if (d === 'unclassified') { pills[i].classList.add('active-unclassified'); }
-            else { pills[i].classList.add('active'); }
-        }
-    }
-    renderAll();
-}
-
-function toggleSourceFilter(source, btn) {
-    currentPage = 1;
-    var idx = activeSourceFilters.indexOf(source);
-    if (idx !== -1) {
-        if (activeSourceFilters.length > 1) {
-            activeSourceFilters.splice(idx, 1);
-        }
-    } else {
-        activeSourceFilters.push(source);
-    }
-    var pills = document.querySelectorAll('#source-filter-row .cat-filter-pill');
-    for (var i = 0; i < pills.length; i++) {
-        var d = pills[i].getAttribute('data-source');
-        pills[i].classList.remove('active');
-        if (activeSourceFilters.indexOf(d) !== -1) { pills[i].classList.add('active'); }
-    }
-    renderAll();
-}
-
-function applyFilters() { currentPage = 1; renderAll(); }
+function applyFilters() { currentPage = 1; renderAll(); updateTierStats(); updateFunnelAfterFilter(); }
 
 function getFilteredFeatures() {
     var minImp = parseInt(document.getElementById('importance-filter').value);
