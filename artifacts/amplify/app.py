@@ -31,7 +31,8 @@ from ai.publish_store import mark_published, save_image as save_publish_image, g
 from ai.classification_overrides import save_override as save_classification_override, get_overrides as get_classification_overrides
 from datetime import datetime, timezone
 
-app = Flask(__name__, template_folder="templates")
+_app_dir = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, template_folder=os.path.join(_app_dir, "templates"), static_folder=os.path.join(_app_dir, "static"))
 app.secret_key = config.SESSION_SECRET
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
@@ -2653,13 +2654,18 @@ if __name__ == "__main__":
         print(f"  {methods:8s} {rule.rule}", flush=True)
     print("=========================\n", flush=True)
     sys.stdout.flush()
-    from waitress import serve
-    serve(
-        app,
-        host="0.0.0.0",
-        port=port,
-        _quiet=False,
-        channel_timeout=300,
-        recv_bytes=65536,
-        threads=8,
-    )
+    try:
+        from waitress import serve
+        logger.info(f"Starting waitress on port {port}")
+        serve(
+            app,
+            host="0.0.0.0",
+            port=port,
+            _quiet=False,
+            channel_timeout=300,
+            recv_bytes=65536,
+            threads=8,
+        )
+    except ImportError:
+        logger.warning("waitress not available, falling back to Flask dev server")
+        app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
