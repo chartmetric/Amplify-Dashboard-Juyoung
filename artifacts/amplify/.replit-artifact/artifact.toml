@@ -4,6 +4,7 @@ title = "Amplify"
 version = "1.0.0"
 id = "artifacts/amplify"
 router = "path"
+deploymentTarget = "vm"
 
 [[integratedSkills]]
 name = "react-vite"
