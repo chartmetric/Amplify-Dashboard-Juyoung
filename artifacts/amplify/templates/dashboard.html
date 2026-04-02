@@ -229,7 +229,7 @@
         .feature-card.expanded { border-color: var(--accent); box-shadow: 0 4px 24px rgba(0,201,167,0.1); }
         .feature-card.autoskipped-card { border-color: var(--autoskipped-border); background: var(--autoskipped-bg); opacity: 0.85; }
         .feature-card.autoskipped-card:hover { border-color: var(--border); opacity: 1; }
-        .feature-card.published-card { border-left: 3px solid #4ade80; background: linear-gradient(90deg, rgba(74,222,128,0.06) 0%, var(--card-bg) 40%); }
+        .feature-card.published-card { border-left: 3px solid #4ade80; background: linear-gradient(90deg, rgba(74,222,128,0.06) 0%, var(--bg-card) 40%); }
         .feature-card.published-card .card-top::after { content: ''; }
         .feature-card.just-classified { animation: fadeInClassified 0.5s ease-out; }
         @keyframes fadeInClassified {
@@ -413,7 +413,7 @@
             animation: fadeIn 0.15s ease;
         }
         .dyk-overlay-card {
-            background: var(--card-bg); border: 1px solid var(--border);
+            background: var(--bg-card); border: 1px solid var(--border);
             border-radius: 16px; padding: 28px; max-width: 480px; width: 90%;
             box-shadow: 0 20px 60px rgba(0,0,0,0.4);
         }
@@ -3079,7 +3079,7 @@ function openDykOverlay(fid) {
                 '<button class="dyk-overlay-close" onclick="closeDykOverlay()">&times;</button>' +
             '</div>' +
             '<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">' + escHtml(title) + '</div>' +
-            '<div class="dyk-overlay-body">' + escHtml(tip) + '</div>' +
+            '<div class="dyk-overlay-body">' + simpleMarkdown(tip) + '</div>' +
             '<div class="dyk-overlay-actions">' +
                 '<button class="dyk-btn-copy" onclick="copyDykTip(\'' + escAttr(fid) + '\')">Copy to Clipboard</button>' +
                 '<button class="dyk-btn-slack" onclick="shareDykOnSlack(\'' + escAttr(fid) + '\')">Share on Slack</button>' +
@@ -3130,7 +3130,7 @@ function shareDykOnSlack(fid) {
         webhookUrl = url;
     }
 
-    var slackText = '\uD83D\uDCA1 *Did You Know?* \u2014 _' + title + '_\n\n' + tip;
+    var slackText = '\uD83D\uDCA1 *Did You Know?* - _' + title + '_\n\n' + tip;
 
     fetch('/api/share/slack', {
         method: 'POST',
