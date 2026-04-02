@@ -3735,7 +3735,8 @@ function removeBatchImage(idx) {
 var PUBLISHABLE_CHANNELS = {
     twitter: '/api/publish/twitter',
     email_newsletter: '/api/publish/email',
-    email_standalone: '/api/publish/email'
+    email_standalone: '/api/publish/email',
+    inapp: '/api/publish/inapp'
 };
 var publishingInFlight = {};
 
@@ -3822,6 +3823,11 @@ function updateChannelStatus(chKey) {
                         '<div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">' + (prevPubbed ? 'Resend' : 'Send') + ' Email &#x1F4E7;</div>' +
                         '<div class="custom-dropdown-item" onclick="previewEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview HTML &#x2197;</div>' +
                         '</div>';
+                } else if (chKey === 'inapp') {
+                    var prevPubbed = contentViewPublished[chKey];
+                    var toggleLabel = prevPubbed ? 'Republish or Preview' : 'Publish or Preview';
+                    var pubLabel = prevPubbed ? 'Republish In-App' : 'Publish In-App';
+                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">' + toggleLabel + '</span><span class="dd-arrow">&#9650;</span></button><div class="custom-dropdown-menu"><div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">' + pubLabel + ' &#x1F4F1;</div><div class="custom-dropdown-item" onclick="window.open(\'/api/announcements/widget\', \'_blank\'); closeDropdown(\'' + ddId + '\');">Preview Widget &#x2197;</div></div>';
                 } else {
                     var prevPubbed = contentViewPublished[chKey];
                     var toggleLabel = prevPubbed ? 'Repost or Preview' : 'Post or Preview';
@@ -3888,12 +3894,17 @@ function showPublishConfirm(message, onConfirm, opts) {
     var h3 = document.createElement('h3');
     h3.textContent = opts.title || 'Confirm';
     var p = document.createElement('p');
-    p.textContent = message;
+    if (opts.isHtml) {
+        p.innerHTML = message;
+    } else {
+        p.textContent = message;
+    }
     var btns = document.createElement('div');
     btns.className = 'pc-btns';
     var cancelBtn = document.createElement('button');
     cancelBtn.className = 'pc-btn-cancel';
     cancelBtn.textContent = 'Cancel';
+    if (opts.hideCancel) cancelBtn.style.display = 'none';
     var confirmBtn = document.createElement('button');
     confirmBtn.className = 'pc-btn-confirm';
     confirmBtn.textContent = opts.confirmText || 'Yes, do it';
@@ -3965,6 +3976,7 @@ function doPublishToChannel(chKey) {
 
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
     var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+    var isInapp = (chKey === 'inapp');
     var payload = { content: content, feature_id: fid };
 
     if (isEmail) {
@@ -3974,6 +3986,9 @@ function doPublishToChannel(chKey) {
         if (imgMap && Object.keys(imgMap).length > 0) {
             payload.images = imgMap;
         }
+    } else if (isInapp) {
+        payload.feature_title = contentViewFeature ? (contentViewFeature.title || '') : '';
+        payload.category = contentViewFeature ? (contentViewFeature.category || '') : '';
     } else {
         var imgData = contentViewImages[chKey];
         if (imgData && imgData.dataUrl) {
@@ -3992,6 +4007,14 @@ function doPublishToChannel(chKey) {
         if (!data.success) {
             var errMsg = data.hint || data.error || 'Unknown error';
             showToast('Send failed: ' + errMsg, 'error');
+            return;
+        }
+        if (isInapp) {
+            contentViewPublished[chKey] = true;
+            var fid2 = contentViewFeature ? (contentViewFeature.id || '') : '';
+            trackPublish(fid2, chKey, 'posted');
+            updateChannelStatus(chKey);
+            showToast('Published as in-app announcement! \uD83D\uDCF1 <a href="/api/announcements/widget" target="_blank" style="color:#00C9A7;text-decoration:underline">Preview Widget \u2192</a>');
             return;
         }
         if (isEmail) {
@@ -4034,6 +4057,8 @@ function doPublishToChannel(chKey) {
         publishingInFlight[chKey] = false;
         if (isEmail) {
             showToast('Error sending email: ' + err.message, 'error');
+        } else if (isInapp) {
+            showToast('Error publishing in-app: ' + err.message, 'error');
         } else {
             showToast('Error: ' + err.message + ' - opening preview instead', 'error');
             previewOnX(chKey);
@@ -4059,6 +4084,10 @@ function publishToChannel(chKey, skipConfirm) {
         showPublishConfirm(msg, function() {
             doPublishToChannel(chKey);
         }, { title: 'Send Email', icon: '\uD83D\uDCE7', confirmText: 'Yes, send it' });
+    } else if (chKey === 'inapp') {
+        showPublishConfirm('Publish this as an in-app announcement? It will be available via the announcements API.', function() {
+            doPublishToChannel(chKey);
+        }, { title: 'Publish In-App', confirmText: 'Yes, publish it' });
     } else {
         var hasImg = !!(contentViewImages[chKey] && contentViewImages[chKey].dataUrl);
         var msg = 'Do you want to post this on X? It will be directly posted to your account.';
@@ -4083,32 +4112,101 @@ function publishAllApproved() {
         }
     }
 
-    if (nonPublishable.length > 0) {
-        var hasImages = nonPublishable.some(function(k) { return !!contentViewImages[k]; });
-        var msg = nonPublishable.length + ' channel(s) approved but no publishing integration yet';
-        if (hasImages) msg += '. Remember to paste images separately for clipboard channels.';
-        showToast(msg, 'warning');
-        var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
-        for (var n = 0; n < nonPublishable.length; n++) {
-            contentViewPublished[nonPublishable[n]] = true;
-            trackPublish(fid, nonPublishable[n], 'clipboard');
-            updateChannelStatus(nonPublishable[n]);
-        }
-    }
-
-    if (publishableKeys.length === 0) return;
+    var allKeys = publishableKeys.concat(nonPublishable);
+    if (allKeys.length === 0) { showToast('No unpublished approved channels', 'warning'); return; }
 
     var twitterKeys = publishableKeys.filter(function(k) { return k === 'twitter'; });
     var emailKeys = publishableKeys.filter(function(k) { return k === 'email_newsletter' || k === 'email_standalone'; });
+    var inappKeys = publishableKeys.filter(function(k) { return k === 'inapp'; });
     var parts = [];
     if (twitterKeys.length > 0) parts.push('post ' + twitterKeys.length + ' to X');
     if (emailKeys.length > 0) parts.push('send ' + emailKeys.length + ' email(s)');
-    var msg = 'Publish all ' + publishableKeys.length + ' approved channel(s)? This will ' + parts.join(' and ') + '.';
+    if (inappKeys.length > 0) parts.push('publish ' + inappKeys.length + ' in-app');
+    if (nonPublishable.length > 0) parts.push('copy ' + nonPublishable.length + ' to clipboard');
+    var msg = 'Publish all ' + allKeys.length + ' approved channel(s)? This will ' + parts.join(', ') + '.';
+
     showPublishConfirm(msg, function() {
+        var results = {};
+        var pending = allKeys.length;
+
+        var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+        for (var n = 0; n < nonPublishable.length; n++) {
+            var nk = nonPublishable[n];
+            var ta = document.getElementById('ta-' + nk);
+            if (ta && ta.value) {
+                navigator.clipboard.writeText(ta.value).catch(function(){});
+            }
+            contentViewPublished[nk] = true;
+            trackPublish(fid, nk, 'clipboard');
+            updateChannelStatus(nk);
+            results[nk] = { status: 'clipboard' };
+            pending--;
+            if (pending <= 0) showPublishSummary(results);
+        }
+
         for (var j = 0; j < publishableKeys.length; j++) {
-            publishToChannel(publishableKeys[j], true);
+            (function(chKey) {
+                var endpoint = PUBLISHABLE_CHANNELS[chKey];
+                var ta = document.getElementById('ta-' + chKey);
+                var content = ta ? ta.value : '';
+                if (!content) { results[chKey] = { status: 'failed', error: 'No content' }; pending--; if (pending <= 0) showPublishSummary(results); return; }
+
+                var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+                var isInapp = (chKey === 'inapp');
+                var payload = { content: content, feature_id: fid };
+                if (isEmail) { payload.channel = chKey; payload.is_test = true; var imgMap = contentViewImageMap[chKey]; if (imgMap && Object.keys(imgMap).length > 0) payload.images = imgMap; }
+                else if (isInapp) { payload.feature_title = contentViewFeature ? (contentViewFeature.title || '') : ''; payload.category = contentViewFeature ? (contentViewFeature.category || '') : ''; }
+                else { var imgData = contentViewImages[chKey]; if (imgData && imgData.dataUrl) payload.image = imgData.dataUrl.split(',')[1]; }
+
+                fetch(endpoint, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        if (isEmail && data.method === 'fallback') {
+                            results[chKey] = { status: 'draft' };
+                        } else if (!isEmail && !isInapp && data.method === 'fallback') {
+                            results[chKey] = { status: 'fallback', url: data.tweet_url };
+                            if (data.tweet_url) window.open(data.tweet_url, '_blank');
+                        } else {
+                            contentViewPublished[chKey] = true;
+                            trackPublish(fid, chKey, 'posted');
+                            updateChannelStatus(chKey);
+                            results[chKey] = { status: 'published' };
+                        }
+                    } else {
+                        results[chKey] = { status: 'failed', error: data.error || data.hint || 'Unknown error' };
+                    }
+                })
+                .catch(function(err) { results[chKey] = { status: 'failed', error: err.message }; })
+                .finally(function() { pending--; if (pending <= 0) showPublishSummary(results); });
+            })(publishableKeys[j]);
         }
     }, { title: 'Publish All', confirmText: 'Yes, publish all' });
+}
+
+function showPublishSummary(results) {
+    var keys = Object.keys(results);
+    var html = '<div style="text-align:left;max-width:380px;">';
+    var published = 0, clipboard = 0, failed = 0;
+    for (var i = 0; i < keys.length; i++) {
+        var r = results[keys[i]];
+        var icon, label;
+        if (r.status === 'published') { icon = '\u2705'; label = 'Published'; published++; }
+        else if (r.status === 'clipboard') { icon = '\uD83D\uDCCB'; label = 'Copied to Clipboard'; clipboard++; }
+        else if (r.status === 'draft') { icon = '\uD83D\uDCDD'; label = 'Draft (SendGrid not configured)'; clipboard++; }
+        else if (r.status === 'fallback') { icon = '\u2197\uFE0F'; label = 'Opened in browser'; clipboard++; }
+        else { icon = '\u274C'; label = 'Failed: ' + (r.error || ''); failed++; }
+        html += '<div style="padding:4px 0;display:flex;align-items:center;gap:8px;">';
+        html += '<span>' + icon + '</span>';
+        html += '<span style="color:#ccc;font-weight:600;min-width:120px;">' + escHtml(keys[i]) + '</span>';
+        html += '<span style="color:#999;font-size:13px;">' + escHtml(label) + '</span>';
+        html += '</div>';
+    }
+    html += '</div>';
+    var title = 'Published to ' + keys.length + ' channel' + (keys.length > 1 ? 's' : '');
+    showPublishConfirm(html, function(){}, { title: title, confirmText: 'Done', hideCancel: true, isHtml: true });
+    var btn = document.getElementById('btn-publish');
+    if (btn && failed === 0) { btn.textContent = 'Published \u2705'; btn.disabled = true; }
 }
 
 function updateApprovalCounter() {

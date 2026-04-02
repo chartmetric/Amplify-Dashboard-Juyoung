@@ -1489,6 +1489,126 @@ def preview_email():
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
+@app.route("/api/publish/inapp", methods=["POST"])
+def publish_inapp():
+    from integrations.inapp_client import publish_announcement
+    import re
+
+    data = request.get_json() or {}
+    content = data.get("content", "").strip()
+    if not content:
+        return jsonify({"success": False, "error": "content is required"}), 400
+
+    feature_title = data.get("feature_title", "")
+    feature_id = data.get("feature_id", "")
+    category = data.get("category", "")
+
+    title = feature_title
+    body = content
+    bold_match = re.match(r'^\*\*(.+?)\*\*\s*\n?', content)
+    if bold_match:
+        title = title or bold_match.group(1)
+        body = content[bold_match.end():].strip()
+    elif not title:
+        lines = content.split('\n', 1)
+        title = lines[0].strip()
+        body = lines[1].strip() if len(lines) > 1 else ""
+
+    result = publish_announcement(title=title, body=body, feature_id=feature_id, category=category)
+    if result.get("success") and feature_id:
+        mark_published(feature_id, "inapp")
+    status_code = 200 if result.get("success") else 500
+    return jsonify(result), status_code
+
+
+@app.route("/api/announcements", methods=["GET"])
+def get_announcements_endpoint():
+    from integrations.inapp_client import get_announcements
+
+    limit = request.args.get("limit", 20, type=int)
+    status = request.args.get("status", None)
+    announcements = get_announcements(limit=limit, status=status)
+    return jsonify({"announcements": announcements, "total": len(announcements)}), 200
+
+
+@app.route("/api/announcements/<announcement_id>/dismiss", methods=["POST"])
+def dismiss_announcement_endpoint(announcement_id):
+    from integrations.inapp_client import dismiss_announcement
+
+    result = dismiss_announcement(announcement_id)
+    status_code = 200 if result.get("success") else 404
+    return jsonify(result), status_code
+
+
+@app.route("/api/announcements/widget", methods=["GET"])
+def announcements_widget():
+    from integrations.inapp_client import get_announcements
+    import html as html_mod
+
+    announcements = get_announcements(limit=5, status="active")
+    cards_html = ""
+    if not announcements:
+        cards_html = '<div class="empty">No announcements yet</div>'
+    else:
+        for ann in announcements:
+            cat = ann.get("category", "") or ""
+            cat_badge = f'<span class="cat-badge">{html_mod.escape(cat.replace("_", " ").title())}</span>' if cat else ""
+            ts = ann.get("published_at", "")[:16].replace("T", " ")
+            body_lines = html_mod.escape(ann.get("body", "")).replace("\n", "<br>")
+            cards_html += f'''<div class="ann-card" id="{html_mod.escape(ann["id"])}">
+                <button class="dismiss" onclick="dismiss('{html_mod.escape(ann["id"])}')">&times;</button>
+                <div class="ann-header">{cat_badge}<span class="ann-ts">{ts} UTC</span></div>
+                <div class="ann-title">{html_mod.escape(ann.get("title", ""))}</div>
+                <div class="ann-body">{body_lines}</div>
+            </div>'''
+
+    widget_html = f'''<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Chartmetric Announcements</title>
+<style>
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ background:#0f1923; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; min-height:100vh; display:flex; align-items:flex-end; justify-content:flex-end; padding:24px; }}
+.widget {{ width:380px; max-height:90vh; overflow-y:auto; display:flex; flex-direction:column; gap:12px; }}
+.ann-card {{
+    background:#1a2332; border:1px solid #2a3a4a; border-left:3px solid #00C9A7;
+    border-radius:10px; padding:16px 18px; position:relative;
+    animation: slideIn 0.4s ease-out forwards;
+    opacity:0; transform:translateX(40px);
+}}
+.ann-card:nth-child(1) {{ animation-delay:0.3s; }}
+.ann-card:nth-child(2) {{ animation-delay:0.5s; }}
+.ann-card:nth-child(3) {{ animation-delay:0.7s; }}
+@keyframes slideIn {{ to {{ opacity:1; transform:translateX(0); }} }}
+@keyframes pulse {{ 0%,100% {{ border-left-color:#00C9A7; }} 50% {{ border-left-color:#00e6be; }} }}
+.ann-card:first-child {{ animation: slideIn 0.4s 0.3s ease-out forwards, pulse 3s 1s ease-in-out infinite; }}
+.dismiss {{ position:absolute; top:10px; right:12px; background:none; border:none; color:#556677; font-size:18px; cursor:pointer; line-height:1; }}
+.dismiss:hover {{ color:#ff6b6b; }}
+.ann-header {{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }}
+.cat-badge {{ background:rgba(0,201,167,0.15); color:#00C9A7; font-size:11px; font-weight:600; padding:2px 8px; border-radius:4px; text-transform:uppercase; letter-spacing:0.5px; }}
+.ann-ts {{ color:#556677; font-size:11px; }}
+.ann-title {{ color:#e8edf2; font-size:15px; font-weight:700; margin-bottom:6px; line-height:1.4; }}
+.ann-body {{ color:#99aabb; font-size:13px; line-height:1.6; }}
+.empty {{ color:#556677; text-align:center; padding:40px; font-size:14px; }}
+.widget-header {{ color:#e8edf2; font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; padding:0 4px; }}
+.widget-header .dot {{ width:8px; height:8px; border-radius:50%; background:#00C9A7; animation: pulse-dot 2s infinite; }}
+@keyframes pulse-dot {{ 0%,100% {{ opacity:1; }} 50% {{ opacity:0.4; }} }}
+</style></head>
+<body>
+<div class="widget">
+    <div class="widget-header"><span class="dot"></span> Chartmetric Product Updates</div>
+    {cards_html}
+</div>
+<script>
+function dismiss(id) {{
+    fetch('/api/announcements/' + id + '/dismiss', {{ method:'POST' }});
+    var el = document.getElementById(id);
+    if (el) {{ el.style.transition='all 0.3s'; el.style.opacity='0'; el.style.transform='translateX(40px)'; setTimeout(function(){{ el.remove(); }}, 300); }}
+}}
+</script>
+</body></html>'''
+    return widget_html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
 @app.route("/api/publish/all", methods=["GET"])
 def get_all_published_endpoint():
     return jsonify(get_all_published()), 200

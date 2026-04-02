@@ -1,0 +1,64 @@
+Add in-app announcement publishing. This creates an API that could be integrated into the real Chartmetric product.
+
+1. CREATE `integrations/inapp_client.py`:
+   - Maintain an in-memory store: ANNOUNCEMENTS = [] (list of published announcements)
+   - Function `publish_announcement(title: str, body: str, feature_id: str = None, category: str = None) -> dict`:
+     - Create an announcement object:
+     {
+         "id": "ann-" + uuid4 hex[:8],
+         "title": title,
+         "body": body,
+         "feature_id": feature_id,
+         "category": category,
+         "published_at": ISO timestamp,
+         "status": "active"
+     }
+     - Append to ANNOUNCEMENTS store
+     - Return {"success": true, "announcement": announcement_object}
+   - Function `get_announcements(limit: int = 20, status: str = None) -> list`:
+     - Return announcements, most recent first, optionally filtered by status
+   - Function `dismiss_announcement(announcement_id: str) -> dict`:
+     - Set status to "dismissed"
+     - Return success/failure
+
+2. ADD endpoints:
+   POST /api/publish/inapp
+   - Body: {"content": "the in-app text", "feature_title": "...", "feature_id": "...", "category": "new_feature"}
+   - Parses the content: first bold line becomes title, rest is body (or use feature_title as title)
+   - Calls publish_announcement()
+   - Returns the announcement
+
+   GET /api/announcements
+   - Query params: ?limit=20&status=active
+   - Returns {"announcements": [...], "total": N}
+   - This is the public API that the real Chartmetric app would call to show announcements to users
+
+   POST /api/announcements/{id}/dismiss
+   - Marks an announcement as dismissed
+
+   GET /api/announcements/widget
+   - Returns a self-contained HTML page that renders a beautiful announcement widget
+   - Styled like a real in-app notification: slide-in card from bottom-right, dark theme matching the dashboard (#0f1923 background, teal #00C9A7 accent), dismiss X button
+   - Shows the most recent active announcement with title, body, category badge, and timestamp
+   - Auto-animates: slides in from right after 1 second, has a gentle pulse on the teal accent border
+   - This is a demo endpoint to show judges what it would look like embedded in the real product
+
+3. UPDATE the dashboard UI — on approved In-App channel cards:
+   - Add "Publish In-App 📱" button (after approval)
+   - When clicked:
+     - Call POST /api/publish/inapp with the content and feature info
+     - Show toast "Published as in-app announcement!"
+     - Add a "Preview Widget →" link that opens /api/announcements/widget in a new tab
+   - Wire into "Publish All Approved" flow
+
+4. UPDATE the "Publish All Approved" button logic:
+   - When clicked, iterate through all approved channels:
+     - Twitter → POST /api/publish/twitter
+     - email_newsletter or email_standalone → POST /api/publish/email
+     - inapp → POST /api/publish/inapp
+     - linkedin → copy to clipboard (no API), show toast
+     - slack_internal → copy to clipboard, show toast
+     - notion_monthly → copy to clipboard, show toast
+     - article_hmc → copy to clipboard, show toast
+   - Show a summary modal after all publishes complete: "Published to X channels" with status per channel (✅ Published / 📋 Copied to Clipboard / ❌ Failed)
+   - Change "Publish All Approved" button to "Published ✅" after completion
