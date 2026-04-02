@@ -3467,7 +3467,9 @@ function updateChannelStatus(chKey) {
                 undo.onclick = function() { undoApproval(chKey); };
                 actionsEl.appendChild(undo);
             }
-            if (PUBLISHABLE_CHANNELS[chKey] && !actionsEl.querySelector('.publish-post-preview-dd')) {
+            if (PUBLISHABLE_CHANNELS[chKey]) {
+                var oldDd = actionsEl.querySelector('.publish-post-preview-dd');
+                if (oldDd) oldDd.remove();
                 var ddId = 'publish-dd-' + chKey;
                 var ddWrapper = document.createElement('div');
                 ddWrapper.className = 'custom-dropdown publish-dropdown publish-post-preview-dd';
