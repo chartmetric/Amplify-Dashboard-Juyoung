@@ -1100,7 +1100,6 @@
             <span class="subtitle">Product Marketing Autopilot</span>
         </div>
         <div class="topbar-right">
-            <button class="btn-prep-content" onclick="openManualInput()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">+ Add Feature</button>
             <button class="btn-analytics" onclick="toggleAnalytics()">&#128202; Analytics</button>
             <button class="btn-prep-content" onclick="startPrepWorkflow()">Prep Content</button>
             <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">&#127769;</button>
@@ -3199,7 +3198,6 @@ function persistApproval(fid, chKey, approved, draftText) {
             if (draftText !== undefined) localStorage.setItem(_draftKey(fid, chKey), draftText);
         } else {
             localStorage.removeItem(_approvalKey(fid, chKey));
-            localStorage.removeItem(_draftKey(fid, chKey));
         }
     } catch(e) {}
 }
@@ -3210,6 +3208,43 @@ function isPersistedApproved(fid, chKey) {
 
 function getPersistedDraft(fid, chKey) {
     try { return localStorage.getItem(_draftKey(fid, chKey)); } catch(e) { return null; }
+}
+
+function autoSaveDraft(chKey) {
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    if (!fid) return;
+    var ta = document.getElementById('ta-' + chKey);
+    if (!ta) return;
+    var text = ta.value;
+    try { localStorage.setItem(_draftKey(fid, chKey), text); } catch(e) {}
+    if (contentViewApproved[chKey] && text !== contentViewInitialDrafts[chKey]) {
+        contentViewApproved[chKey] = false;
+        persistApproval(fid, chKey, false);
+        updateChannelStatus(chKey);
+        updateApprovalCounter();
+    }
+}
+
+function _imageMapKey(fid, ch) { return 'ampImages:' + fid + ':' + ch; }
+
+function persistImageMap(chKey) {
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    if (!fid) return;
+    var map = contentViewImageMap[chKey];
+    try {
+        if (map && Object.keys(map).length > 0) {
+            localStorage.setItem(_imageMapKey(fid, chKey), JSON.stringify(map));
+        } else {
+            localStorage.removeItem(_imageMapKey(fid, chKey));
+        }
+    } catch(e) {}
+}
+
+function getPersistedImageMap(fid, chKey) {
+    try {
+        var raw = localStorage.getItem(_imageMapKey(fid, chKey));
+        return raw ? JSON.parse(raw) : null;
+    } catch(e) { return null; }
 }
 
 function generateContent(fid) {
@@ -3303,11 +3338,11 @@ function enterContentView(feature) {
             if (!ch) return;
             var wasApproved = isPersistedApproved(fid, chKey);
             var savedDraft = getPersistedDraft(fid, chKey);
-            if (wasApproved && savedDraft !== null) {
+            contentViewOriginals[chKey] = ch.content || '';
+            if (savedDraft !== null) {
                 ch.content = savedDraft;
             }
             contentViewChannels[chKey] = ch;
-            contentViewOriginals[chKey] = ch.content || '';
             contentViewInitialDrafts[chKey] = ch.content || '';
             contentViewApproved[chKey] = wasApproved;
             contentViewRegenFeedback[chKey] = '';
@@ -3331,6 +3366,15 @@ function enterContentView(feature) {
                     if (s.image.name && s.image.dataUrl) {
                         if (!contentViewImageMap[chKey]) contentViewImageMap[chKey] = {};
                         contentViewImageMap[chKey][s.image.name] = s.image.dataUrl;
+                    }
+                }
+                var localImgMap = getPersistedImageMap(fid, chKey);
+                if (localImgMap) {
+                    if (!contentViewImageMap[chKey]) contentViewImageMap[chKey] = {};
+                    for (var imgKey in localImgMap) {
+                        if (!contentViewImageMap[chKey][imgKey]) {
+                            contentViewImageMap[chKey][imgKey] = localImgMap[imgKey];
+                        }
                     }
                 }
             });
@@ -3474,6 +3518,7 @@ function buildChannelCard(chKey, ch) {
     }
     ta.addEventListener('blur', function() {
         switchToPreview(chKey);
+        autoSaveDraft(chKey);
     });
 
     var fbInput = card.querySelector('.regen-feedback-input');
@@ -3585,10 +3630,13 @@ function regenerateChannel(chKey) {
 
         if (contentViewApproved[chKey]) {
             contentViewApproved[chKey] = false;
+            var regenFid = contentViewFeature ? (contentViewFeature.id || '') : '';
+            if (regenFid) persistApproval(regenFid, chKey, false);
             updateChannelStatus(chKey);
             updateApprovalCounter();
         }
 
+        autoSaveDraft(chKey);
         switchToPreview(chKey);
     })
     .catch(function(err) {
@@ -3834,6 +3882,8 @@ function insertImageMarkerAtCursor(chKey, imgData) {
     if (!contentViewImageMap) window.contentViewImageMap = {};
     if (!contentViewImageMap[chKey]) contentViewImageMap[chKey] = {};
     contentViewImageMap[chKey][imgData.name] = imgData.dataUrl;
+    persistImageMap(chKey);
+    autoSaveDraft(chKey);
 }
 
 var contentViewImageMap = {};
@@ -3870,6 +3920,8 @@ function removeChannelImage(chKey) {
     var allChKeys = Object.keys(contentViewChannels);
     for (var i = 0; i < allChKeys.length; i++) {
         delete contentViewImages[allChKeys[i]];
+        contentViewImageMap[allChKeys[i]] = {};
+        persistImageMap(allChKeys[i]);
         var wrap = document.getElementById('img-wrap-' + allChKeys[i]);
         if (wrap) { wrap.innerHTML = ''; wrap.style.display = 'none'; }
         var addBtn = document.getElementById('add-img-btn-' + allChKeys[i]);
@@ -4041,6 +4093,7 @@ function saveLinkFromTooltip() {
     ta.dispatchEvent(new Event('input'));
     var preview = document.getElementById('md-preview-' + ta.dataset.channel);
     if (preview) preview.innerHTML = simpleMarkdown(ta.value);
+    if (ta.dataset.channel) autoSaveDraft(ta.dataset.channel);
     dismissLinkTooltip();
 }
 
@@ -4057,6 +4110,7 @@ function removeLinkFromTooltip() {
     ta.dispatchEvent(new Event('input'));
     var preview = document.getElementById('md-preview-' + ta.dataset.channel);
     if (preview) preview.innerHTML = simpleMarkdown(ta.value);
+    if (ta.dataset.channel) autoSaveDraft(ta.dataset.channel);
     dismissLinkTooltip();
 }
 
