@@ -1784,6 +1784,49 @@ def generate_content_endpoint():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/share/slack", methods=["POST"])
+def share_slack_endpoint():
+    """Share content to a Slack webhook.
+
+    Category: Sharing
+
+    Request Body:
+    {
+        "webhook_url": "https://hooks.slack.com/services/...",
+        "text": "The message to post",
+        "feature_title": "Optional feature title"
+    }
+    """
+    data = request.get_json() or {}
+    webhook_url = data.get("webhook_url", "").strip()
+    text = data.get("text", "").strip()
+
+    if not webhook_url:
+        return jsonify({"error": "webhook_url is required"}), 400
+    if not text:
+        return jsonify({"error": "text is required"}), 400
+
+    from urllib.parse import urlparse
+    parsed = urlparse(webhook_url)
+    if (parsed.scheme != "https" or
+        parsed.hostname != "hooks.slack.com" or
+        not parsed.path.startswith("/services/") or
+        parsed.username or parsed.password or parsed.port):
+        return jsonify({"error": "Invalid Slack webhook URL"}), 400
+
+    import requests as req_lib
+    payload = {"text": text}
+    try:
+        resp = req_lib.post(webhook_url, json=payload, timeout=10)
+        if resp.status_code == 200 and resp.text == "ok":
+            return jsonify({"success": True})
+        else:
+            return jsonify({"error": f"Slack returned {resp.status_code}: {resp.text}"}), 502
+    except Exception as e:
+        logger.error(f"Slack webhook error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/generate/single", methods=["POST"])
 def generate_single_endpoint():
     """Regenerate content for one channel, optionally with feedback on previous draft.

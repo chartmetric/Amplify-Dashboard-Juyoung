@@ -388,6 +388,58 @@
         .pub-prev-note { font-size: 11px; color: var(--text-faint); margin-top: 4px; font-style: italic; }
         .pub-channel-filters { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
         .filter-label-sub { color: var(--text-faint); font-size: 12px; margin: 0 2px; }
+        .dyk-toggle-btn {
+            display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;
+            border-radius: 8px; border: 1px solid var(--border); background: transparent;
+            color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer;
+            transition: all 0.2s; white-space: nowrap;
+        }
+        .dyk-toggle-btn:hover { border-color: #eab308; color: #eab308; }
+        .dyk-toggle-btn.active { background: rgba(234,179,8,0.15); border-color: #eab308; color: #eab308; }
+        .dyk-tip-preview {
+            margin-top: 8px; padding: 8px 12px; border-radius: 8px;
+            background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.2);
+            font-size: 12px; color: var(--text-body); cursor: pointer;
+            transition: all 0.2s; line-height: 1.4;
+        }
+        .dyk-tip-preview:hover { background: rgba(234,179,8,0.15); border-color: rgba(234,179,8,0.4); }
+        .dyk-tip-preview .dyk-tip-icon { margin-right: 4px; }
+        .dyk-tip-preview .dyk-tip-text { }
+        .dyk-tip-preview.loading { color: var(--text-faint); font-style: italic; }
+        .dyk-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6); z-index: 10000;
+            display: flex; align-items: center; justify-content: center;
+            animation: fadeIn 0.15s ease;
+        }
+        .dyk-overlay-card {
+            background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: 16px; padding: 28px; max-width: 480px; width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+        }
+        .dyk-overlay-header {
+            display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+        }
+        .dyk-overlay-title { font-size: 16px; font-weight: 700; color: #eab308; }
+        .dyk-overlay-close {
+            background: none; border: none; color: var(--text-muted); font-size: 20px;
+            cursor: pointer; padding: 4px 8px; border-radius: 6px;
+        }
+        .dyk-overlay-close:hover { background: var(--hover-bg); }
+        .dyk-overlay-body {
+            font-size: 15px; line-height: 1.6; color: var(--text-body);
+            margin-bottom: 20px; padding: 16px; border-radius: 10px;
+            background: rgba(234,179,8,0.06); border: 1px solid rgba(234,179,8,0.15);
+        }
+        .dyk-overlay-actions { display: flex; gap: 10px; }
+        .dyk-btn-copy, .dyk-btn-slack {
+            flex: 1; padding: 10px 16px; border-radius: 8px; font-size: 13px;
+            font-weight: 600; cursor: pointer; border: none; transition: all 0.2s;
+        }
+        .dyk-btn-copy { background: var(--accent); color: var(--cta-text); }
+        .dyk-btn-copy:hover { background: var(--accent-hover); }
+        .dyk-btn-slack { background: #4A154B; color: #fff; }
+        .dyk-btn-slack:hover { background: #611f63; }
         .btn-generate {
             background: var(--accent); color: var(--cta-text); border: none; padding: 10px 20px;
             border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;
@@ -1093,6 +1145,9 @@
                     </div>
                     <input type="hidden" id="importance-filter" value="3">
                 </div>
+                <button class="dyk-toggle-btn" id="dyk-toggle" onclick="toggleDidYouKnow()">
+                    &#128161; Did You Know?
+                </button>
             </div>
         </div>
 
@@ -2239,6 +2294,9 @@ function renderAll() {
 
     renderPagination(totalFiltered, startIdx + 1, endIdx);
     attachShowMore();
+    if (dykEnabled) {
+        setTimeout(generateDykTipsForVisibleCards, 50);
+    }
 }
 
 function renderPagination(total, startNum, endNum) {
@@ -2427,6 +2485,7 @@ function buildCard(f, isAutoSkippedCard) {
                         actionBtn +
                     '</div>' +
                 '</div>' +
+                '<div class="dyk-tip-wrap" id="dyk-tip-' + escAttr(fid) + '" style="display:none;"></div>' +
             '</div>' +
         '</div>' +
         '<div class="card-expanded-content">' +
@@ -2438,7 +2497,8 @@ function buildCard(f, isAutoSkippedCard) {
         if (e.target.closest('.btn-generate') || e.target.closest('.btn-classify-now') ||
             e.target.closest('.show-more-link') || e.target.closest('.score-badge') ||
             e.target.closest('.score-popover') || e.target.closest('.cat-popover') ||
-            e.target.closest('.override-reason-row') || e.target.closest('.card-meta')) return;
+            e.target.closest('.override-reason-row') || e.target.closest('.card-meta') ||
+            e.target.closest('.dyk-tip-preview')) return;
         toggleCard(card, fid);
     });
 
@@ -2870,7 +2930,8 @@ function commitOverride(f, c, reason, onDone) {
 
 var CHANNEL_ICONS = {
     twitter: '\uD83D\uDC26', email_newsletter: '\uD83D\uDCE7', email_standalone: '\uD83D\uDCE8',
-    inapp: '\uD83D\uDCF1', linkedin: '\uD83D\uDCBC', notion_monthly: '\uD83D\uDCCB', article_hmc: '\uD83D\uDCDD'
+    inapp: '\uD83D\uDCF1', linkedin: '\uD83D\uDCBC', notion_monthly: '\uD83D\uDCCB', article_hmc: '\uD83D\uDCDD',
+    did_you_know: '\uD83D\uDCA1'
 };
 var contentViewFeature = null;
 var contentViewChannels = {};
@@ -2885,8 +2946,188 @@ var publishedFeatureState = {};
 
 var CHANNEL_DISPLAY_SHORT = {
     twitter: 'Twitter', email_newsletter: 'Newsletter', email_standalone: 'Email',
-    inapp: 'In-App', linkedin: 'LinkedIn', notion_monthly: 'Notion', article_hmc: 'HMC'
+    inapp: 'In-App', linkedin: 'LinkedIn', notion_monthly: 'Notion', article_hmc: 'HMC',
+    did_you_know: 'Did You Know?'
 };
+
+var dykEnabled = false;
+var dykTips = {};
+var dykGenerating = {};
+
+function toggleDidYouKnow() {
+    dykEnabled = !dykEnabled;
+    var btn = document.getElementById('dyk-toggle');
+    if (dykEnabled) {
+        btn.classList.add('active');
+        generateDykTipsForVisibleCards();
+    } else {
+        btn.classList.remove('active');
+        hideDykTips();
+    }
+}
+
+function generateDykTipsForVisibleCards() {
+    var cards = document.querySelectorAll('.feature-card');
+    cards.forEach(function(card) {
+        var fid = card.querySelector('.btn-generate');
+        if (!fid) return;
+        fid = fid.getAttribute('data-fid');
+        if (!fid) return;
+        showDykTipForFeature(fid);
+    });
+}
+
+function showDykTipForFeature(fid) {
+    var wrap = document.getElementById('dyk-tip-' + fid);
+    if (!wrap) return;
+    wrap.style.display = 'block';
+
+    if (dykTips[fid]) {
+        wrap.innerHTML = '<div class="dyk-tip-preview" onclick="openDykOverlay(\'' + escAttr(fid) + '\')">' +
+            '<span class="dyk-tip-icon">\uD83D\uDCA1</span>' +
+            '<span class="dyk-tip-text">' + escHtml(dykTips[fid].substring(0, 120)) + (dykTips[fid].length > 120 ? '...' : '') + '</span>' +
+            '</div>';
+        return;
+    }
+
+    if (dykGenerating[fid]) return;
+    dykGenerating[fid] = true;
+
+    wrap.innerHTML = '<div class="dyk-tip-preview loading">' +
+        '<span class="dyk-tip-icon">\uD83D\uDCA1</span>' +
+        '<span class="dyk-tip-text">Generating tip...</span>' +
+        '</div>';
+
+    var feature = null;
+    for (var i = 0; i < allFeatures.length; i++) {
+        if (allFeatures[i].id === fid) { feature = allFeatures[i]; break; }
+    }
+    if (!feature) { dykGenerating[fid] = false; return; }
+
+    fetch('/api/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ feature: feature, channels: ['did_you_know'] })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        dykGenerating[fid] = false;
+        var content = '';
+        if (data.generated_content && data.generated_content.did_you_know) {
+            content = data.generated_content.did_you_know.content || '';
+        }
+        dykTips[fid] = content;
+        if (dykEnabled && document.getElementById('dyk-tip-' + fid)) {
+            showDykTipForFeature(fid);
+        }
+    })
+    .catch(function(err) {
+        dykGenerating[fid] = false;
+        var w = document.getElementById('dyk-tip-' + fid);
+        if (w) w.innerHTML = '<div class="dyk-tip-preview" style="color:var(--text-faint);">' +
+            '<span class="dyk-tip-icon">\uD83D\uDCA1</span>' +
+            '<span class="dyk-tip-text">Failed to generate tip</span></div>';
+    });
+}
+
+function hideDykTips() {
+    var wraps = document.querySelectorAll('.dyk-tip-wrap');
+    wraps.forEach(function(w) { w.style.display = 'none'; });
+}
+
+function openDykOverlay(fid) {
+    var tip = dykTips[fid];
+    if (!tip) return;
+
+    var feature = null;
+    for (var i = 0; i < allFeatures.length; i++) {
+        if (allFeatures[i].id === fid) { feature = allFeatures[i]; break; }
+    }
+    var title = feature ? feature.title : 'Feature';
+
+    var overlay = document.createElement('div');
+    overlay.className = 'dyk-overlay';
+    overlay.id = 'dyk-overlay';
+    overlay.innerHTML =
+        '<div class="dyk-overlay-card">' +
+            '<div class="dyk-overlay-header">' +
+                '<span class="dyk-overlay-title">\uD83D\uDCA1 Did You Know?</span>' +
+                '<button class="dyk-overlay-close" onclick="closeDykOverlay()">&times;</button>' +
+            '</div>' +
+            '<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">' + escHtml(title) + '</div>' +
+            '<div class="dyk-overlay-body">' + escHtml(tip) + '</div>' +
+            '<div class="dyk-overlay-actions">' +
+                '<button class="dyk-btn-copy" onclick="copyDykTip(\'' + escAttr(fid) + '\')">Copy to Clipboard</button>' +
+                '<button class="dyk-btn-slack" onclick="shareDykOnSlack(\'' + escAttr(fid) + '\')">Share on Slack</button>' +
+            '</div>' +
+        '</div>';
+
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeDykOverlay();
+    });
+
+    document.body.appendChild(overlay);
+}
+
+function closeDykOverlay() {
+    var overlay = document.getElementById('dyk-overlay');
+    if (overlay) overlay.remove();
+}
+
+function copyDykTip(fid) {
+    var tip = dykTips[fid];
+    if (!tip) return;
+    navigator.clipboard.writeText(tip).then(function() {
+        showToast('Tip copied to clipboard!', 'success');
+    }).catch(function() {
+        showToast('Failed to copy', 'error');
+    });
+}
+
+function shareDykOnSlack(fid) {
+    var tip = dykTips[fid];
+    if (!tip) return;
+
+    var feature = null;
+    for (var i = 0; i < allFeatures.length; i++) {
+        if (allFeatures[i].id === fid) { feature = allFeatures[i]; break; }
+    }
+    var title = feature ? feature.title : 'Feature';
+
+    var webhookUrl = localStorage.getItem('dyk_slack_webhook');
+    if (!webhookUrl) {
+        var url = prompt('Enter your Slack Incoming Webhook URL to share tips:\n(Must start with https://hooks.slack.com/)');
+        if (!url) return;
+        if (url.indexOf('https://hooks.slack.com/services/') !== 0) {
+            showToast('Invalid Slack webhook URL. Must start with https://hooks.slack.com/services/', 'error');
+            return;
+        }
+        localStorage.setItem('dyk_slack_webhook', url);
+        webhookUrl = url;
+    }
+
+    var slackText = '\uD83D\uDCA1 *Did You Know?* \u2014 _' + title + '_\n\n' + tip;
+
+    fetch('/api/share/slack', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ webhook_url: webhookUrl, text: slackText, feature_title: title })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            showToast('Tip shared on Slack!', 'success');
+        } else {
+            if (data.error && data.error.indexOf('Invalid') !== -1) {
+                localStorage.removeItem('dyk_slack_webhook');
+            }
+            showToast('Slack error: ' + (data.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(function(err) {
+        showToast('Failed to share on Slack: ' + err.message, 'error');
+    });
+}
 
 function trackPublish(fid, chKey, mode) {
     if (!fid) return;
@@ -3014,6 +3255,7 @@ function enterContentView(feature) {
 
     var channels = (cl.recommended_channels || []).slice();
     if (channels.length === 0) channels = ['twitter', 'linkedin', 'inapp'];
+    if (channels.indexOf('did_you_know') === -1) channels.push('did_you_know');
 
     document.getElementById('channel-grid').innerHTML = '';
     document.getElementById('content-bottom-bar').style.display = 'none';

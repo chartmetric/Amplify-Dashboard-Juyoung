@@ -69,4 +69,14 @@ CHANNEL_CONFIGS = {
         "example_output_format": "meta_description: [155-char SEO description]\n\n# [SEO Title with Primary Keyword]\n\n[Hook intro paragraph with stats + SEO phrases]\n\n## [Feature/Strategy 1 Name]\n[Feature description + user benefit]\n[How to access/use it]\n**Why this matters:** [data-backed context]\n**Pro tip:** [insider advice]\n\n## [Feature/Strategy 2 Name]\n...\n\n## [Empowering Closing Header]\n[1-2 sentence empowering close]",
         "enabled": True,
     },
+    "did_you_know": {
+        "display_name": "\U0001f4a1 Did You Know?",
+        "description": "Fun educational discovery content about hidden or underused Chartmetric features",
+        "max_chars": 280,
+        "tone": "Friendly, surprising, educational. Like a knowledgeable colleague sharing a cool hidden trick. Conversational and upbeat \u2014 make the reader feel like they just discovered a secret superpower.",
+        "format_rules": "Structure: Start with 'Did you know?' followed by a surprising or lesser-known fact about the Chartmetric feature. Then include a clear, actionable CTA starting with 'Try it:' that tells the user exactly how to access or use the feature. Keep it concise and punchy \u2014 this is a single-tweet-length tip. No hashtags, no links, no emoji in body. Must be under 280 characters total.",
+        "audience": "Existing Chartmetric users who may not be aware of all platform capabilities \u2014 power users and casual users alike",
+        "example_output_format": "Did you know? [surprising fact about the feature]. Try it: [specific actionable CTA].",
+        "enabled": True,
+    },
 }
