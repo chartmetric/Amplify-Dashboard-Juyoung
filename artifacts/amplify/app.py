@@ -56,6 +56,28 @@ _batch_state = {
 }
 _batch_lock = threading.Lock()
 
+_metrics = {
+    "generate_count": 0,
+    "approve_count": 0,
+    "edit_count": 0,
+    "daily_generates": {},
+}
+_metrics_lock = threading.Lock()
+
+
+def _inc_generate(count=1):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    with _metrics_lock:
+        _metrics["generate_count"] += count
+        _metrics["daily_generates"][today] = _metrics["daily_generates"].get(today, 0) + count
+
+
+def _inc_approve(was_edited=False):
+    with _metrics_lock:
+        _metrics["approve_count"] += 1
+        if was_edited:
+            _metrics["edit_count"] += 1
+
 
 @app.route("/")
 def dashboard():
@@ -1452,8 +1474,10 @@ def approve_and_save():
     if not channel or not original_draft or not approved_draft:
         return jsonify({"error": "channel, original_draft, and approved_draft are required"}), 400
 
+    was_edited = (original_draft.strip() != approved_draft.strip())
+    _inc_approve(was_edited=was_edited)
     save_feedback(channel, feature_title, original_draft, approved_draft, feedback_note)
-    print(f"[approve] Approved draft for '{feature_title}' on channel '{channel}'", flush=True)
+    print(f"[approve] Approved draft for '{feature_title}' on channel '{channel}' (edited={was_edited})", flush=True)
     return jsonify({"success": True, "message": "Approved and feedback saved for future learning"})
 
 
@@ -1747,6 +1771,7 @@ def generate_content_endpoint():
     try:
         print(f"[generate] Generating content for '{feature.get('title', 'unknown')}' on channels: {channels}", flush=True)
         results = generate_all_channels(feature, channels=channels, custom_instructions=custom_instructions or None)
+        _inc_generate(len(results) if results else 1)
         return jsonify({
             "feature_id": feature.get("id", ""),
             "feature_title": feature.get("title", ""),
@@ -1801,6 +1826,7 @@ def generate_single_endpoint():
             feedback=feedback or None,
             skip_cache=True,
         )
+        _inc_generate(1)
         return jsonify(result)
     except Exception as e:
         logger.error(f"Generate single endpoint error: {e}")
@@ -1873,6 +1899,7 @@ def generate_batch_endpoint():
                 feature_channels = f.get("classification", {}).get("recommended_channels")
 
             content = generate_all_channels(f, channels=feature_channels)
+            _inc_generate(len(content) if content else 1)
             results.append({
                 "feature_id": f.get("id", ""),
                 "feature_title": f.get("title", ""),
@@ -1974,6 +2001,7 @@ def generate_batch_single_channel_endpoint():
             for i in range(len(features)):
                 results.append(result_by_idx.get(i, {"success": False, "error": "Missing"}))
 
+        _inc_generate(succeeded)
         return jsonify({
             "channel": channel,
             "channel_display_name": config["display_name"],
@@ -1985,6 +2013,33 @@ def generate_batch_single_channel_endpoint():
     except Exception as e:
         logger.error(f"Generate batch-single-channel error: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/metrics")
+def get_metrics():
+    """Return in-memory analytics metrics for the dashboard.
+
+    Category: Analytics
+
+    Response:
+    {
+        "generate_count": 47,
+        "approve_count": 12,
+        "edit_count": 8,
+        "daily_generates": {"2026-04-01": 12, ...},
+        "feedback_summary": {"twitter": 3, "email_newsletter": 2}
+    }
+    """
+    all_fb = get_all_feedback()
+    feedback_summary = {ch: len(records) for ch, records in all_fb.items()}
+    with _metrics_lock:
+        return jsonify({
+            "generate_count": _metrics["generate_count"],
+            "approve_count": _metrics["approve_count"],
+            "edit_count": _metrics["edit_count"],
+            "daily_generates": dict(_metrics["daily_generates"]),
+            "feedback_summary": feedback_summary,
+        })
 
 
 @app.route("/api/content/combine", methods=["POST"])

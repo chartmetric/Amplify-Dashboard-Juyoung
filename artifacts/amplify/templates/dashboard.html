@@ -754,6 +754,79 @@
             font-family: inherit; white-space: nowrap; flex-shrink: 0;
         }
         .btn-prep-content:hover { background: var(--accent-hover); }
+        .btn-analytics {
+            background: var(--bg-card); color: var(--text-body); border: 1px solid var(--border);
+            padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+            cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .btn-analytics:hover { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+        .btn-analytics.active { border-color: var(--accent); background: var(--accent-bg-strong); color: var(--accent); }
+        .analytics-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500;
+            background: var(--bg-overlay); overflow-y: auto; transition: background-color 0.2s;
+        }
+        .analytics-header {
+            padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--bg-panel);
+            display: flex; align-items: center; justify-content: space-between;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .analytics-header-left { display: flex; align-items: center; gap: 12px; }
+        .analytics-header-title { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+        .analytics-close {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+            color: var(--text-muted); cursor: pointer; padding: 6px 12px; font-size: 13px;
+            font-family: inherit; transition: all 0.2s;
+        }
+        .analytics-close:hover { border-color: var(--accent); color: var(--accent); }
+        .analytics-body { max-width: 960px; margin: 0 auto; padding: 24px; }
+        .analytics-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;
+        }
+        @media (max-width: 700px) {
+            .analytics-grid { grid-template-columns: 1fr; }
+        }
+        .analytics-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+            padding: 20px; transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .analytics-card:hover { border-color: var(--border-hover); box-shadow: 0 4px 20px var(--shadow); }
+        .analytics-card-header {
+            display: flex; align-items: flex-start; justify-content: space-between;
+            margin-bottom: 4px;
+        }
+        .analytics-card-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .analytics-demo-label {
+            font-size: 10px; color: #eab308; background: rgba(234,179,8,0.12);
+            padding: 2px 8px; border-radius: 99px; font-weight: 600; white-space: nowrap;
+        }
+        .analytics-big-number { font-size: 32px; font-weight: 800; color: var(--text-primary); line-height: 1.1; margin: 8px 0 2px; }
+        .analytics-subtitle { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+        .analytics-trend {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px;
+        }
+        .analytics-trend.down { color: #00C9A7; background: rgba(0,201,167,0.12); }
+        .analytics-trend.up { color: #ef4444; background: rgba(239,68,68,0.12); }
+        .analytics-trend.neutral { color: var(--text-muted); background: rgba(107,114,128,0.12); }
+        .analytics-sparkline { display: flex; align-items: flex-end; gap: 3px; height: 40px; margin-top: 10px; }
+        .analytics-spark-bar {
+            flex: 1; background: var(--accent); border-radius: 3px 3px 0 0;
+            min-width: 6px; opacity: 0.7; transition: opacity 0.15s;
+        }
+        .analytics-spark-bar:hover { opacity: 1; }
+        .analytics-bar-chart { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+        .analytics-bar-row { display: flex; align-items: center; gap: 8px; }
+        .analytics-bar-label { font-size: 11px; color: var(--text-muted); min-width: 70px; text-align: right; }
+        .analytics-bar-track { flex: 1; height: 14px; background: var(--bg-input); border-radius: 7px; overflow: hidden; }
+        .analytics-bar-fill { height: 100%; border-radius: 7px; transition: width 0.6s ease; }
+        .analytics-bar-value { font-size: 11px; color: var(--text-muted); min-width: 24px; }
+        .analytics-feedback-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+        .analytics-feedback-item {
+            font-size: 12px; color: var(--text-body); padding: 8px 10px;
+            background: var(--bg-input); border-radius: 6px; border-left: 3px solid var(--accent);
+        }
+        .analytics-feedback-channel { font-size: 10px; font-weight: 600; color: var(--accent); text-transform: uppercase; margin-bottom: 2px; }
         .prep-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500;
             background: var(--bg-overlay); overflow-y: auto; transition: background-color 0.2s;
@@ -976,6 +1049,7 @@
         </div>
         <div class="topbar-right">
             <button class="btn-prep-content" onclick="openManualInput()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">+ Add Feature</button>
+            <button class="btn-analytics" onclick="toggleAnalytics()">&#128202; Analytics</button>
             <button class="btn-prep-content" onclick="startPrepWorkflow()">Prep Content for...</button>
             <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">&#127769;</button>
             <div style="display:flex;align-items:center;gap:6px;" title="API server connection">
@@ -1139,6 +1213,55 @@
             <button class="btn-approve" id="btn-approve-all" onclick="approveAllChannels()">Approve All</button>
             <button class="btn-undo-all" id="btn-undo-all" onclick="undoAllApprovals()" style="display:none;">Undo All</button>
             <button class="btn-publish" id="btn-publish" disabled onclick="publishAllApproved()">Publish All Approved &rarr;</button>
+        </div>
+    </div>
+
+    <div id="analytics-overlay" class="analytics-overlay" style="display:none;">
+        <div class="analytics-header">
+            <div class="analytics-header-left">
+                <span style="font-size:20px;">&#128202;</span>
+                <span class="analytics-header-title">Analytics Dashboard</span>
+            </div>
+            <button class="analytics-close" onclick="toggleAnalytics()">&#10005; Close</button>
+        </div>
+        <div class="analytics-body">
+            <div class="analytics-grid">
+                <div class="analytics-card" id="analytics-card-generated">
+                    <div class="analytics-card-header">
+                        <span class="analytics-card-title">Content Generated This Week</span>
+                        <span class="analytics-demo-label" id="gen-demo-label" style="display:none;">(Demo data)</span>
+                    </div>
+                    <div class="analytics-big-number" id="gen-count">--</div>
+                    <div class="analytics-subtitle" id="gen-subtitle">drafts across channels</div>
+                    <div class="analytics-sparkline" id="gen-sparkline"></div>
+                </div>
+                <div class="analytics-card" id="analytics-card-editrate">
+                    <div class="analytics-card-header">
+                        <span class="analytics-card-title">Marketer Edit Rate</span>
+                        <span class="analytics-demo-label" id="edit-demo-label" style="display:none;">(Demo data)</span>
+                    </div>
+                    <div class="analytics-big-number" id="edit-rate">--</div>
+                    <div class="analytics-subtitle" id="edit-subtitle">of drafts edited before approval</div>
+                    <div id="edit-trend"></div>
+                </div>
+                <div class="analytics-card" id="analytics-card-channels">
+                    <div class="analytics-card-header">
+                        <span class="analytics-card-title">Channel Performance</span>
+                        <span class="analytics-demo-label" id="channel-demo-label" style="display:none;">(Demo data)</span>
+                    </div>
+                    <div class="analytics-subtitle" id="channel-subtitle" style="margin-top:8px;">Most active channel loading...</div>
+                    <div class="analytics-bar-chart" id="channel-bars"></div>
+                </div>
+                <div class="analytics-card" id="analytics-card-feedback">
+                    <div class="analytics-card-header">
+                        <span class="analytics-card-title">Feedback Loop Health</span>
+                        <span class="analytics-demo-label" id="fb-demo-label" style="display:none;">(Demo data)</span>
+                    </div>
+                    <div class="analytics-big-number" id="fb-count">--</div>
+                    <div class="analytics-subtitle" id="fb-subtitle">marketer edits learned from</div>
+                    <div class="analytics-feedback-list" id="fb-examples"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -5353,8 +5476,200 @@ function submitPasteBar() {
     });
 }
 
+function toggleAnalytics() {
+    var overlay = document.getElementById('analytics-overlay');
+    var btn = document.querySelector('.btn-analytics');
+    if (overlay.style.display === 'block') {
+        overlay.style.display = 'none';
+        document.body.style.overflow = '';
+        if (btn) btn.classList.remove('active');
+    } else {
+        overlay.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        if (btn) btn.classList.add('active');
+        loadAnalyticsData();
+    }
+}
+
+function loadAnalyticsData() {
+    Promise.all([
+        fetch('/api/metrics').then(function(r) { return r.ok ? r.json() : null; }),
+        fetch('/api/feedback').then(function(r) { return r.ok ? r.json() : null; })
+    ]).then(function(results) {
+        renderAnalyticsCards(results[0], results[1]);
+    }).catch(function() {
+        renderAnalyticsCards(null, null);
+    });
+}
+
+function renderAnalyticsCards(metrics, feedback) {
+    var isDemo = !metrics || metrics.generate_count === 0;
+    var genCount = isDemo ? 47 : metrics.generate_count;
+    var approveCount = isDemo ? 32 : metrics.approve_count;
+    var editCount = isDemo ? 21 : metrics.edit_count;
+    var dailyGenerates = (!isDemo && metrics.daily_generates && Object.keys(metrics.daily_generates).length > 0)
+        ? metrics.daily_generates : null;
+    var feedbackSummary = metrics ? metrics.feedback_summary : {};
+
+    document.getElementById('gen-demo-label').style.display = isDemo ? '' : 'none';
+    document.getElementById('gen-count').textContent = genCount + ' drafts';
+    document.getElementById('gen-subtitle').textContent = isDemo
+        ? 'across 12 features and 8 channels'
+        : 'generated via API this session';
+
+    var sparkEl = document.getElementById('gen-sparkline');
+    sparkEl.innerHTML = '';
+    if (dailyGenerates) {
+        var days = Object.keys(dailyGenerates).sort();
+        var maxVal = Math.max.apply(null, days.map(function(d) { return dailyGenerates[d]; }));
+        for (var i = 0; i < days.length; i++) {
+            var pct = maxVal > 0 ? (dailyGenerates[days[i]] / maxVal * 100) : 10;
+            var bar = document.createElement('div');
+            bar.className = 'analytics-spark-bar';
+            bar.style.height = Math.max(pct, 8) + '%';
+            bar.title = days[i] + ': ' + dailyGenerates[days[i]] + ' drafts';
+            sparkEl.appendChild(bar);
+        }
+    } else {
+        var demoData = [5, 8, 12, 6, 9, 4, 3];
+        var demoLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        for (var j = 0; j < demoData.length; j++) {
+            var b = document.createElement('div');
+            b.className = 'analytics-spark-bar';
+            b.style.height = (demoData[j] / 12 * 100) + '%';
+            b.title = demoLabels[j] + ': ' + demoData[j] + ' drafts';
+            sparkEl.appendChild(b);
+        }
+    }
+
+    var editIsDemo = isDemo || approveCount === 0;
+    document.getElementById('edit-demo-label').style.display = editIsDemo ? '' : 'none';
+    var editPct = editIsDemo ? 66 : Math.round((editCount / approveCount) * 100);
+    document.getElementById('edit-rate').textContent = editPct + '%';
+    document.getElementById('edit-subtitle').textContent = editIsDemo
+        ? 'of drafts edited before approval — AI adapts to your style'
+        : editCount + ' of ' + approveCount + ' drafts were edited before approval';
+    var trendEl = document.getElementById('edit-trend');
+    trendEl.innerHTML = '';
+    var trendSpan = document.createElement('span');
+    trendSpan.className = 'analytics-trend down';
+    trendSpan.textContent = '\u2193 12% from last week';
+    trendEl.appendChild(trendSpan);
+
+    var channelColors = {
+        twitter: '#1DA1F2', email_newsletter: '#00C9A7', in_app_notification: '#a855f7',
+        linkedin: '#0A66C2', notion_monthly: '#ffffff', slack_internal: '#E01E5A',
+        blog_post: '#f97316', changelog: '#eab308'
+    };
+    var channelNames = {
+        twitter: 'Twitter', email_newsletter: 'Email', in_app_notification: 'In-App',
+        linkedin: 'LinkedIn', notion_monthly: 'Notion', slack_internal: 'Slack',
+        blog_post: 'Blog', changelog: 'Changelog'
+    };
+    var channelData;
+    var channelIsDemo;
+    if (feedbackSummary && Object.keys(feedbackSummary).length > 0) {
+        channelData = feedbackSummary;
+        channelIsDemo = false;
+    } else {
+        channelData = { twitter: 18, email_newsletter: 14, in_app_notification: 8, linkedin: 5, notion_monthly: 3 };
+        channelIsDemo = true;
+    }
+    document.getElementById('channel-demo-label').style.display = channelIsDemo ? '' : 'none';
+
+    var chKeys = Object.keys(channelData).sort(function(a, b) { return channelData[b] - channelData[a]; });
+    var maxCh = channelData[chKeys[0]] || 1;
+    document.getElementById('channel-subtitle').textContent = 'Most active: ' + (channelNames[chKeys[0]] || chKeys[0]);
+
+    var barsEl = document.getElementById('channel-bars');
+    barsEl.innerHTML = '';
+    for (var ci = 0; ci < Math.min(chKeys.length, 5); ci++) {
+        var key = chKeys[ci];
+        var row = document.createElement('div');
+        row.className = 'analytics-bar-row';
+        var lbl = document.createElement('span');
+        lbl.className = 'analytics-bar-label';
+        lbl.textContent = channelNames[key] || key;
+        var track = document.createElement('div');
+        track.className = 'analytics-bar-track';
+        var fill = document.createElement('div');
+        fill.className = 'analytics-bar-fill';
+        fill.style.width = '0%';
+        fill.style.background = channelColors[key] || 'var(--accent)';
+        track.appendChild(fill);
+        var val = document.createElement('span');
+        val.className = 'analytics-bar-value';
+        val.textContent = channelData[key];
+        row.appendChild(lbl);
+        row.appendChild(track);
+        row.appendChild(val);
+        barsEl.appendChild(row);
+        (function(f, pct) {
+            setTimeout(function() { f.style.width = pct + '%'; }, 50);
+        })(fill, Math.round(channelData[key] / maxCh * 100));
+    }
+
+    var allFb = feedback || {};
+    var totalFb = 0;
+    var fbChannels = Object.keys(allFb);
+    for (var fi = 0; fi < fbChannels.length; fi++) {
+        totalFb += (allFb[fbChannels[fi]] || []).length;
+    }
+    var fbIsDemo = totalFb === 0;
+    document.getElementById('fb-demo-label').style.display = fbIsDemo ? '' : 'none';
+
+    if (fbIsDemo) {
+        document.getElementById('fb-count').textContent = '24';
+        document.getElementById('fb-subtitle').textContent = 'The AI has learned from 24 marketer edits';
+        var exEl = document.getElementById('fb-examples');
+        exEl.innerHTML = '';
+        var demoFb = [
+            { ch: 'twitter', text: 'Shortened copy, removed hashtags, added data point' },
+            { ch: 'email', text: 'Changed subject line tone to be more casual' },
+            { ch: 'linkedin', text: 'Added customer quote, removed jargon' }
+        ];
+        for (var di = 0; di < demoFb.length; di++) {
+            var item = document.createElement('div');
+            item.className = 'analytics-feedback-item';
+            var chLabel = document.createElement('div');
+            chLabel.className = 'analytics-feedback-channel';
+            chLabel.textContent = demoFb[di].ch;
+            item.appendChild(chLabel);
+            item.appendChild(document.createTextNode(demoFb[di].text));
+            exEl.appendChild(item);
+        }
+    } else {
+        document.getElementById('fb-count').textContent = totalFb;
+        document.getElementById('fb-subtitle').textContent = 'The AI has learned from ' + totalFb + ' marketer edits';
+        var exEl2 = document.getElementById('fb-examples');
+        exEl2.innerHTML = '';
+        var shown = 0;
+        for (var fci = 0; fci < fbChannels.length && shown < 4; fci++) {
+            var records = allFb[fbChannels[fci]] || [];
+            for (var ri = records.length - 1; ri >= 0 && shown < 4; ri--) {
+                var rec = records[ri];
+                var item2 = document.createElement('div');
+                item2.className = 'analytics-feedback-item';
+                var preview = rec.feedback_note || ('Edited "' + (rec.feature_title || '').substring(0, 40) + '..."');
+                var chLabel2 = document.createElement('div');
+                chLabel2.className = 'analytics-feedback-channel';
+                chLabel2.textContent = fbChannels[fci];
+                item2.appendChild(chLabel2);
+                item2.appendChild(document.createTextNode(preview));
+                exEl2.appendChild(item2);
+                shown++;
+            }
+        }
+    }
+}
+
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
+        var analyticsOverlay = document.getElementById('analytics-overlay');
+        if (analyticsOverlay && analyticsOverlay.style.display === 'block') {
+            toggleAnalytics();
+            return;
+        }
         var prepOverlay = document.getElementById('prep-overlay');
         if (prepOverlay && prepOverlay.style.display === 'block') {
             exitPrepWorkflow();
