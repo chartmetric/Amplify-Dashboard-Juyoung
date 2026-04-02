@@ -1,0 +1,50 @@
+Add screenshot/image support to the channel content cards. Marketers almost always want to attach a product screenshot to tweets, emails, LinkedIn posts, etc. This needs to work in both the single-feature and batch workflow content views.
+
+1. IMAGE UPLOAD ON EACH CHANNEL CARD:
+   - Add an "📷 Add Image" button in the action bar of each channel card (next to Regenerate and Approve)
+   - Clicking it opens a file picker (accept="image/*") that lets the user select a screenshot from their computer
+   - Also support drag-and-drop: the user can drag an image directly onto a channel card's textarea area
+   - When dragging over the textarea, show a visual drop zone overlay: dashed teal border, "Drop image here" text, slightly dimmed background
+
+2. IMAGE PREVIEW — show the image IN CONTEXT with the text:
+   - After an image is uploaded, show a preview of how it will look relative to the text content
+   - The preview layout depends on the channel:
+     - **Twitter/X**: Image appears BELOW the tweet text (that's how Twitter displays it). Show a mock tweet card: text on top, image below with rounded corners, like a real tweet preview
+     - **LinkedIn**: Image appears BELOW the post text, full-width with rounded corners
+     - **Email (newsletter + standalone)**: Image appears INLINE — show it between the subject/header area and the body text, centered, max-width 100%, like an email hero image
+     - **In-App**: Small thumbnail to the LEFT of the announcement text (like a notification with an icon)
+     - **Slack Internal**: Image appears BELOW the message text (like a Slack attachment)
+     - **Notion Monthly**: Image appears BELOW each feature section header, centered
+     - **HMC Article**: Image appears as a hero image at the TOP of the article section
+   - The preview should be a realistic mockup — not just "image attached" text. The user should see exactly what the final output looks like with the image positioned correctly.
+   - Show the image at a reasonable preview size (max-height 200px for the preview thumbnail, maintaining aspect ratio)
+
+3. IMAGE MANAGEMENT per card:
+   - Once an image is attached, show:
+     - The image preview in its channel-appropriate position
+     - Image filename and size below the preview (e.g., "screenshot.png — 245 KB")
+     - "Replace" button to swap the image
+     - "Remove ✕" button to remove it
+   - Only ONE image per channel card (keep it simple)
+   - The image state should persist when switching between views (store in the JS state alongside the text content)
+
+4. IMAGE IN PUBLISH FLOW:
+   - When "Publish All Approved" is clicked, include the image data in the publish payload:
+     - Twitter: include the image as base64 in the POST /api/publish/twitter body (we'll handle it in the backend)
+     - Email: embed the image in the HTML email template (inline as base64 or as a data URI in an <img> tag)
+     - In-App: store the image reference in the announcement object
+     - Clipboard channels (LinkedIn, Slack, Notion, HMC): when copying, show a toast: "Text copied! Don't forget to paste your image separately" — since clipboard can't include images with text
+   - Update POST /api/publish/twitter to accept an optional "image" field (base64 string). If present AND Twitter API is configured, use tweepy's media_upload to attach the image. If using the fallback intent URL, open the URL and show a toast: "Tweet text pre-filled — paste your image manually in the compose box"
+   - Update POST /api/publish/email to accept an optional "image" field. If present, embed it in the HTML email template as an inline image above the body text.
+   - Update POST /api/publish/inapp to accept an optional "image" field. Store it in the announcement object and render it in the widget preview.
+
+5. BATCH WORKFLOW support:
+   - In the batch workflow (Prep Content for... flow), each item in the batch review list should also have the "Add Image" button
+   - Different features will likely have different screenshots, so image state is per-item
+   - In the combined preview (Step 4 of batch workflow), show each feature's image in its correct position within the combined document
+
+6. DRAG AND DROP UX:
+   - When a file is dragged anywhere over the content generation area, highlight ALL channel cards with a subtle dashed border to indicate they accept drops
+   - When hovering over a specific card, that card gets a brighter highlight
+   - Dropping on a specific card attaches the image to just that card
+   - Support paste from clipboard too (Ctrl/Cmd+V when a channel card is focused) — this is how most people share screenshots

@@ -1412,7 +1412,8 @@ def publish_twitter():
     if not content:
         return jsonify({"success": False, "error": "content is required"}), 400
 
-    result = publish_tweet(content)
+    image_base64 = data.get("image")
+    result = publish_tweet(content, image_base64=image_base64)
     status_code = 200 if result.get("success") else 500
     return jsonify(result), status_code
 

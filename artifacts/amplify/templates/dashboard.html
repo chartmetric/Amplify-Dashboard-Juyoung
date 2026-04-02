@@ -573,6 +573,45 @@
         .btn-publish-channel:disabled { opacity: 0.5; cursor: not-allowed; }
         .status-badge.published-badge { background: rgba(29,161,242,0.15); color: #1DA1F2; }
         .channel-card.published { border-left: 3px solid #1DA1F2; }
+        .btn-add-image {
+            background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 6px 12px;
+            border-radius: 6px; font-size: 12px; cursor: pointer; font-family: inherit;
+        }
+        .btn-add-image:hover { border-color: var(--border-hover); color: var(--text-body); }
+        .img-drop-zone {
+            position: absolute; inset: 0; z-index: 10; display: none;
+            border: 2px dashed var(--accent); border-radius: 8px;
+            background: rgba(0,201,167,0.06); align-items: center; justify-content: center;
+            font-size: 14px; color: var(--accent); font-weight: 600; pointer-events: none;
+        }
+        .img-drop-zone.active { display: flex; }
+        .channel-card-body { position: relative; }
+        .img-preview-wrap {
+            padding: 8px 16px 0; display: flex; flex-direction: column; gap: 6px;
+        }
+        .img-preview-container { position: relative; border-radius: 8px; overflow: hidden; background: var(--bg-input); }
+        .img-preview-container img {
+            display: block; max-height: 200px; width: auto; max-width: 100%; object-fit: contain;
+        }
+        .img-preview-twitter { border-radius: 12px; border: 1px solid var(--border); overflow: hidden; }
+        .img-preview-twitter img { width: 100%; max-height: 200px; object-fit: cover; }
+        .img-preview-linkedin img,
+        .img-preview-email img { width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; }
+        .img-preview-inapp { display: flex; gap: 10px; align-items: flex-start; }
+        .img-preview-inapp img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+        .img-preview-hero img { width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; }
+        .img-meta {
+            display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-muted);
+            padding: 4px 0 2px;
+        }
+        .img-meta button {
+            background: none; border: none; color: var(--text-muted); cursor: pointer;
+            font-size: 11px; text-decoration: underline; font-family: inherit; padding: 0;
+        }
+        .img-meta button:hover { color: var(--text-body); }
+        .img-meta .img-remove { color: #ef4444; }
+        .img-meta .img-remove:hover { color: #f87171; }
+        .channel-card.drag-highlight { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,201,167,0.15); }
         .content-bottom-bar {
             position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-panel);
             border-top: 1px solid var(--border); padding: 14px 24px;
@@ -2468,6 +2507,7 @@ var contentViewOriginals = {};
 var contentViewInitialDrafts = {};
 var contentViewApproved = {};
 var contentViewPublished = {};
+var contentViewImages = {};
 var contentViewRegenFeedback = {};
 
 function _approvalKey(fid, ch) { return 'ampApproved:' + fid + ':' + ch; }
@@ -2509,6 +2549,7 @@ function enterContentView(feature) {
     contentViewInitialDrafts = {};
     contentViewApproved = {};
     contentViewPublished = {};
+    contentViewImages = {};
     contentViewRegenFeedback = {};
 
     document.querySelector('.main').style.display = 'none';
@@ -2632,6 +2673,9 @@ function buildChannelCard(chKey, ch) {
     var charClass = content.length <= maxChars ? 'ok' : 'over';
     var isArticle = chKey === 'article_hmc';
 
+    var imgAbove = (chKey === 'article_hmc');
+    var imgBelow = !imgAbove;
+
     card.innerHTML =
         '<div class="channel-card-header">' +
             '<input type="checkbox" class="ch-select-cb" id="cb-' + chKey + '" data-channel="' + chKey + '" onchange="updateChannelSelection()" title="Select for bulk approve">' +
@@ -2642,13 +2686,16 @@ function buildChannelCard(chKey, ch) {
             (ch.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
             (isArticle ? '<button class="btn-preview-toggle" id="preview-toggle-' + chKey + '" onclick="togglePreview(\'' + chKey + '\')">Preview</button>' : '') +
         '</div>' +
+        (imgAbove ? '<div class="img-preview-wrap" id="img-wrap-' + chKey + '" style="display:none;"></div>' : '') +
         '<div class="channel-card-body">' +
             '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '">' + escHtml(content) + '</textarea>' +
             (isArticle ? '<div class="md-preview" id="md-preview-' + chKey + '"></div>' : '') +
         '</div>' +
+        (imgBelow ? '<div class="img-preview-wrap" id="img-wrap-' + chKey + '" style="display:none;"></div>' : '') +
         '<div class="channel-card-loading" id="ch-loading-' + chKey + '"><div class="spinner"></div><span>Regenerating...</span></div>' +
         '<div class="channel-card-actions" id="ch-actions-' + chKey + '">' +
             '<button class="btn-approve" id="approve-btn-' + chKey + '" onclick="approveChannel(\'' + chKey + '\')">Approve \u2713</button>' +
+            '<button class="btn-add-image" id="add-img-btn-' + chKey + '" onclick="triggerImagePicker(\'' + chKey + '\', false)">\uD83D\uDCF7 Add Image</button>' +
             '<input type="text" class="regen-feedback-input" id="feedback-' + chKey + '" placeholder="Optional: what to change...">' +
             '<button class="btn-regen" onclick="regenerateChannel(\'' + chKey + '\')">Regenerate</button>' +
         '</div>';
@@ -2665,6 +2712,7 @@ function buildChannelCard(chKey, ch) {
     });
 
     setTimeout(function() { autoResizeTextarea(ta); }, 0);
+    setupCardDragDrop(card, chKey, false);
     ta.addEventListener('input', function() { autoResizeTextarea(this); });
 
     var fbInput = card.querySelector('.regen-feedback-input');
@@ -2882,6 +2930,148 @@ function undoApproval(chKey) {
     updateApprovalCounter();
 }
 
+var CHANNEL_IMAGE_LAYOUT = {
+    twitter: 'twitter', linkedin: 'linkedin',
+    email_newsletter: 'email', email_standalone: 'email',
+    inapp: 'inapp', notion_monthly: 'hero', article_hmc: 'hero'
+};
+
+function getImagePreviewClass(chKey) {
+    var layout = CHANNEL_IMAGE_LAYOUT[chKey] || 'hero';
+    return 'img-preview-container img-preview-' + layout;
+}
+
+function handleImageFile(file, chKey, isBatch, batchIdx) {
+    if (!file || !file.type.startsWith('image/')) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var imgData = { dataUrl: e.target.result, name: file.name, size: file.size };
+        if (isBatch) {
+            if (!window.prepBatchImages) window.prepBatchImages = {};
+            window.prepBatchImages[batchIdx] = imgData;
+            renderBatchImagePreview(batchIdx);
+        } else {
+            contentViewImages[chKey] = imgData;
+            renderChannelImagePreview(chKey);
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function renderChannelImagePreview(chKey) {
+    var wrap = document.getElementById('img-wrap-' + chKey);
+    if (!wrap) return;
+    var img = contentViewImages[chKey];
+    if (!img) { wrap.innerHTML = ''; wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    var previewClass = getImagePreviewClass(chKey);
+    wrap.innerHTML =
+        '<div class="' + previewClass + '"><img src="' + img.dataUrl + '" alt="Attached image"></div>' +
+        '<div class="img-meta">' +
+            '<span>' + escHtml(img.name) + ' - ' + formatFileSize(img.size) + '</span>' +
+            '<button onclick="triggerImageReplace(\'' + chKey + '\', false)">Replace</button>' +
+            '<button class="img-remove" onclick="removeChannelImage(\'' + chKey + '\')">Remove \u2715</button>' +
+        '</div>';
+    var addBtn = document.getElementById('add-img-btn-' + chKey);
+    if (addBtn) addBtn.style.display = 'none';
+}
+
+function removeChannelImage(chKey) {
+    delete contentViewImages[chKey];
+    var wrap = document.getElementById('img-wrap-' + chKey);
+    if (wrap) { wrap.innerHTML = ''; wrap.style.display = 'none'; }
+    var addBtn = document.getElementById('add-img-btn-' + chKey);
+    if (addBtn) addBtn.style.display = '';
+}
+
+function triggerImagePicker(chKey, isBatch, batchIdx) {
+    var input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = function() {
+        if (input.files && input.files[0]) handleImageFile(input.files[0], chKey, isBatch, batchIdx);
+    };
+    input.click();
+}
+
+function triggerImageReplace(chKey, isBatch, batchIdx) {
+    triggerImagePicker(chKey, isBatch, batchIdx);
+}
+
+function setupCardDragDrop(cardEl, chKey, isBatch, batchIdx) {
+    var body = cardEl.querySelector('.channel-card-body') || cardEl.querySelector('.batch-item-body');
+    if (!body) return;
+    var dropZone = document.createElement('div');
+    dropZone.className = 'img-drop-zone';
+    dropZone.textContent = 'Drop image here';
+    body.appendChild(dropZone);
+    var counter = 0;
+    cardEl.addEventListener('dragenter', function(e) {
+        e.preventDefault(); counter++;
+        if (e.dataTransfer && e.dataTransfer.types.indexOf('Files') !== -1) {
+            dropZone.classList.add('active');
+            cardEl.classList.add('drag-highlight');
+        }
+    });
+    cardEl.addEventListener('dragleave', function(e) {
+        e.preventDefault(); counter--;
+        if (counter <= 0) { counter = 0; dropZone.classList.remove('active'); cardEl.classList.remove('drag-highlight'); }
+    });
+    cardEl.addEventListener('dragover', function(e) { e.preventDefault(); });
+    cardEl.addEventListener('drop', function(e) {
+        e.preventDefault(); counter = 0;
+        dropZone.classList.remove('active'); cardEl.classList.remove('drag-highlight');
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+            handleImageFile(e.dataTransfer.files[0], chKey, isBatch, batchIdx);
+        }
+    });
+    var ta = cardEl.querySelector('textarea');
+    if (ta) {
+        ta.addEventListener('paste', function(e) {
+            var items = (e.clipboardData || {}).items || [];
+            for (var i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    e.preventDefault();
+                    handleImageFile(items[i].getAsFile(), chKey, isBatch, batchIdx);
+                    return;
+                }
+            }
+        });
+    }
+}
+
+function renderBatchImagePreview(idx) {
+    var wrap = document.getElementById('batch-img-wrap-' + idx);
+    if (!wrap) return;
+    var img = (window.prepBatchImages || {})[idx];
+    if (!img) { wrap.innerHTML = ''; wrap.style.display = 'none'; return; }
+    var chKey = window.prepBatchChannel || 'twitter';
+    var previewClass = getImagePreviewClass(chKey);
+    wrap.style.display = '';
+    wrap.innerHTML =
+        '<div class="' + previewClass + '"><img src="' + img.dataUrl + '" alt="Attached image"></div>' +
+        '<div class="img-meta">' +
+            '<span>' + escHtml(img.name) + ' - ' + formatFileSize(img.size) + '</span>' +
+            '<button onclick="triggerImageReplace(null, true, ' + idx + ')">Replace</button>' +
+            '<button class="img-remove" onclick="removeBatchImage(' + idx + ')">Remove \u2715</button>' +
+        '</div>';
+    var addBtn = document.getElementById('batch-add-img-btn-' + idx);
+    if (addBtn) addBtn.style.display = 'none';
+}
+
+function removeBatchImage(idx) {
+    if (window.prepBatchImages) delete window.prepBatchImages[idx];
+    var wrap = document.getElementById('batch-img-wrap-' + idx);
+    if (wrap) { wrap.innerHTML = ''; wrap.style.display = 'none'; }
+    var addBtn = document.getElementById('batch-add-img-btn-' + idx);
+    if (addBtn) addBtn.style.display = '';
+}
+
 var PUBLISHABLE_CHANNELS = { twitter: '/api/publish/twitter' };
 
 function updateChannelStatus(chKey) {
@@ -2954,10 +3144,16 @@ function publishToChannel(chKey) {
     var btn = document.getElementById('publish-btn-' + chKey);
     if (btn) { btn.textContent = 'Publishing...'; btn.disabled = true; }
 
+    var payload = { content: content };
+    var imgData = contentViewImages[chKey];
+    if (imgData && imgData.dataUrl) {
+        payload.image = imgData.dataUrl.split(',')[1];
+    }
+
     fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: content })
+        body: JSON.stringify(payload)
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -2975,7 +3171,10 @@ function publishToChannel(chKey) {
             window.open(data.tweet_url, '_blank');
             contentViewPublished[chKey] = true;
             updateChannelStatus(chKey);
-            showToast('Tweet pre-filled - click Post in the new tab');
+            var fallbackMsg = data.has_image_reminder
+                ? 'Tweet pre-filled - paste your image manually in the compose box'
+                : 'Tweet pre-filled - click Post in the new tab';
+            showToast(fallbackMsg);
         }
     })
     .catch(function(err) {
@@ -2986,9 +3185,11 @@ function publishToChannel(chKey) {
 
 function publishAllApproved() {
     var keys = Object.keys(contentViewApproved);
+    var published = 0;
     for (var i = 0; i < keys.length; i++) {
         if (contentViewApproved[keys[i]] && !contentViewPublished[keys[i]] && PUBLISHABLE_CHANNELS[keys[i]]) {
             publishToChannel(keys[i]);
+            published++;
         }
     }
     var nonPublishable = [];
@@ -2998,7 +3199,10 @@ function publishAllApproved() {
         }
     }
     if (nonPublishable.length > 0) {
-        showToast(nonPublishable.length + ' channel(s) approved but no publishing integration yet', 'warning');
+        var hasImages = nonPublishable.some(function(k) { return !!contentViewImages[k]; });
+        var msg = nonPublishable.length + ' channel(s) approved but no publishing integration yet';
+        if (hasImages) msg += '. Remember to paste images separately for clipboard channels.';
+        showToast(msg, 'warning');
     }
 }
 
@@ -3041,6 +3245,7 @@ function exitContentView() {
     contentViewInitialDrafts = {};
     contentViewApproved = {};
     contentViewPublished = {};
+    contentViewImages = {};
     contentViewRegenFeedback = {};
 }
 
@@ -3079,6 +3284,7 @@ function exitPrepWorkflow() {
     prepBatchApproved = {};
     prepBatchInitialDrafts = {};
     prepBatchRegenFeedback = {};
+    window.prepBatchImages = {};
 }
 
 function prepGoToStep(step) {
@@ -3240,6 +3446,8 @@ function startBatchGeneration() {
     prepBatchApproved = {};
     prepBatchInitialDrafts = {};
     prepBatchRegenFeedback = {};
+    window.prepBatchImages = {};
+    window.prepBatchChannel = prepChannel;
     document.getElementById('batch-results-list').innerHTML = '';
     document.getElementById('batch-actions-top').style.display = 'none';
     document.getElementById('batch-bottom-bar').style.display = 'none';
@@ -3306,9 +3514,11 @@ function buildBatchItem(r, idx) {
         '<div class="batch-item-body" id="batch-body-' + idx + '">' +
             '<textarea class="channel-textarea" id="batch-ta-' + idx + '" data-idx="' + idx + '" data-max="' + maxChars + '">' + escHtml(content) + '</textarea>' +
         '</div>' +
+        '<div class="img-preview-wrap" id="batch-img-wrap-' + idx + '" style="display:none;"></div>' +
         '<div class="batch-item-loading" id="batch-loading-' + idx + '" style="display:none;"><div class="spinner"></div><span>Regenerating...</span></div>' +
         '<div class="batch-item-actions" id="batch-actions-' + idx + '">' +
             '<button class="btn-approve" id="batch-approve-btn-' + idx + '" onclick="batchApproveItem(' + idx + ')">Approve \u2713</button>' +
+            '<button class="btn-add-image" id="batch-add-img-btn-' + idx + '" onclick="triggerImagePicker(null, true, ' + idx + ')">\uD83D\uDCF7 Add Image</button>' +
             '<input type="text" class="regen-feedback-input" id="batch-feedback-' + idx + '" placeholder="Optional: what to change...">' +
             '<button class="btn-regen" onclick="batchRegenItem(' + idx + ')">Regenerate</button>' +
         '</div>';
@@ -3324,6 +3534,7 @@ function buildBatchItem(r, idx) {
         }
     });
     setTimeout(function() { autoResizeTextarea(ta); }, 0);
+    setupCardDragDrop(item, null, true, idx);
     ta.addEventListener('input', function() { autoResizeTextarea(this); });
 
     var fbInput = item.querySelector('.regen-feedback-input');
