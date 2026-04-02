@@ -54,9 +54,9 @@ CHANNEL_CONFIGS = {
         "description": "Feature summary block for monthly product meeting notes",
         "max_chars": 600,
         "tone": "Concise, factual, scannable. Like a quick update in a meeting doc. Get to the point in 2-3 sentences.",
-        "format_rules": "Structure: Bold feature name as a heading, then 2-3 sentences covering what changed and why it matters to users. Include a relevant link if available. End with key contributors. That's it. No separate sections for Overview, User Impact, Technical Notes. Keep it tight and scannable.",
+        "format_rules": "Structure: Bold feature name as a heading, then 2-3 sentences covering what changed and why it matters to users. Include a relevant link if available. End with key contributors (first names only, e.g. 'Hanby' not 'Hanby Choi'). That's it. No separate sections for Overview, User Impact, Technical Notes. Keep it tight and scannable.",
         "audience": "Chartmetric leadership and cross-functional team in a monthly product review meeting",
-        "example_output_format": "### **[Feature Name]**\n\n[2-3 sentence summary of what changed and user impact]. [Link if relevant]\n\nKey Contributors: [names]",
+        "example_output_format": "### **[Feature Name]**\n\n[2-3 sentence summary of what changed and user impact]. [Link if relevant]\n\nKey Contributors: [first names only]",
         "enabled": True,
     },
     "article_hmc": {

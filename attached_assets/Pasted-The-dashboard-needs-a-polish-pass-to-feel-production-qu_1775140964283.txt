@@ -1,0 +1,54 @@
+The dashboard needs a polish pass to feel production-quality, not prototype-y. Judges evaluate UX at 20%. Apply these improvements across the entire dashboard:
+
+1. TRANSITIONS + MICRO-INTERACTIONS:
+   - Add smooth CSS transitions on ALL interactive elements (buttons, cards, state changes) — 200ms ease
+   - Feature cards: subtle scale(1.01) + brighter border on hover
+   - Buttons: brightness filter on hover, slight scale on click (active state)
+   - Add a fade-in animation when channel cards load (stagger them slightly, 100ms apart)
+   - Add a fade-in with stagger when the feature list first loads (100ms between each card)
+   - When switching between views (feature list → content generation → batch workflow), use a smooth crossfade, not an abrupt swap
+
+2. LOADING STATES:
+   - Replace any plain "Loading..." text with a pulsing dot animation (three dots cycling) in teal color
+   - For content generation: show channel names appearing one by one as they complete
+   - If Claude API is slow (10+ seconds), show "This may take 15-30 seconds..." message after 5 seconds so the user doesn't think it's frozen
+
+3. TOAST NOTIFICATIONS:
+   - When any action succeeds (approve, regenerate, publish, classify, override), show a small toast message that slides in from the bottom-right and auto-dismisses after 3 seconds
+   - Teal background for success, red for errors, yellow for warnings
+   - Stack multiple toasts if they fire quickly (newest on top)
+   - Toasts should have a subtle shadow and rounded corners
+
+4. EMPTY + ERROR STATES:
+   - If feature list is empty after filtering: show centered state with large icon + "No features found" + "Try lowering the importance filter or paste a URL to add one"
+   - If any API call fails: show a friendly inline error with a "Retry" button, not a blank screen or browser error
+   - If classification fails for a specific feature: show "Classification failed — try again" on that card with a retry button
+
+5. RESPONSIVE LAYOUT:
+   - Channel cards: 2 columns above 1024px, 1 column below
+   - Feature cards: full width, stack nicely on mobile
+   - Top bar: keep layout on mobile but reduce padding
+   - Batch workflow steps: stack vertically on mobile
+   - Modals/overlays: max-width 560px centered on desktop, full-width with margin on mobile
+
+6. SCROLL BEHAVIOR:
+   - Smooth scrolling everywhere
+   - When switching to content generation view, scroll to top
+   - When a new feature card is added (via URL paste), scroll it into view with a brief highlight animation
+   - Sticky bottom action bar should not cover content — add padding at the bottom of the content area
+
+7. VISUAL CONSISTENCY CHECK:
+   - Verify all buttons use the same border-radius (8px), padding, and font sizes
+   - Verify all cards use consistent border-radius (12px), background (#1a2733), and border (#2a3a4a)
+   - Verify all text colors are consistent: #ffffff headings, #e0e0e0 body, #8899aa muted
+   - Make sure teal (#00C9A7) is used consistently as the primary accent everywhere
+   - No orphaned styles or inconsistent spacing between sections
+
+8. KEYBOARD SHORTCUTS:
+   - Ctrl/Cmd+Enter in a channel card textarea triggers "Approve" for that card
+   - Escape closes any open modal, popover, or overlay
+   - Tab should navigate logically between interactive elements
+
+9. ADD a subtle footer: "Built with ⚡ by Juyoung — Chartmetric AI Week 2026"
+
+The goal: every interaction should feel intentional. Hover states, transitions, loading feedback, and error recovery should all work smoothly. A judge should look at this and think "this feels like a real product" not "this is a hackathon project."
