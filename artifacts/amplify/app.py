@@ -1463,8 +1463,8 @@ def publish_email():
             else:
                 subject = "Chartmetric Product Update"
 
-    image = data.get("image", None)
-    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, image_data_uri=image)
+    images = data.get("images", None)
+    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images)
     if result.get("success") and result.get("method") == "sendgrid" and feature_id:
         mark_published(feature_id, channel)
     status_code = 200 if result.get("success") else 500
@@ -1479,13 +1479,13 @@ def preview_email():
         data = request.get_json() or {}
         content = data.get("content", "")
         subject = data.get("subject", "Chartmetric Product Update")
-        image = data.get("image", None)
+        images = data.get("images", None)
     else:
         content = request.args.get("content", "")
         subject = request.args.get("subject", "Chartmetric Product Update")
-        image = None
+        images = None
 
-    html = render_email_html(subject, content, image_data_uri=image)
+    html = render_email_html(subject, content, images=images)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 

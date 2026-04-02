@@ -2800,6 +2800,7 @@ function enterContentView(feature) {
     contentViewApproved = {};
     contentViewPublished = {};
     contentViewImages = {};
+    contentViewImageMap = {};
     contentViewRegenFeedback = {};
 
     document.querySelector('.main').style.display = 'none';
@@ -3258,6 +3259,7 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
         } else {
             contentViewImages[chKey] = imgData;
             renderChannelImagePreview(chKey);
+            insertImageMarkerAtCursor(chKey, imgData);
             var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
             if (fid) {
                 fetch('/api/publish/image', {
@@ -3270,6 +3272,23 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
     };
     reader.readAsDataURL(file);
 }
+
+function insertImageMarkerAtCursor(chKey, imgData) {
+    var ta = document.getElementById('ta-' + chKey);
+    if (!ta) return;
+    var marker = '\n[image: ' + imgData.name + ']\n';
+    var start = ta.selectionStart || ta.value.length;
+    var end = ta.selectionEnd || ta.value.length;
+    ta.value = ta.value.substring(0, start) + marker + ta.value.substring(end);
+    ta.selectionStart = ta.selectionEnd = start + marker.length;
+    ta.dispatchEvent(new Event('input'));
+    ta.focus();
+    if (!contentViewImageMap) window.contentViewImageMap = {};
+    if (!contentViewImageMap[chKey]) contentViewImageMap[chKey] = {};
+    contentViewImageMap[chKey][imgData.name] = imgData.dataUrl;
+}
+
+var contentViewImageMap = {};
 
 function formatFileSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
@@ -3591,10 +3610,11 @@ function previewEmailHtml(chKey) {
             content = lines.slice(1).join('\n').trim();
         }
     }
-    var imgData = contentViewImages[chKey];
-    var imageUri = (imgData && imgData.dataUrl) ? imgData.dataUrl : null;
     var payload = { content: content, subject: subject };
-    if (imageUri) payload.image = imageUri;
+    var imgMap = contentViewImageMap[chKey];
+    if (imgMap && Object.keys(imgMap).length > 0) {
+        payload.images = imgMap;
+    }
     fetch('/api/publish/email/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3627,14 +3647,15 @@ function doPublishToChannel(chKey) {
     var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
     var payload = { content: content, feature_id: fid };
 
-    var imgData = contentViewImages[chKey];
     if (isEmail) {
         payload.channel = chKey;
         payload.is_test = true;
-        if (imgData && imgData.dataUrl) {
-            payload.image = imgData.dataUrl;
+        var imgMap = contentViewImageMap[chKey];
+        if (imgMap && Object.keys(imgMap).length > 0) {
+            payload.images = imgMap;
         }
     } else {
+        var imgData = contentViewImages[chKey];
         if (imgData && imgData.dataUrl) {
             payload.image = imgData.dataUrl.split(',')[1];
         }
@@ -3810,6 +3831,7 @@ function exitContentView() {
     contentViewApproved = {};
     contentViewPublished = {};
     contentViewImages = {};
+    contentViewImageMap = {};
     contentViewRegenFeedback = {};
 }
 
