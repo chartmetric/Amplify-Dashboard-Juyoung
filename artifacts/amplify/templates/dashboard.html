@@ -1250,12 +1250,6 @@ function loadFeatures() {
             }
             startAutoRefreshTimer();
             if (stats) {
-                var tierCounts = countTiers();
-                stats.innerHTML =
-                    '<span>Features: ' + allFeatures.length + ' total</span>' +
-                    '<span id="stat-auto-skipped" class="tier-stat tier-auto">' + tierCounts.autoSkipped + ' auto-skipped</span>' +
-                    '<span id="stat-ai-classified" class="tier-stat tier-ai">' + tierCounts.aiClassified + ' AI-classified</span>' +
-                    '<span id="stat-unclassified" class="tier-stat tier-pending">' + tierCounts.unclassified + ' pending</span>';
                 stats.style.display = 'flex';
             }
             updateTierStats();
@@ -1338,12 +1332,6 @@ function manualRefresh() {
             }
             startAutoRefreshTimer();
             if (stats) {
-                var tierCounts = countTiers();
-                stats.innerHTML =
-                    '<span>Features: ' + allFeatures.length + ' total</span>' +
-                    '<span id="stat-auto-skipped" class="tier-stat tier-auto">' + tierCounts.autoSkipped + ' auto-skipped</span>' +
-                    '<span id="stat-ai-classified" class="tier-stat tier-ai">' + tierCounts.aiClassified + ' AI-classified</span>' +
-                    '<span id="stat-unclassified" class="tier-stat tier-pending">' + tierCounts.unclassified + ' pending</span>';
                 stats.style.display = 'flex';
             }
             updateTierStats();
@@ -1399,9 +1387,17 @@ function countClassified() {
 }
 
 function countTiers() {
-    var autoSkipped = 0, aiClassified = 0, unclassified = 0;
+    var autoSkipped = 0, aiClassified = 0, unclassified = 0, total = 0;
+    var srcFilters = activeSourceFilters;
+    var showAnnounced = srcFilters.indexOf('announced') !== -1;
+    var showNotAnnounced = srcFilters.indexOf('not_announced') !== -1;
     for (var i = 0; i < allFeatures.length; i++) {
-        var cl = allFeatures[i].classification;
+        var f = allFeatures[i];
+        var isAsanaOnly = f.source === 'asana_only';
+        if (isAsanaOnly && !showNotAnnounced) continue;
+        if (!isAsanaOnly && !showAnnounced) continue;
+        total++;
+        var cl = f.classification;
         if (!cl || cl.unclassified) {
             unclassified++;
         } else if (cl.classification_method === 'quick_keyword') {
@@ -1410,7 +1406,7 @@ function countTiers() {
             aiClassified++;
         }
     }
-    return { autoSkipped: autoSkipped, aiClassified: aiClassified, unclassified: unclassified };
+    return { autoSkipped: autoSkipped, aiClassified: aiClassified, unclassified: unclassified, total: total };
 }
 
 function updateTierStats() {
@@ -1418,7 +1414,7 @@ function updateTierStats() {
     if (!stats) return;
     var tierCounts = countTiers();
     stats.innerHTML =
-        '<span>Features: ' + allFeatures.length + ' total</span>' +
+        '<span>Features: ' + tierCounts.total + ' total</span>' +
         '<span id="stat-auto-skipped" class="tier-stat tier-auto">' + tierCounts.autoSkipped + ' auto-skipped</span>' +
         '<span id="stat-ai-classified" class="tier-stat tier-ai">' + tierCounts.aiClassified + ' AI-classified</span>' +
         '<span id="stat-unclassified" class="tier-stat tier-pending">' + tierCounts.unclassified + ' pending</span>';
