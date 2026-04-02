@@ -3253,8 +3253,9 @@ function doPublishToChannel(chKey) {
         }
         contentViewPublished[chKey] = true;
         updateChannelStatus(chKey);
+        var hasImg = !!(contentViewImages[chKey] && contentViewImages[chKey].dataUrl);
         var tweetLink = data.tweet_url ? ' <a href="' + data.tweet_url + '" target="_blank" style="color:#1DA1F2;text-decoration:underline">View tweet</a>' : '';
-        showToast('Posted to X! \u2705' + tweetLink);
+        showToast('Posted to X' + (hasImg ? ' with image' : '') + '! \u2705' + tweetLink);
     })
     .catch(function(err) {
         publishingInFlight[chKey] = false;
