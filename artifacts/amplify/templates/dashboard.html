@@ -556,6 +556,15 @@
             cursor: pointer; text-decoration: underline; margin-left: auto;
         }
         .btn-undo-approve:hover { color: var(--text-body); }
+        .btn-undo-all {
+            background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 6px 14px;
+            border-radius: 6px; font-size: 12px; cursor: pointer; font-family: inherit;
+        }
+        .btn-undo-all:hover { color: var(--text-body); border-color: var(--border-hover); }
+        .ch-select-cb {
+            width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0;
+        }
+        .channel-card.ch-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
         .content-bottom-bar {
             position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-panel);
             border-top: 1px solid var(--border); padding: 14px 24px;
@@ -940,7 +949,9 @@
         <div class="channel-grid" id="channel-grid"></div>
         <div class="content-bottom-bar" id="content-bottom-bar" style="display:none;">
             <span class="approved-counter" id="approved-counter">Approved: 0/0 channels</span>
+            <button class="btn-approve" id="btn-approve-selected" onclick="approveSelectedChannels()" style="display:none;">Approve Selected</button>
             <button class="btn-approve" id="btn-approve-all" onclick="approveAllChannels()">Approve All</button>
+            <button class="btn-undo-all" id="btn-undo-all" onclick="undoAllApprovals()" style="display:none;">Undo All</button>
             <button class="btn-publish" id="btn-publish" disabled>Publish All Approved &rarr;</button>
         </div>
     </div>
@@ -2613,6 +2624,7 @@ function buildChannelCard(chKey, ch) {
 
     card.innerHTML =
         '<div class="channel-card-header">' +
+            '<input type="checkbox" class="ch-select-cb" id="cb-' + chKey + '" data-channel="' + chKey + '" onchange="updateChannelSelection()" title="Select for bulk approve">' +
             '<span class="channel-icon">' + icon + '</span>' +
             '<span class="channel-name">' + escHtml(ch.channel_display_name || chKey) + '</span>' +
             '<span class="char-count-badge ' + charClass + '" id="char-' + chKey + '">' + content.length + '/' + maxChars + '</span>' +
@@ -2812,6 +2824,45 @@ function approveAllChannels() {
     }
 }
 
+function approveSelectedChannels() {
+    var cbs = document.querySelectorAll('.ch-select-cb:checked');
+    for (var i = 0; i < cbs.length; i++) {
+        var chKey = cbs[i].getAttribute('data-channel');
+        if (chKey && !contentViewApproved[chKey]) {
+            approveChannel(chKey);
+        }
+    }
+}
+
+function undoAllApprovals() {
+    var keys = Object.keys(contentViewApproved);
+    for (var i = 0; i < keys.length; i++) {
+        if (contentViewApproved[keys[i]]) {
+            undoApproval(keys[i]);
+        }
+    }
+}
+
+function updateChannelSelection() {
+    var cbs = document.querySelectorAll('.ch-select-cb');
+    var selectedCount = 0;
+    for (var i = 0; i < cbs.length; i++) {
+        var chKey = cbs[i].getAttribute('data-channel');
+        var card = document.getElementById('ch-card-' + chKey);
+        if (cbs[i].checked) {
+            selectedCount++;
+            if (card) card.classList.add('ch-selected');
+        } else {
+            if (card) card.classList.remove('ch-selected');
+        }
+    }
+    var approveSelBtn = document.getElementById('btn-approve-selected');
+    if (approveSelBtn) {
+        approveSelBtn.style.display = selectedCount > 0 ? '' : 'none';
+        approveSelBtn.textContent = 'Approve Selected (' + selectedCount + ')';
+    }
+}
+
 function undoApproval(chKey) {
     contentViewApproved[chKey] = false;
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
@@ -2864,6 +2915,19 @@ function updateApprovalCounter() {
     if (btn) btn.disabled = approved === 0;
     var approveAllBtn = document.getElementById('btn-approve-all');
     if (approveAllBtn) approveAllBtn.style.display = (approved >= total) ? 'none' : '';
+    var undoAllBtn = document.getElementById('btn-undo-all');
+    if (undoAllBtn) undoAllBtn.style.display = approved > 0 ? '' : 'none';
+    var cbs = document.querySelectorAll('.ch-select-cb');
+    for (var i = 0; i < cbs.length; i++) {
+        var chKey = cbs[i].getAttribute('data-channel');
+        if (contentViewApproved[chKey]) {
+            cbs[i].checked = false;
+            cbs[i].disabled = true;
+        } else {
+            cbs[i].disabled = false;
+        }
+    }
+    updateChannelSelection();
 }
 
 function exitContentView() {
