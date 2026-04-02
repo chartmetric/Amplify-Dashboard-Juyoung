@@ -631,6 +631,16 @@
         .img-warning-modal-box .img-warn-btns .warn-btn-continue { background: var(--accent); color: #fff; border-color: var(--accent); }
         .img-warning-modal-box .img-warn-btns .warn-btn-continue:hover { background: #00b898; }
         .img-warning-modal-box .img-warn-btns button:hover { background: var(--border); }
+        .publish-confirm-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); }
+        .publish-confirm-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 28px 32px; max-width: 420px; width: 90%; box-shadow: 0 16px 48px var(--shadow-strong); text-align: center; }
+        .publish-confirm-box .pc-icon { font-size: 32px; margin-bottom: 12px; }
+        .publish-confirm-box h3 { margin: 0 0 10px; font-size: 17px; color: var(--text-primary); }
+        .publish-confirm-box p { margin: 0 0 20px; font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+        .publish-confirm-box .pc-btns { display: flex; gap: 10px; justify-content: center; }
+        .publish-confirm-box .pc-btns button { padding: 9px 20px; border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--bg-panel); color: var(--text-body); transition: background 0.15s; }
+        .publish-confirm-box .pc-btns button:hover { background: var(--border); }
+        .publish-confirm-box .pc-btns .pc-btn-confirm { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .publish-confirm-box .pc-btns .pc-btn-confirm:hover { background: #00b898; }
         .content-bottom-bar {
             position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-panel);
             border-top: 1px solid var(--border); padding: 14px 24px;
@@ -3186,16 +3196,29 @@ function previewOnX(chKey) {
     }
 }
 
-function publishToChannel(chKey) {
-    if (publishingInFlight[chKey]) { showToast('Already posting\u2026 please wait', 'warning'); return; }
+function showPublishConfirm(message, onConfirm) {
+    var modal = document.createElement('div');
+    modal.className = 'publish-confirm-modal';
+    modal.innerHTML = '<div class="publish-confirm-box">' +
+        '<div class="pc-icon">\uD83D\uDCE8</div>' +
+        '<h3>Post to X</h3>' +
+        '<p>' + message + '</p>' +
+        '<div class="pc-btns">' +
+        '<button class="pc-btn-cancel">Cancel</button>' +
+        '<button class="pc-btn-confirm">Yes, post it</button>' +
+        '</div></div>';
+    document.body.appendChild(modal);
+    modal.querySelector('.pc-btn-cancel').onclick = function() { modal.remove(); };
+    modal.querySelector('.pc-btn-confirm').onclick = function() { modal.remove(); onConfirm(); };
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
+function doPublishToChannel(chKey) {
     var endpoint = PUBLISHABLE_CHANNELS[chKey];
-    if (!endpoint) { showToast('Publishing not yet supported for ' + chKey, 'warning'); return; }
+    publishingInFlight[chKey] = true;
 
     var ta = document.getElementById('ta-' + chKey);
     var content = ta ? ta.value : '';
-    if (!content) { showToast('No content to publish', 'error'); return; }
-
-    publishingInFlight[chKey] = true;
 
     var payload = { content: content };
     var imgData = contentViewImages[chKey];
@@ -3212,19 +3235,18 @@ function publishToChannel(chKey) {
     .then(function(data) {
         publishingInFlight[chKey] = false;
         if (!data.success) {
-            showToast('Post failed: ' + (data.error || 'Unknown error') + ' - opening preview instead', 'error');
-            previewOnX(chKey);
+            showToast('Post failed: ' + (data.error || 'Unknown error'), 'error');
             return;
         }
         if (data.method === 'fallback') {
             var tweetUrl = data.tweet_url;
             if (data.has_image_reminder) {
-                showImageWarningModal('No Twitter API credentials are configured, so your tweet text has been pre-filled via the X compose link. You\'ll need to attach your image manually in the X compose box before posting.', function() {
+                showImageWarningModal('Twitter API returned a fallback response. Your tweet text has been pre-filled via the X compose link. You will need to attach your image manually in the X compose box before posting.', function() {
                     window.open(tweetUrl, '_blank');
                 });
             } else {
                 window.open(tweetUrl, '_blank');
-                showToast('Tweet text pre-filled \u2014 click Post in the X compose window');
+                showToast('Tweet text pre-filled. Click Post in the X compose window.');
             }
             return;
         }
@@ -3235,32 +3257,59 @@ function publishToChannel(chKey) {
     })
     .catch(function(err) {
         publishingInFlight[chKey] = false;
-        showToast('Error: ' + err.message + ' - opening preview instead', 'error');
-        previewOnX(chKey);
+        showToast('Error: ' + err.message, 'error');
     });
+}
+
+function publishToChannel(chKey, skipConfirm) {
+    if (publishingInFlight[chKey]) { showToast('Already posting... please wait', 'warning'); return; }
+    var endpoint = PUBLISHABLE_CHANNELS[chKey];
+    if (!endpoint) { showToast('Publishing not yet supported for ' + chKey, 'warning'); return; }
+
+    var ta = document.getElementById('ta-' + chKey);
+    var content = ta ? ta.value : '';
+    if (!content) { showToast('No content to publish', 'error'); return; }
+
+    if (skipConfirm) {
+        doPublishToChannel(chKey);
+    } else {
+        var hasImg = !!(contentViewImages[chKey] && contentViewImages[chKey].dataUrl);
+        var msg = 'Do you want to post this on X? It will be directly posted to your account.';
+        if (hasImg) msg += ' Your attached image will be uploaded with the tweet.';
+        showPublishConfirm(msg, function() {
+            doPublishToChannel(chKey);
+        });
+    }
 }
 
 function publishAllApproved() {
     var keys = Object.keys(contentViewApproved);
-    var published = 0;
-    for (var i = 0; i < keys.length; i++) {
-        if (contentViewApproved[keys[i]] && !contentViewPublished[keys[i]] && PUBLISHABLE_CHANNELS[keys[i]]) {
-            publishToChannel(keys[i]);
-            published++;
-        }
-    }
+    var publishableKeys = [];
     var nonPublishable = [];
-    for (var j = 0; j < keys.length; j++) {
-        if (contentViewApproved[keys[j]] && !contentViewPublished[keys[j]] && !PUBLISHABLE_CHANNELS[keys[j]]) {
-            nonPublishable.push(keys[j]);
+    for (var i = 0; i < keys.length; i++) {
+        if (contentViewApproved[keys[i]] && !contentViewPublished[keys[i]]) {
+            if (PUBLISHABLE_CHANNELS[keys[i]]) {
+                publishableKeys.push(keys[i]);
+            } else {
+                nonPublishable.push(keys[i]);
+            }
         }
     }
+
     if (nonPublishable.length > 0) {
         var hasImages = nonPublishable.some(function(k) { return !!contentViewImages[k]; });
         var msg = nonPublishable.length + ' channel(s) approved but no publishing integration yet';
         if (hasImages) msg += '. Remember to paste images separately for clipboard channels.';
         showToast(msg, 'warning');
     }
+
+    if (publishableKeys.length === 0) return;
+
+    showPublishConfirm('Post all ' + publishableKeys.length + ' approved channel(s) to X? They will be directly posted to your account.', function() {
+        for (var j = 0; j < publishableKeys.length; j++) {
+            publishToChannel(publishableKeys[j], true);
+        }
+    });
 }
 
 function updateApprovalCounter() {
