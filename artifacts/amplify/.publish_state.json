@@ -5,5 +5,9 @@
   },
   "test-123:inapp": {
     "published": true
+  },
+  "slack-1774543024.236439-0:twitter": {
+    "published": true,
+    "tweet_url": "https://twitter.com/i/web/status/2039823932715671737"
   }
 }
