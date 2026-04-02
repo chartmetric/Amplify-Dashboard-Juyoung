@@ -377,6 +377,12 @@
         .card-bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .channel-pills { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
         .channel-pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-muted); }
+        .published-channels-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+        .pub-ch-pill { font-size: 10px; padding: 2px 7px; border-radius: 99px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+        .pub-ch-pill.pub-posted { background: #1a3a2a; color: #4ade80; }
+        .pub-ch-pill.pub-copied { background: #2a3a4a; color: #8899aa; }
+        .pub-ch-pill.pub-full { background: #1a3a2a; color: #4ade80; font-weight: 700; padding: 3px 10px; }
+        .pub-prev-note { font-size: 11px; color: var(--text-faint); margin-top: 4px; font-style: italic; }
         .btn-generate {
             background: var(--accent); color: var(--cta-text); border: none; padding: 10px 20px;
             border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;
@@ -2539,6 +2545,67 @@ var contentViewPublished = {};
 var contentViewImages = {};
 var contentViewRegenFeedback = {};
 
+var publishedFeatureState = {};
+
+var CHANNEL_DISPLAY_SHORT = {
+    twitter: 'Twitter', email_newsletter: 'Newsletter', email_standalone: 'Email',
+    inapp: 'In-App', linkedin: 'LinkedIn', notion_monthly: 'Notion', article_hmc: 'HMC'
+};
+
+function trackPublish(fid, chKey, mode) {
+    if (!fid) return;
+    if (!publishedFeatureState[fid]) publishedFeatureState[fid] = {};
+    publishedFeatureState[fid][chKey] = { mode: mode || 'posted', ts: new Date().toISOString() };
+    refreshFeatureCardPublishStatus(fid);
+}
+
+function buildPublishedPillsHtml(fid, recommendedChannels) {
+    var state = publishedFeatureState[fid];
+    if (!state) return '';
+    var pubKeys = Object.keys(state);
+    if (pubKeys.length === 0) return '';
+
+    if (recommendedChannels && recommendedChannels.length > 0 && pubKeys.length >= recommendedChannels.length) {
+        var allDone = recommendedChannels.every(function(ch) { return !!state[ch]; });
+        if (allDone) return '<div class="published-channels-row"><span class="pub-ch-pill pub-full">\u2705 Fully Published</span></div>';
+    }
+
+    var html = '<div class="published-channels-row">';
+    pubKeys.forEach(function(ch) {
+        var info = state[ch];
+        var label = CHANNEL_DISPLAY_SHORT[ch] || ch;
+        if (info.mode === 'clipboard') {
+            html += '<span class="pub-ch-pill pub-copied">\uD83D\uDCCB ' + label + '</span>';
+        } else {
+            html += '<span class="pub-ch-pill pub-posted">\u2705 ' + label + '</span>';
+        }
+    });
+    html += '</div>';
+    return html;
+}
+
+function refreshFeatureCardPublishStatus(fid) {
+    var card = document.querySelector('.feature-card[data-fid="' + fid + '"]');
+    if (!card) return;
+    var existing = card.querySelector('.published-channels-row');
+    if (existing) existing.remove();
+
+    var f = null;
+    for (var i = 0; i < allFeatures.length; i++) {
+        if (allFeatures[i].id === fid) { f = allFeatures[i]; break; }
+    }
+    var recCh = f && f.classification ? (f.classification.recommended_channels || []) : [];
+    var pillsHtml = buildPublishedPillsHtml(fid, recCh);
+    if (!pillsHtml) return;
+
+    var bottomRow = card.querySelector('.card-bottom-row');
+    if (bottomRow) {
+        var wrapper = document.createElement('div');
+        wrapper.innerHTML = pillsHtml;
+        bottomRow.parentNode.insertBefore(wrapper.firstChild, bottomRow.nextSibling);
+    }
+}
+
 function _approvalKey(fid, ch) { return 'ampApproved:' + fid + ':' + ch; }
 function _draftKey(fid, ch) { return 'ampDraft:' + fid + ':' + ch; }
 
@@ -2668,14 +2735,36 @@ function enterContentView(feature) {
                 var s = savedState[chKey] || {};
                 if (s.published) {
                     contentViewPublished[chKey] = true;
+                    if (!publishedFeatureState[fid]) publishedFeatureState[fid] = {};
+                    if (!publishedFeatureState[fid][chKey]) {
+                        publishedFeatureState[fid][chKey] = { mode: 'posted', ts: null };
+                    }
                 }
                 if (s.image) {
                     contentViewImages[chKey] = s.image;
                 }
             });
+            var memState = publishedFeatureState[fid];
+            if (memState) {
+                Object.keys(memState).forEach(function(ch) {
+                    if (orderedKeys.indexOf(ch) !== -1 && !contentViewPublished[ch]) {
+                        if (memState[ch].mode === 'clipboard') {
+                            contentViewPublished[ch] = true;
+                        }
+                    }
+                });
+            }
             revealChannelCards(orderedKeys, results, grid);
         })
         .catch(function() {
+            var memState = publishedFeatureState[fid];
+            if (memState) {
+                Object.keys(memState).forEach(function(ch) {
+                    if (orderedKeys.indexOf(ch) !== -1) {
+                        contentViewPublished[ch] = true;
+                    }
+                });
+            }
             revealChannelCards(orderedKeys, results, grid);
         });
 
@@ -2686,6 +2775,7 @@ function enterContentView(feature) {
                     document.getElementById('content-loading').style.display = 'none';
                     document.getElementById('content-bottom-bar').style.display = 'flex';
                     updateApprovalCounter();
+                    refreshFeatureCardPublishStatus(fid);
                     return;
                 }
                 var chKey = keys[idx];
@@ -2977,8 +3067,18 @@ function undoApproval(chKey) {
     contentViewPublished[chKey] = false;
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
     persistApproval(fid, chKey, false);
+    if (publishedFeatureState[fid]) {
+        delete publishedFeatureState[fid][chKey];
+        if (Object.keys(publishedFeatureState[fid]).length === 0) delete publishedFeatureState[fid];
+    }
+    var actionsEl = document.getElementById('ch-actions-' + chKey);
+    if (actionsEl) {
+        var prevNote = actionsEl.querySelector('.pub-prev-note');
+        if (prevNote) prevNote.remove();
+    }
     updateChannelStatus(chKey);
     updateApprovalCounter();
+    refreshFeatureCardPublishStatus(fid);
 }
 
 var CHANNEL_IMAGE_LAYOUT = {
@@ -3148,13 +3248,25 @@ function updateChannelStatus(chKey) {
     var actionsEl = document.getElementById('ch-actions-' + chKey);
 
     if (contentViewPublished[chKey]) {
+        var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+        var pubInfo = (publishedFeatureState[fid] || {})[chKey];
+        var isCopied = pubInfo && pubInfo.mode === 'clipboard';
         if (card) { card.classList.remove('approved'); card.classList.add('published'); }
-        if (statusEl) { statusEl.className = 'status-badge published-badge'; statusEl.textContent = 'Published \u2713'; }
+        if (statusEl) {
+            statusEl.className = 'status-badge published-badge';
+            statusEl.textContent = isCopied ? 'Copied \uD83D\uDCCB' : 'Published \u2713';
+        }
         if (actionsEl) {
             var approveBtn = actionsEl.querySelector('.btn-approve');
             if (approveBtn) approveBtn.style.display = 'none';
             var publishDdEl = actionsEl.querySelector('.publish-post-preview-dd');
-            if (publishDdEl) publishDdEl.style.display = 'none';
+            if (publishDdEl) {
+                var ddToggle = publishDdEl.querySelector('.dd-label');
+                if (ddToggle) ddToggle.textContent = 'Repost or Preview';
+                var ddItems = publishDdEl.querySelectorAll('.custom-dropdown-item');
+                if (ddItems[0]) ddItems[0].innerHTML = 'Repost to X &#x2192;';
+                publishDdEl.style.display = '';
+            }
             var publishBtn = actionsEl.querySelector('.btn-publish-channel');
             if (publishBtn) publishBtn.style.display = 'none';
             var previewBtn = actionsEl.querySelector('.btn-preview-channel');
@@ -3166,6 +3278,15 @@ function updateChannelStatus(chKey) {
                 undo.textContent = 'Undo';
                 undo.onclick = function() { undoApproval(chKey); };
                 actionsEl.appendChild(undo);
+            }
+            var prevNote = actionsEl.querySelector('.pub-prev-note');
+            if (!prevNote && pubInfo && pubInfo.ts) {
+                var note = document.createElement('div');
+                note.className = 'pub-prev-note';
+                var d = new Date(pubInfo.ts);
+                var timeStr = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                note.textContent = (isCopied ? 'Copied ' : 'Previously published ') + timeStr;
+                actionsEl.appendChild(note);
             }
         }
     } else if (contentViewApproved[chKey]) {
@@ -3297,6 +3418,8 @@ function doPublishToChannel(chKey) {
             return;
         }
         contentViewPublished[chKey] = true;
+        var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+        trackPublish(fid, chKey, 'posted');
         updateChannelStatus(chKey);
         var hasImg = !!(contentViewImages[chKey] && contentViewImages[chKey].dataUrl);
         var tweetLink = data.tweet_url ? ' <a href="' + data.tweet_url + '" target="_blank" style="color:#1DA1F2;text-decoration:underline">View tweet</a>' : '';
@@ -3349,6 +3472,12 @@ function publishAllApproved() {
         var msg = nonPublishable.length + ' channel(s) approved but no publishing integration yet';
         if (hasImages) msg += '. Remember to paste images separately for clipboard channels.';
         showToast(msg, 'warning');
+        var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+        for (var n = 0; n < nonPublishable.length; n++) {
+            contentViewPublished[nonPublishable[n]] = true;
+            trackPublish(fid, nonPublishable[n], 'clipboard');
+            updateChannelStatus(nonPublishable[n]);
+        }
     }
 
     if (publishableKeys.length === 0) return;
