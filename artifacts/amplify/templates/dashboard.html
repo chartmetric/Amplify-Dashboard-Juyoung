@@ -464,6 +464,8 @@
             transition: color 0.15s, border-color 0.15s;
         }
         .btn-regen:hover { color: #e0e0e0; border-color: #4a5a6a; }
+        .btn-regen.has-feedback { background: #00C9A7; color: #0f1923; border-color: #00C9A7; font-weight: 600; }
+        .btn-regen.has-feedback:hover { background: #00e0bb; border-color: #00e0bb; }
         .btn-regen:disabled { opacity: 0.5; cursor: not-allowed; }
         .regen-feedback-input {
             flex: 1; min-width: 120px; background: #0d1520; color: #e0e0e0;
@@ -2294,6 +2296,15 @@ function buildChannelCard(chKey, ch) {
     setTimeout(function() { autoResizeTextarea(ta); }, 0);
     ta.addEventListener('input', function() { autoResizeTextarea(this); });
 
+    var fbInput = card.querySelector('.regen-feedback-input');
+    var regenBtn = card.querySelector('.btn-regen');
+    if (fbInput && regenBtn) {
+        fbInput.addEventListener('input', function() {
+            if (this.value.trim()) regenBtn.classList.add('has-feedback');
+            else regenBtn.classList.remove('has-feedback');
+        });
+    }
+
     return card;
 }
 
@@ -2773,6 +2784,15 @@ function buildBatchItem(r, idx) {
     });
     setTimeout(function() { autoResizeTextarea(ta); }, 0);
     ta.addEventListener('input', function() { autoResizeTextarea(this); });
+
+    var fbInput = item.querySelector('.regen-feedback-input');
+    var regenBtn = item.querySelector('.btn-regen');
+    if (fbInput && regenBtn) {
+        fbInput.addEventListener('input', function() {
+            if (this.value.trim()) regenBtn.classList.add('has-feedback');
+            else regenBtn.classList.remove('has-feedback');
+        });
+    }
 
     return item;
 }
