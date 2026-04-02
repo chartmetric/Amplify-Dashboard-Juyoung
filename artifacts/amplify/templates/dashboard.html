@@ -3220,6 +3220,12 @@ function doPublishToChannel(chKey) {
     var ta = document.getElementById('ta-' + chKey);
     var content = ta ? ta.value : '';
 
+    if (!content) {
+        publishingInFlight[chKey] = false;
+        showToast('No content found in textarea for ' + chKey, 'error');
+        return;
+    }
+
     var payload = { content: content };
     var imgData = contentViewImages[chKey];
     if (imgData && imgData.dataUrl) {

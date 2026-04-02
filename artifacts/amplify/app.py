@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 
 app = Flask(__name__, template_folder="templates")
 app.secret_key = config.SESSION_SECRET
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1407,8 +1408,11 @@ def publish_twitter():
     """
     from integrations.twitter_client import publish_tweet
 
+    logger.info(f"[publish/twitter] Request received, content-length header: {request.content_length}")
     data = request.get_json() or {}
     content = data.get("content", "").strip()
+    has_image = bool(data.get("image"))
+    logger.info(f"[publish/twitter] Content: {len(content)} chars, has_image: {has_image}")
     if not content:
         return jsonify({"success": False, "error": "content is required"}), 400
 

@@ -35,8 +35,26 @@ def publish_tweet(content: str, image_base64: str = None) -> dict:
                 try:
                     image_data = base64.b64decode(image_base64)
                     file_obj = io.BytesIO(image_data)
-                    file_obj.name = "image.png"
-                    media = api_v1.media_upload(filename="image.png", file=file_obj)
+
+                    if image_data[:8] == b'\x89PNG\r\n\x1a\n':
+                        ext, mime = "png", "image/png"
+                    elif image_data[:2] == b'\xff\xd8':
+                        ext, mime = "jpg", "image/jpeg"
+                    elif image_data[:4] == b'GIF8':
+                        ext, mime = "gif", "image/gif"
+                    elif image_data[:4] == b'RIFF' and image_data[8:12] == b'WEBP':
+                        ext, mime = "webp", "image/webp"
+                    else:
+                        ext, mime = "png", "image/png"
+
+                    filename = f"image.{ext}"
+                    file_obj.name = filename
+                    logger.info(f"[twitter] Uploading image: {len(image_data)} bytes, type={mime}")
+                    media = api_v1.media_upload(
+                        filename=filename,
+                        file=file_obj,
+                        media_category="tweet_image",
+                    )
                     media_id = media.media_id
                     logger.info(f"[twitter] Image uploaded, media_id={media_id}")
                 except Exception as img_err:
