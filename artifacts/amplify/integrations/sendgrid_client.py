@@ -62,10 +62,19 @@ def render_email_html(subject: str, body: str, images: dict = None) -> str:
             cta_phrases = ["try it here", "check it out", "learn more", "get started", "see it in action", "explore now"]
             is_cta = any(p in stripped.lower() for p in cta_phrases)
             if is_cta and ("http" in stripped):
-                url_match = re.search(r'(https?://\S+)', stripped)
-                url = _esc(url_match.group(1)) if url_match else "#"
-                label = _esc(re.sub(r'https?://\S+', '', stripped).strip().rstrip(':').strip() or "Try it now")
-                body_html += f'<div style="text-align:center;margin:24px 0;"><a href="{url}" style="display:inline-block;background:#00C9A7;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:700;font-size:15px;">{label}</a></div>'
+                md_link = re.search(r'\[([^\]]+)\]\((https?://[^)]+)\)', stripped)
+                bare_url = re.search(r'(https?://\S+)', stripped)
+                if md_link:
+                    url = _esc(md_link.group(2))
+                    rest = stripped[:md_link.start()] + stripped[md_link.end():]
+                    label = _esc(rest.strip().rstrip('.').rstrip(':').strip() or md_link.group(1))
+                    body_html += f'<div style="text-align:center;margin:24px 0;"><a href="{url}" style="display:inline-block;background:#00C9A7;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:700;font-size:15px;">{label}</a></div>'
+                elif bare_url:
+                    url = _esc(bare_url.group(1).rstrip(').,;'))
+                    label = _esc(re.sub(r'https?://\S+', '', stripped).strip().rstrip(':').strip() or "Try it now")
+                    body_html += f'<div style="text-align:center;margin:24px 0;"><a href="{url}" style="display:inline-block;background:#00C9A7;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:700;font-size:15px;">{label}</a></div>'
+                else:
+                    body_html += f'<p style="margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(stripped)}</p>'
             else:
                 body_html += f'<p style="margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(stripped)}</p>'
 

@@ -2922,6 +2922,10 @@ function enterContentView(feature) {
                 }
                 if (s.image) {
                     contentViewImages[chKey] = s.image;
+                    if (s.image.name && s.image.dataUrl) {
+                        if (!contentViewImageMap[chKey]) contentViewImageMap[chKey] = {};
+                        contentViewImageMap[chKey][s.image.name] = s.image.dataUrl;
+                    }
                 }
             });
             var memState = publishedFeatureState[fid];
