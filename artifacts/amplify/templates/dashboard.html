@@ -790,30 +790,40 @@
             <span class="load-all-banner-text">Showing all Asana tasks &mdash; only classified features can generate content. Use "Classify" on individual cards or wait for background classification.</span>
         </div>
 
+        <div class="category-filter-row" id="source-filter-row">
+            <span class="filter-label">Source:</span>
+            <button class="cat-filter-pill active" data-source="announced" onclick="toggleSourceFilter('announced', this)">
+                <span class="cat-pill-dot" style="background:#00C9A7;"></span>Announced on Slack
+            </button>
+            <button class="cat-filter-pill" data-source="not_announced" onclick="toggleSourceFilter('not_announced', this)">
+                <span class="cat-pill-dot" style="background:#f97316;"></span>Not Yet Announced on Slack
+            </button>
+        </div>
+
         <div class="category-filter-row" id="category-filter-row">
             <span class="filter-label">Category:</span>
-            <button class="cat-filter-pill active" data-cat="all" onclick="setCategoryFilter('all', this)">
+            <button class="cat-filter-pill active" data-cat="all" onclick="toggleCategoryFilter('all', this)">
                 <span class="cat-pill-dot" style="background:#8899aa;"></span>All
             </button>
-            <button class="cat-filter-pill" data-cat="new_feature" onclick="setCategoryFilter('new_feature', this)">
+            <button class="cat-filter-pill" data-cat="new_feature" onclick="toggleCategoryFilter('new_feature', this)">
                 <span class="cat-pill-dot" style="background:#00C9A7;"></span>New Feature
             </button>
-            <button class="cat-filter-pill" data-cat="improvement" onclick="setCategoryFilter('improvement', this)">
+            <button class="cat-filter-pill" data-cat="improvement" onclick="toggleCategoryFilter('improvement', this)">
                 <span class="cat-pill-dot" style="background:#3b82f6;"></span>Improvement
             </button>
-            <button class="cat-filter-pill" data-cat="mobile" onclick="setCategoryFilter('mobile', this)">
+            <button class="cat-filter-pill" data-cat="mobile" onclick="toggleCategoryFilter('mobile', this)">
                 <span class="cat-pill-dot" style="background:#a855f7;"></span>Mobile
             </button>
-            <button class="cat-filter-pill" data-cat="deprecation" onclick="setCategoryFilter('deprecation', this)">
+            <button class="cat-filter-pill" data-cat="deprecation" onclick="toggleCategoryFilter('deprecation', this)">
                 <span class="cat-pill-dot" style="background:#f97316;"></span>Deprecation
             </button>
-            <button class="cat-filter-pill" data-cat="bug_fix" onclick="setCategoryFilter('bug_fix', this)">
+            <button class="cat-filter-pill" data-cat="bug_fix" onclick="toggleCategoryFilter('bug_fix', this)">
                 <span class="cat-pill-dot" style="background:#ef4444;"></span>Bug Fix
             </button>
-            <button class="cat-filter-pill" data-cat="infrastructure" onclick="setCategoryFilter('infrastructure', this)">
+            <button class="cat-filter-pill" data-cat="infrastructure" onclick="toggleCategoryFilter('infrastructure', this)">
                 <span class="cat-pill-dot" style="background:#6b7280;"></span>Infrastructure
             </button>
-            <button class="cat-filter-pill" data-cat="unclassified" onclick="setCategoryFilter('unclassified', this)">
+            <button class="cat-filter-pill" data-cat="unclassified" onclick="toggleCategoryFilter('unclassified', this)">
                 <span class="cat-pill-dot" style="background:#4b5563;"></span>Unclassified
             </button>
         </div>
@@ -947,6 +957,8 @@
 var allFeatures = [];
 var expandedId = null;
 var categoryFilter = 'all';
+var activeCategoryFilters = ['all'];
+var activeSourceFilters = ['announced'];
 var pollInterval = null;
 var classificationTotal = 0;
 var classificationDone = 0;
@@ -1082,12 +1094,23 @@ function renderFunnelBar(data, activeStep) {
 
 function onFunnelClick(stepId) {
     if (stepId === 'total') {
+        activeSourceFilters = ['announced', 'not_announced'];
+        refreshSourceFilterUI();
         manualRefresh();
     } else if (stepId === 'claude') {
         loadFeaturesSentToClaude();
     } else if (stepId === 'classified') {
-        setCategoryFilter('all', document.querySelector('.cat-filter-pill[data-cat="all"]'));
+        setCategoryFilter('all', document.querySelector('#category-filter-row .cat-filter-pill[data-cat="all"]'));
         if (currentFunnelData) renderFunnelBar(currentFunnelData, 'classified');
+    }
+}
+
+function refreshSourceFilterUI() {
+    var pills = document.querySelectorAll('#source-filter-row .cat-filter-pill');
+    for (var i = 0; i < pills.length; i++) {
+        var s = pills[i].getAttribute('data-source');
+        pills[i].classList.remove('active');
+        if (activeSourceFilters.indexOf(s) !== -1) pills[i].classList.add('active');
     }
 }
 
@@ -1492,8 +1515,9 @@ function updateStats() {
 
 function setCategoryFilter(cat, btn) {
     categoryFilter = cat;
+    activeCategoryFilters = [cat];
     currentPage = 1;
-    var pills = document.querySelectorAll('.cat-filter-pill');
+    var pills = document.querySelectorAll('#category-filter-row .cat-filter-pill');
     for (var i = 0; i < pills.length; i++) {
         pills[i].classList.remove('active', 'active-unclassified');
     }
@@ -1502,11 +1526,69 @@ function setCategoryFilter(cat, btn) {
         else { btn.classList.add('active'); }
     }
     renderAll();
+    updateFunnelAfterFilter();
+}
+
+function toggleCategoryFilter(cat, btn) {
+    if (cat === 'all') {
+        activeCategoryFilters = ['all'];
+        categoryFilter = 'all';
+    } else {
+        var allIdx = activeCategoryFilters.indexOf('all');
+        if (allIdx !== -1) activeCategoryFilters.splice(allIdx, 1);
+
+        var idx = activeCategoryFilters.indexOf(cat);
+        if (idx !== -1) {
+            activeCategoryFilters.splice(idx, 1);
+            if (activeCategoryFilters.length === 0) {
+                activeCategoryFilters = ['all'];
+                categoryFilter = 'all';
+            }
+        } else {
+            activeCategoryFilters.push(cat);
+        }
+
+        if (activeCategoryFilters.length === 1) categoryFilter = activeCategoryFilters[0];
+        else categoryFilter = 'multi';
+    }
+
+    var pills = document.querySelectorAll('#category-filter-row .cat-filter-pill');
+    for (var i = 0; i < pills.length; i++) {
+        var pillCat = pills[i].getAttribute('data-cat');
+        pills[i].classList.remove('active', 'active-unclassified');
+        if (activeCategoryFilters.indexOf(pillCat) !== -1) {
+            pills[i].classList.add(pillCat === 'unclassified' ? 'active-unclassified' : 'active');
+        }
+    }
+    currentPage = 1;
+    renderAll();
+    updateFunnelAfterFilter();
+}
+
+function toggleSourceFilter(source, btn) {
+    var idx = activeSourceFilters.indexOf(source);
+    if (idx !== -1) {
+        if (activeSourceFilters.length <= 1) return;
+        activeSourceFilters.splice(idx, 1);
+    } else {
+        activeSourceFilters.push(source);
+    }
+
+    var pills = document.querySelectorAll('#source-filter-row .cat-filter-pill');
+    for (var i = 0; i < pills.length; i++) {
+        var s = pills[i].getAttribute('data-source');
+        pills[i].classList.remove('active');
+        if (activeSourceFilters.indexOf(s) !== -1) pills[i].classList.add('active');
+    }
+    currentPage = 1;
+    renderAll();
+    updateFunnelAfterFilter();
+}
+
+function updateFunnelAfterFilter() {
     if (currentFunnelData) {
-        var visible = (cat === 'all' || cat === 'unclassified')
-            ? allFeatures
-            : allFeatures.filter(function(f) { return featureMatchesCategory(f, cat); });
-        currentFunnelData.filtered = visible.length;
+        var result = getFilteredFeatures();
+        currentFunnelData.filtered = result.classified.length + result.unclassified.length + result.asanaOnly.length;
         renderFunnelBar(currentFunnelData, 'showing');
     }
 }
@@ -1515,7 +1597,12 @@ function applyFilters() { currentPage = 1; renderAll(); }
 
 function getFilteredFeatures() {
     var minImp = parseInt(document.getElementById('importance-filter').value);
-    var catFilter = categoryFilter;
+    var catFilters = activeCategoryFilters;
+    var srcFilters = activeSourceFilters;
+    var isAllCats = catFilters.indexOf('all') !== -1;
+    var hasUnclassifiedCat = catFilters.indexOf('unclassified') !== -1;
+    var showAnnounced = srcFilters.indexOf('announced') !== -1;
+    var showNotAnnounced = srcFilters.indexOf('not_announced') !== -1;
     var classified = [];
     var unclassified = [];
     var asanaOnly = [];
@@ -1526,14 +1613,23 @@ function getFilteredFeatures() {
         var isAsanaOnly = f.source === 'asana_only';
         var isReallyUnclassified = !cl || cl.unclassified;
 
+        if (isAsanaOnly && !showNotAnnounced) continue;
+        if (!isAsanaOnly && !showAnnounced) continue;
+
         if (isReallyUnclassified) {
-            if (catFilter !== 'all' && catFilter !== 'unclassified') continue;
+            if (!isAllCats && !hasUnclassifiedCat) continue;
             if (isAsanaOnly) { asanaOnly.push(f); }
             else { unclassified.push(f); }
         } else {
             var score = cl.importance_score || 0;
-            if (catFilter === 'unclassified') continue;
-            if (catFilter !== 'all' && !featureMatchesCategory(f, catFilter)) continue;
+            if (!isAllCats && hasUnclassifiedCat && catFilters.length === 1) continue;
+            if (!isAllCats) {
+                var matchesAnyCat = false;
+                for (var ci = 0; ci < catFilters.length; ci++) {
+                    if (catFilters[ci] !== 'unclassified' && featureMatchesCategory(f, catFilters[ci])) { matchesAnyCat = true; break; }
+                }
+                if (!matchesAnyCat) continue;
+            }
             if (score < minImp) continue;
             if (isAsanaOnly) { asanaOnly.push(f); }
             else { classified.push(f); }
