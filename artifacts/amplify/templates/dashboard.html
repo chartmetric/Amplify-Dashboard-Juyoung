@@ -673,7 +673,8 @@
         .md-preview h1 { font-size: 18px; } .md-preview h2 { font-size: 16px; } .md-preview h3 { font-size: 14px; }
         .md-preview p { margin: 6px 0; }
         .md-preview strong { color: var(--accent); }
-        .md-preview a { color: #3b82f6; }
+        .md-preview a { color: #3b82f6; text-decoration: underline; text-underline-offset: 2px; }
+        .md-preview a:hover { color: #60a5fa; }
         .btn-preview-toggle {
             background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 4px 10px;
             border-radius: 6px; font-size: 11px; cursor: pointer; font-family: inherit;
@@ -2984,8 +2985,8 @@ function buildChannelCard(chKey, ch) {
         '</div>' +
         (imgAbove ? '<div class="img-preview-wrap" id="img-wrap-' + chKey + '" style="display:none;"></div>' : '') +
         '<div class="channel-card-body">' +
-            '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '">' + escHtml(content) + '</textarea>' +
-            (isArticle ? '<div class="md-preview" id="md-preview-' + chKey + '"></div>' : '') +
+            '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(content) + '</textarea>' +
+            '<div class="md-preview" id="md-preview-' + chKey + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(content) + '</div>' +
         '</div>' +
         (imgBelow ? '<div class="img-preview-wrap" id="img-wrap-' + chKey + '" style="display:none;"></div>' : '') +
         '<div class="channel-card-loading" id="ch-loading-' + chKey + '"><div class="spinner"></div><span>Regenerating...</span></div>' +
@@ -3011,6 +3012,18 @@ function buildChannelCard(chKey, ch) {
     setupCardDragDrop(card, chKey, false);
     ta.addEventListener('input', function() { autoResizeTextarea(this); });
 
+    var mdPreview = card.querySelector('.md-preview');
+    if (mdPreview) {
+        mdPreview.addEventListener('click', function(e) {
+            if (e.target.closest && e.target.closest('a')) return;
+            if (e.target.tagName === 'A') return;
+            switchToEdit(chKey);
+        });
+    }
+    ta.addEventListener('blur', function() {
+        switchToPreview(chKey);
+    });
+
     var fbInput = card.querySelector('.regen-feedback-input');
     var regenBtn = card.querySelector('.btn-regen');
     if (fbInput && regenBtn) {
@@ -3028,20 +3041,36 @@ function autoResizeTextarea(ta) {
     ta.style.height = Math.max(ta.scrollHeight, 120) + 'px';
 }
 
+function switchToEdit(chKey) {
+    var ta = document.getElementById('ta-' + chKey);
+    var preview = document.getElementById('md-preview-' + chKey);
+    if (!ta || !preview) return;
+    preview.style.display = 'none';
+    ta.style.display = 'block';
+    autoResizeTextarea(ta);
+    ta.focus();
+}
+
+function switchToPreview(chKey) {
+    var ta = document.getElementById('ta-' + chKey);
+    var preview = document.getElementById('md-preview-' + chKey);
+    if (!ta || !preview) return;
+    preview.innerHTML = simpleMarkdown(ta.value);
+    preview.style.display = 'block';
+    ta.style.display = 'none';
+}
+
 function togglePreview(chKey) {
     var ta = document.getElementById('ta-' + chKey);
     var preview = document.getElementById('md-preview-' + chKey);
     var toggle = document.getElementById('preview-toggle-' + chKey);
     if (!preview) return;
     if (preview.style.display === 'block') {
-        preview.style.display = 'none';
-        ta.style.display = 'block';
-        toggle.classList.remove('active');
+        switchToEdit(chKey);
+        if (toggle) toggle.classList.remove('active');
     } else {
-        preview.innerHTML = simpleMarkdown(ta.value);
-        preview.style.display = 'block';
-        ta.style.display = 'none';
-        toggle.classList.add('active');
+        switchToPreview(chKey);
+        if (toggle) toggle.classList.add('active');
     }
 }
 
@@ -3052,7 +3081,12 @@ function simpleMarkdown(text) {
     html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(m, text, url) {
+        if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) {
+            return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+        }
+        return text;
+    });
     html = html.replace(/\n/g, '<br>');
     return html;
 }
@@ -3103,13 +3137,7 @@ function regenerateChannel(chKey) {
             updateApprovalCounter();
         }
 
-        var preview = document.getElementById('md-preview-' + chKey);
-        if (preview && preview.style.display === 'block') {
-            preview.style.display = 'none';
-            var toggle = document.getElementById('preview-toggle-' + chKey);
-            if (toggle) toggle.classList.remove('active');
-            if (ta) ta.style.display = 'block';
-        }
+        switchToPreview(chKey);
     })
     .catch(function(err) {
         if (loadingEl) loadingEl.style.display = 'none';
@@ -4101,7 +4129,8 @@ function buildBatchItem(r, idx) {
             (r.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
         '</div>' +
         '<div class="batch-item-body" id="batch-body-' + idx + '">' +
-            '<textarea class="channel-textarea" id="batch-ta-' + idx + '" data-idx="' + idx + '" data-max="' + maxChars + '">' + escHtml(content) + '</textarea>' +
+            '<textarea class="channel-textarea" id="batch-ta-' + idx + '" data-idx="' + idx + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(content) + '</textarea>' +
+            '<div class="md-preview" id="batch-md-preview-' + idx + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(content) + '</div>' +
         '</div>' +
         '<div class="img-preview-wrap" id="batch-img-wrap-' + idx + '" style="display:none;"></div>' +
         '<div class="batch-item-loading" id="batch-loading-' + idx + '" style="display:none;"><div class="spinner"></div><span>Regenerating...</span></div>' +
@@ -4126,6 +4155,18 @@ function buildBatchItem(r, idx) {
     setupCardDragDrop(item, null, true, idx);
     ta.addEventListener('input', function() { autoResizeTextarea(this); });
 
+    var batchPreview = item.querySelector('.md-preview');
+    if (batchPreview) {
+        batchPreview.addEventListener('click', function(e) {
+            if (e.target.closest && e.target.closest('a')) return;
+            if (e.target.tagName === 'A') return;
+            switchToBatchEdit(idx);
+        });
+    }
+    ta.addEventListener('blur', function() {
+        switchToBatchPreview(idx);
+    });
+
     var fbInput = item.querySelector('.regen-feedback-input');
     var regenBtn = item.querySelector('.btn-regen');
     if (fbInput && regenBtn) {
@@ -4136,6 +4177,25 @@ function buildBatchItem(r, idx) {
     }
 
     return item;
+}
+
+function switchToBatchEdit(idx) {
+    var ta = document.getElementById('batch-ta-' + idx);
+    var preview = document.getElementById('batch-md-preview-' + idx);
+    if (!ta || !preview) return;
+    preview.style.display = 'none';
+    ta.style.display = 'block';
+    autoResizeTextarea(ta);
+    ta.focus();
+}
+
+function switchToBatchPreview(idx) {
+    var ta = document.getElementById('batch-ta-' + idx);
+    var preview = document.getElementById('batch-md-preview-' + idx);
+    if (!ta || !preview) return;
+    preview.innerHTML = simpleMarkdown(ta.value);
+    preview.style.display = 'block';
+    ta.style.display = 'none';
 }
 
 function batchRegenItem(idx) {
@@ -4173,6 +4233,7 @@ function batchRegenItem(idx) {
             updateBatchItemStatus(idx);
             updateBatchApprovalCount();
         }
+        switchToBatchPreview(idx);
     })
     .catch(function(err) {
         if (loadingEl) loadingEl.style.display = 'none';

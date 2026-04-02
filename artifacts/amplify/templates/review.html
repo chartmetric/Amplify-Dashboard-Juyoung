@@ -64,6 +64,8 @@ h2{font-size:1.2rem;color:#444;margin:2rem 0 1rem}
 .card-header{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1rem;border-bottom:1px solid #f0f0f0;background:#fafafa}
 .card-header h4{font-size:.9rem;margin:0;color:#333}
 .card-body{padding:1rem;flex:1;max-height:360px;overflow-y:auto;font-size:.9rem;white-space:pre-wrap;word-break:break-word;color:#333}
+.card-body a{color:#3b82f6;text-decoration:underline;text-underline-offset:2px}
+.card-body a:hover{color:#60a5fa}
 .card-footer{display:flex;gap:.5rem;padding:.75rem 1rem;border-top:1px solid #f0f0f0;align-items:center;background:#fafafa}
 .card-footer input{flex:1;border:1px solid #ddd;border-radius:6px;padding:.35rem .6rem;font-size:.8rem;font-family:inherit}
 .card-regen-spinner{display:none;width:18px;height:18px;border:2px solid #e0e0e0;border-top-color:#00C9A7;border-radius:50%;animation:spin .7s linear infinite}
@@ -372,7 +374,7 @@ function renderContent(content) {
 
     var body = document.createElement('div');
     body.className = 'card-body';
-    body.textContent = item.content || item.error || 'No content';
+    body.innerHTML = simpleMarkdown(item.content || item.error || 'No content');
     card.appendChild(body);
 
     if (item.was_trimmed) {
@@ -426,7 +428,7 @@ async function regenerate(channel, card, body, input, spinner) {
     var data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    body.textContent = data.content || 'No content';
+    body.innerHTML = simpleMarkdown(data.content || 'No content');
     var charCount = data.char_count || (data.content || '').length;
     var maxChars = data.max_chars || '?';
     var badge = card.querySelector('.badge-chars');
@@ -445,7 +447,7 @@ async function regenerate(channel, card, body, input, spinner) {
     input.value = '';
   } catch (e) {
     console.error('Regeneration failed:', e);
-    body.textContent = 'Regeneration failed: ' + e.message;
+    body.innerHTML = esc('Regeneration failed: ' + e.message);
   } finally {
     spinner.style.display = 'none';
   }
@@ -456,6 +458,23 @@ function esc(s) {
   var d = document.createElement('div');
   d.textContent = String(s);
   return d.innerHTML;
+}
+
+function simpleMarkdown(text) {
+  var html = esc(text);
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(m, text, url) {
+    if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) {
+      return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+    }
+    return text;
+  });
+  html = html.replace(/\n/g, '<br>');
+  return html;
 }
 
 fetchChannels();
