@@ -829,10 +829,43 @@
             background: var(--bg-card); color: var(--text-body); border: 1px solid var(--border);
             padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
             cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0;
-            transition: background 0.2s, border-color 0.2s;
+            transition: background 0.2s, border-color 0.2s; display: none;
         }
         .btn-analytics:hover { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
         .btn-analytics.active { border-color: var(--accent); background: var(--accent-bg-strong); color: var(--accent); }
+        .lab-wrapper { position: relative; display: inline-block; }
+        .btn-lab {
+            background: var(--bg-card); color: var(--text-body); border: 1px solid var(--border);
+            padding: 8px 14px; border-radius: 8px; font-size: 15px; cursor: pointer;
+            font-family: inherit; white-space: nowrap; flex-shrink: 0;
+            transition: background 0.2s, border-color 0.2s; display: inline-flex;
+            align-items: center; gap: 6px;
+        }
+        .btn-lab:hover { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+        .btn-lab.active { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+        .lab-dropdown {
+            display: none; position: absolute; top: calc(100% + 6px); right: 0;
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+            box-shadow: 0 8px 24px var(--shadow-strong); min-width: 200px; z-index: 300;
+            overflow: hidden; animation: fadeIn 0.12s ease;
+        }
+        .lab-dropdown.open { display: block; }
+        .lab-dropdown-item {
+            display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+            font-size: 13px; font-weight: 600; color: var(--text-body); cursor: pointer;
+            transition: background 0.15s; border: none; background: none; width: 100%;
+            text-align: left; font-family: inherit;
+        }
+        .lab-dropdown-item:hover { background: var(--hover-bg); }
+        .lab-dropdown-item .lab-item-icon { font-size: 16px; width: 22px; text-align: center; }
+        .lab-dropdown-item .lab-item-label { flex: 1; }
+        .lab-dropdown-item .lab-item-status {
+            font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 10px;
+        }
+        .lab-dropdown-item .lab-item-status.on {
+            background: rgba(0,201,167,0.15); color: var(--accent);
+        }
+        .lab-dropdown-divider { height: 1px; background: var(--border); margin: 0; }
         .analytics-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500;
             background: var(--bg-overlay); overflow-y: auto; transition: background-color 0.2s;
@@ -1119,6 +1152,25 @@
             <span class="subtitle">Product Marketing Autopilot</span>
         </div>
         <div class="topbar-right">
+            <div class="lab-wrapper">
+                <button class="btn-lab" id="btn-lab" onclick="toggleLabDropdown()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v5.586a1 1 0 0 0 .293.707l5.414 5.414a2 2 0 0 1 .586 1.414V19a2 2 0 0 1-2 2H4.707a2 2 0 0 1-2-2v-2.879a2 2 0 0 1 .586-1.414l5.414-5.414A1 1 0 0 0 9 8.586V3z"/><line x1="9" y1="3" x2="15" y2="3"/></svg>
+                    <span style="font-size:13px;font-weight:600;">Lab</span>
+                </button>
+                <div class="lab-dropdown" id="lab-dropdown">
+                    <button class="lab-dropdown-item" onclick="labToggleAnalytics()">
+                        <span class="lab-item-icon">&#128202;</span>
+                        <span class="lab-item-label">Analytics</span>
+                        <span class="lab-item-status" id="lab-analytics-status"></span>
+                    </button>
+                    <div class="lab-dropdown-divider"></div>
+                    <button class="lab-dropdown-item" onclick="labToggleDyk()">
+                        <span class="lab-item-icon">&#128161;</span>
+                        <span class="lab-item-label">Did You Know?</span>
+                        <span class="lab-item-status" id="lab-dyk-status"></span>
+                    </button>
+                </div>
+            </div>
             <button class="btn-analytics" onclick="toggleAnalytics()">&#128202; Analytics</button>
             <button class="btn-prep-content" onclick="startPrepWorkflow()">Prep Content</button>
             <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">&#127769;</button>
@@ -1163,9 +1215,7 @@
                     </div>
                     <input type="hidden" id="importance-filter" value="3">
                 </div>
-                <button class="dyk-toggle-btn" id="dyk-toggle" onclick="toggleDidYouKnow()">
-                    &#128161; Did You Know?
-                </button>
+                <span id="dyk-toggle" style="display:none;"></span>
             </div>
         </div>
 
@@ -5964,17 +6014,67 @@ function submitPasteBar() {
     });
 }
 
+function toggleLabDropdown() {
+    var dd = document.getElementById('lab-dropdown');
+    var btn = document.getElementById('btn-lab');
+    var isOpen = dd.classList.contains('open');
+    if (isOpen) {
+        dd.classList.remove('open');
+        btn.classList.remove('active');
+    } else {
+        updateLabStatuses();
+        dd.classList.add('open');
+        btn.classList.add('active');
+    }
+}
+
+function closeLabDropdown() {
+    var dd = document.getElementById('lab-dropdown');
+    var btn = document.getElementById('btn-lab');
+    if (dd) dd.classList.remove('open');
+    if (btn) btn.classList.remove('active');
+}
+
+document.addEventListener('click', function(e) {
+    var wrapper = document.querySelector('.lab-wrapper');
+    if (wrapper && !wrapper.contains(e.target)) {
+        closeLabDropdown();
+    }
+});
+
+function updateLabStatuses() {
+    var analyticsEl = document.getElementById('lab-analytics-status');
+    var dykEl = document.getElementById('lab-dyk-status');
+    var analyticsOverlay = document.getElementById('analytics-overlay');
+    var analyticsOn = analyticsOverlay && analyticsOverlay.style.display === 'block';
+    if (analyticsEl) {
+        analyticsEl.textContent = analyticsOn ? 'ON' : '';
+        analyticsEl.className = 'lab-item-status' + (analyticsOn ? ' on' : '');
+    }
+    if (dykEl) {
+        dykEl.textContent = dykEnabled ? 'ON' : '';
+        dykEl.className = 'lab-item-status' + (dykEnabled ? ' on' : '');
+    }
+}
+
+function labToggleAnalytics() {
+    closeLabDropdown();
+    toggleAnalytics();
+}
+
+function labToggleDyk() {
+    closeLabDropdown();
+    toggleDidYouKnow();
+}
+
 function toggleAnalytics() {
     var overlay = document.getElementById('analytics-overlay');
-    var btn = document.querySelector('.btn-analytics');
     if (overlay.style.display === 'block') {
         overlay.style.display = 'none';
         document.body.style.overflow = '';
-        if (btn) btn.classList.remove('active');
     } else {
         overlay.style.display = 'block';
         document.body.style.overflow = 'hidden';
-        if (btn) btn.classList.add('active');
         loadAnalyticsData();
     }
 }
