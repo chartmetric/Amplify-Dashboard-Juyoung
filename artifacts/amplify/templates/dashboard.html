@@ -229,6 +229,8 @@
         .feature-card.expanded { border-color: var(--accent); box-shadow: 0 4px 24px rgba(0,201,167,0.1); }
         .feature-card.autoskipped-card { border-color: var(--autoskipped-border); background: var(--autoskipped-bg); opacity: 0.85; }
         .feature-card.autoskipped-card:hover { border-color: var(--border); opacity: 1; }
+        .feature-card.published-card { border-left: 3px solid #4ade80; background: linear-gradient(90deg, rgba(74,222,128,0.06) 0%, var(--card-bg) 40%); }
+        .feature-card.published-card .card-top::after { content: ''; }
         .feature-card.just-classified { animation: fadeInClassified 0.5s ease-out; }
         @keyframes fadeInClassified {
             from { opacity: 0.5; transform: translateY(4px); border-color: rgba(0,201,167,0.5); }
@@ -377,7 +379,7 @@
         .card-bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .channel-pills { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
         .channel-pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-muted); }
-        .published-channels-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+        .published-channels-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; padding-left: 56px; }
         .pub-ch-pill { font-size: 10px; padding: 2px 7px; border-radius: 99px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
         .pub-ch-pill.pub-posted { background: #1a3a2a; color: #4ade80; }
         .pub-ch-pill.pub-copied { background: #2a3a4a; color: #8899aa; }
@@ -1814,7 +1816,7 @@ function loadPublishedMap() {
                 }
             });
         });
-        if (activePublishFilter) renderAll();
+        renderAll();
     })
     .catch(function() {});
 }
@@ -2135,7 +2137,8 @@ function buildCard(f, isAutoSkippedCard) {
     var fid = f.id || '';
 
     var card = document.createElement('div');
-    card.className = 'feature-card' + (isAutoSkippedCard ? ' autoskipped-card' : '') + (f._justAdded ? ' just-added' : '');
+    var isPublished = getFeaturePublishedChannels(fid).length > 0;
+    card.className = 'feature-card' + (isAutoSkippedCard ? ' autoskipped-card' : '') + (f._justAdded ? ' just-added' : '') + (isPublished ? ' published-card' : '');
     card.dataset.fid = fid;
 
     var scoreBadgeClass, scoreBadgeContent;
@@ -2197,6 +2200,8 @@ function buildCard(f, isAutoSkippedCard) {
         channels.forEach(function(ch) { channelHtml += '<span class="channel-pill">' + escHtml(ch) + '</span>'; });
     }
 
+    var publishedPillsHtml = buildPublishedPillsHtml(fid, channels);
+
     var actionBtn;
     if (isAutoSkippedCard) {
         actionBtn = '<button class="btn-classify-now" data-fid="' + escAttr(fid) + '">' +
@@ -2230,6 +2235,7 @@ function buildCard(f, isAutoSkippedCard) {
                 '</div>' +
             '</div>' +
         '</div>' +
+        publishedPillsHtml +
         '<div class="card-expanded-content">' +
             buildDescBlock(f) +
             buildMetaPills(f) +
@@ -2736,6 +2742,12 @@ function refreshFeatureCardPublishStatus(fid) {
         if (allFeatures[i].id === fid) { f = allFeatures[i]; break; }
     }
     var recCh = f && f.classification ? (f.classification.recommended_channels || []) : [];
+    var hasPub = getFeaturePublishedChannels(fid).length > 0;
+    if (hasPub) {
+        card.classList.add('published-card');
+    } else {
+        card.classList.remove('published-card');
+    }
     var pillsHtml = buildPublishedPillsHtml(fid, recCh);
     if (!pillsHtml) return;
 
