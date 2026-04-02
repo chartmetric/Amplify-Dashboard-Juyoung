@@ -773,6 +773,11 @@
                     <button class="refresh-icon-btn" id="btn-refresh" onclick="manualRefresh()" title="Refresh features from Slack &amp; Asana">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 18.37-4.5M21.5 12.5a10 10 0 0 1-18.37 4.5"/></svg>
                     </button>
+                    <span class="filter-label">Sort by</span>
+                    <select id="sort-by" onchange="applyFilters()">
+                        <option value="importance" selected>Importance</option>
+                        <option value="recency">Recency</option>
+                    </select>
                     <span class="filter-label">Min importance</span>
                     <select id="importance-filter" onchange="applyFilters()">
                         <option value="5">5 only</option>
@@ -1590,6 +1595,55 @@ function updateFunnelAfterFilter() {
     }
 }
 
+function toggleCategoryFilter(cat, btn) {
+    currentPage = 1;
+    if (cat === 'all') {
+        activeCategoryFilters = ['all'];
+    } else {
+        var idx = activeCategoryFilters.indexOf(cat);
+        if (idx !== -1) {
+            activeCategoryFilters.splice(idx, 1);
+            if (activeCategoryFilters.length === 0 || (activeCategoryFilters.length === 1 && activeCategoryFilters[0] === 'all')) {
+                activeCategoryFilters = ['all'];
+            }
+        } else {
+            var allIdx = activeCategoryFilters.indexOf('all');
+            if (allIdx !== -1) activeCategoryFilters.splice(allIdx, 1);
+            activeCategoryFilters.push(cat);
+        }
+    }
+    categoryFilter = activeCategoryFilters.length === 1 ? activeCategoryFilters[0] : 'all';
+    var pills = document.querySelectorAll('#category-filter-row .cat-filter-pill');
+    for (var i = 0; i < pills.length; i++) {
+        var d = pills[i].getAttribute('data-cat');
+        pills[i].classList.remove('active', 'active-unclassified');
+        if (activeCategoryFilters.indexOf(d) !== -1) {
+            if (d === 'unclassified') { pills[i].classList.add('active-unclassified'); }
+            else { pills[i].classList.add('active'); }
+        }
+    }
+    renderAll();
+}
+
+function toggleSourceFilter(source, btn) {
+    currentPage = 1;
+    var idx = activeSourceFilters.indexOf(source);
+    if (idx !== -1) {
+        if (activeSourceFilters.length > 1) {
+            activeSourceFilters.splice(idx, 1);
+        }
+    } else {
+        activeSourceFilters.push(source);
+    }
+    var pills = document.querySelectorAll('#source-filter-row .cat-filter-pill');
+    for (var i = 0; i < pills.length; i++) {
+        var d = pills[i].getAttribute('data-source');
+        pills[i].classList.remove('active');
+        if (activeSourceFilters.indexOf(d) !== -1) { pills[i].classList.add('active'); }
+    }
+    renderAll();
+}
+
 function applyFilters() { currentPage = 1; renderAll(); }
 
 function getFilteredFeatures() {
@@ -1633,10 +1687,16 @@ function getFilteredFeatures() {
         }
     }
 
+    var sortBy = (document.getElementById('sort-by') || {}).value || 'importance';
     classified.sort(function(a, b) {
         var aAdded = a._justAdded ? 1 : 0;
         var bAdded = b._justAdded ? 1 : 0;
         if (aAdded !== bAdded) return bAdded - aAdded;
+        if (sortBy === 'recency') {
+            var aDate = a.release_date || '';
+            var bDate = b.release_date || '';
+            if (bDate !== aDate) return bDate > aDate ? 1 : -1;
+        }
         return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
     });
     unclassified.sort(function(a, b) {
@@ -2864,12 +2924,18 @@ function selectUseCase(channelKey) {
 function getPickerFeatures() {
     var minImp = parseInt(document.getElementById('picker-importance').value) || 1;
     var search = (document.getElementById('picker-search').value || '').toLowerCase().trim();
+    var sortBy = (document.getElementById('sort-by') || {}).value || 'importance';
     return allFeatures.filter(function(f) {
         var score = (f.classification || {}).importance_score || 0;
         if (score < minImp) return false;
         if (search && f.title.toLowerCase().indexOf(search) === -1) return false;
         return true;
     }).sort(function(a, b) {
+        if (sortBy === 'recency') {
+            var aDate = a.release_date || '';
+            var bDate = b.release_date || '';
+            if (bDate !== aDate) return bDate > aDate ? 1 : -1;
+        }
         return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
     });
 }

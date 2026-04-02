@@ -760,7 +760,12 @@ def classified_features():
 
     all_features = classified + skipped
     all_features = apply_manual_overrides(all_features)
-    all_features.sort(key=lambda f: f.get("classification", {}).get("importance_score", 0), reverse=True)
+
+    sort_by = request.args.get("sort_by", "importance")
+    if sort_by == "recency":
+        all_features.sort(key=lambda f: f.get("release_date") or "", reverse=True)
+    else:
+        all_features.sort(key=lambda f: f.get("classification", {}).get("importance_score", 0), reverse=True)
 
     total = len(all_features)
     min_importance = request.args.get("min_importance", type=int)
