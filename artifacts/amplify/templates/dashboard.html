@@ -6034,7 +6034,8 @@ var GENALL_CHANNELS = ['twitter', 'email_standalone', 'inapp'];
 var GENALL_CHANNEL_NAMES = { twitter: 'Twitter / X', email_standalone: 'Email', inapp: 'In-App' };
 
 function generateAllTopFeatures() {
-    var filtered = getFilteredFeatures();
+    var result = getFilteredFeatures();
+    var filtered = (result.classified || []).slice();
     filtered.sort(function(a, b) {
         return ((b.classification || {}).importance_score || 0) - ((a.classification || {}).importance_score || 0);
     });
