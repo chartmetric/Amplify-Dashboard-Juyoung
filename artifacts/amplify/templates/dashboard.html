@@ -565,6 +565,14 @@
             width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0;
         }
         .channel-card.ch-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+        .btn-publish-channel {
+            background: #1DA1F2; color: #fff; border: none; padding: 6px 14px;
+            border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+        }
+        .btn-publish-channel:hover { background: #1a91da; }
+        .btn-publish-channel:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status-badge.published-badge { background: rgba(29,161,242,0.15); color: #1DA1F2; }
+        .channel-card.published { border-left: 3px solid #1DA1F2; }
         .content-bottom-bar {
             position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-panel);
             border-top: 1px solid var(--border); padding: 14px 24px;
@@ -952,7 +960,7 @@
             <button class="btn-approve" id="btn-approve-selected" onclick="approveSelectedChannels()" style="display:none;">Approve Selected</button>
             <button class="btn-approve" id="btn-approve-all" onclick="approveAllChannels()">Approve All</button>
             <button class="btn-undo-all" id="btn-undo-all" onclick="undoAllApprovals()" style="display:none;">Undo All</button>
-            <button class="btn-publish" id="btn-publish" disabled>Publish All Approved &rarr;</button>
+            <button class="btn-publish" id="btn-publish" disabled onclick="publishAllApproved()">Publish All Approved &rarr;</button>
         </div>
     </div>
 
@@ -2459,6 +2467,7 @@ var contentViewChannels = {};
 var contentViewOriginals = {};
 var contentViewInitialDrafts = {};
 var contentViewApproved = {};
+var contentViewPublished = {};
 var contentViewRegenFeedback = {};
 
 function _approvalKey(fid, ch) { return 'ampApproved:' + fid + ':' + ch; }
@@ -2499,6 +2508,7 @@ function enterContentView(feature) {
     contentViewOriginals = {};
     contentViewInitialDrafts = {};
     contentViewApproved = {};
+    contentViewPublished = {};
     contentViewRegenFeedback = {};
 
     document.querySelector('.main').style.display = 'none';
@@ -2865,19 +2875,39 @@ function updateChannelSelection() {
 
 function undoApproval(chKey) {
     contentViewApproved[chKey] = false;
+    contentViewPublished[chKey] = false;
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
     persistApproval(fid, chKey, false);
     updateChannelStatus(chKey);
     updateApprovalCounter();
 }
 
+var PUBLISHABLE_CHANNELS = { twitter: '/api/publish/twitter' };
+
 function updateChannelStatus(chKey) {
     var card = document.getElementById('ch-card-' + chKey);
     var statusEl = document.getElementById('status-' + chKey);
     var actionsEl = document.getElementById('ch-actions-' + chKey);
 
-    if (contentViewApproved[chKey]) {
-        if (card) card.classList.add('approved');
+    if (contentViewPublished[chKey]) {
+        if (card) { card.classList.remove('approved'); card.classList.add('published'); }
+        if (statusEl) { statusEl.className = 'status-badge published-badge'; statusEl.textContent = 'Published \u2713'; }
+        if (actionsEl) {
+            var approveBtn = actionsEl.querySelector('.btn-approve');
+            if (approveBtn) approveBtn.style.display = 'none';
+            var publishBtn = actionsEl.querySelector('.btn-publish-channel');
+            if (publishBtn) publishBtn.style.display = 'none';
+            var existing = actionsEl.querySelector('.btn-undo-approve');
+            if (!existing) {
+                var undo = document.createElement('button');
+                undo.className = 'btn-undo-approve';
+                undo.textContent = 'Undo';
+                undo.onclick = function() { undoApproval(chKey); };
+                actionsEl.appendChild(undo);
+            }
+        }
+    } else if (contentViewApproved[chKey]) {
+        if (card) { card.classList.add('approved'); card.classList.remove('published'); }
         if (statusEl) { statusEl.className = 'status-badge approved-badge'; statusEl.textContent = 'Approved \u2713'; }
         if (actionsEl) {
             var approveBtn = actionsEl.querySelector('.btn-approve');
@@ -2890,16 +2920,85 @@ function updateChannelStatus(chKey) {
                 undo.onclick = function() { undoApproval(chKey); };
                 actionsEl.appendChild(undo);
             }
+            if (PUBLISHABLE_CHANNELS[chKey] && !actionsEl.querySelector('.btn-publish-channel')) {
+                var pubBtn = document.createElement('button');
+                pubBtn.className = 'btn-publish-channel';
+                pubBtn.id = 'publish-btn-' + chKey;
+                pubBtn.textContent = 'Publish to X \u2192';
+                pubBtn.onclick = function() { publishToChannel(chKey); };
+                actionsEl.insertBefore(pubBtn, actionsEl.querySelector('.btn-undo-approve'));
+            }
         }
     } else {
-        if (card) card.classList.remove('approved');
+        if (card) { card.classList.remove('approved'); card.classList.remove('published'); }
         if (statusEl) { statusEl.className = 'status-badge draft'; statusEl.textContent = 'Draft'; }
         if (actionsEl) {
             var approveBtn = actionsEl.querySelector('.btn-approve');
             if (approveBtn) { approveBtn.style.display = ''; approveBtn.textContent = 'Approve \u2713'; approveBtn.disabled = false; }
             var undo = actionsEl.querySelector('.btn-undo-approve');
             if (undo) undo.remove();
+            var publishBtn = actionsEl.querySelector('.btn-publish-channel');
+            if (publishBtn) publishBtn.remove();
         }
+    }
+}
+
+function publishToChannel(chKey) {
+    var endpoint = PUBLISHABLE_CHANNELS[chKey];
+    if (!endpoint) { showToast('Publishing not yet supported for ' + chKey, 'warning'); return; }
+
+    var ta = document.getElementById('ta-' + chKey);
+    var content = ta ? ta.value : '';
+    if (!content) { showToast('No content to publish', 'error'); return; }
+
+    var btn = document.getElementById('publish-btn-' + chKey);
+    if (btn) { btn.textContent = 'Publishing...'; btn.disabled = true; }
+
+    fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: content })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (!data.success) {
+            showToast('Publish failed: ' + (data.error || 'Unknown error'), 'error');
+            if (btn) { btn.textContent = 'Publish to X \u2192'; btn.disabled = false; }
+            return;
+        }
+        if (data.method === 'api') {
+            contentViewPublished[chKey] = true;
+            updateChannelStatus(chKey);
+            showToast('Published to X!');
+            if (data.tweet_url) window.open(data.tweet_url, '_blank');
+        } else if (data.method === 'fallback') {
+            window.open(data.tweet_url, '_blank');
+            contentViewPublished[chKey] = true;
+            updateChannelStatus(chKey);
+            showToast('Tweet pre-filled - click Post in the new tab');
+        }
+    })
+    .catch(function(err) {
+        showToast('Error: ' + err.message, 'error');
+        if (btn) { btn.textContent = 'Publish to X \u2192'; btn.disabled = false; }
+    });
+}
+
+function publishAllApproved() {
+    var keys = Object.keys(contentViewApproved);
+    for (var i = 0; i < keys.length; i++) {
+        if (contentViewApproved[keys[i]] && !contentViewPublished[keys[i]] && PUBLISHABLE_CHANNELS[keys[i]]) {
+            publishToChannel(keys[i]);
+        }
+    }
+    var nonPublishable = [];
+    for (var j = 0; j < keys.length; j++) {
+        if (contentViewApproved[keys[j]] && !contentViewPublished[keys[j]] && !PUBLISHABLE_CHANNELS[keys[j]]) {
+            nonPublishable.push(keys[j]);
+        }
+    }
+    if (nonPublishable.length > 0) {
+        showToast(nonPublishable.length + ' channel(s) approved but no publishing integration yet', 'warning');
     }
 }
 
@@ -2941,6 +3040,7 @@ function exitContentView() {
     contentViewOriginals = {};
     contentViewInitialDrafts = {};
     contentViewApproved = {};
+    contentViewPublished = {};
     contentViewRegenFeedback = {};
 }
 

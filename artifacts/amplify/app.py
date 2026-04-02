@@ -1392,6 +1392,31 @@ def approve_and_save():
     return jsonify({"success": True, "message": "Approved and feedback saved for future learning"})
 
 
+@app.route("/api/publish/twitter", methods=["POST"])
+def publish_twitter():
+    """Publish a tweet via Twitter API or fallback to intent URL.
+
+    Category: Publishing
+
+    Request Body:
+    {
+        "content": "the tweet text"
+    }
+
+    Response: {"success": true, "tweet_url": "...", "method": "api"|"fallback"}
+    """
+    from integrations.twitter_client import publish_tweet
+
+    data = request.get_json() or {}
+    content = data.get("content", "").strip()
+    if not content:
+        return jsonify({"success": False, "error": "content is required"}), 400
+
+    result = publish_tweet(content)
+    status_code = 200 if result.get("success") else 500
+    return jsonify(result), status_code
+
+
 @app.route("/api/generate", methods=["POST"])
 def generate_content_endpoint():
     """Generate content for one feature across multiple channels.

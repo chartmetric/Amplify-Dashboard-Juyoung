@@ -35,6 +35,9 @@ artifacts-monorepo/
 │       │   ├── asana_source.py  # Asana project task ingestion
 │       │   ├── slack_source.py  # Slack channel message ingestion
 │       │   └── manual_source.py # Manual feature entry
+│       ├── integrations/    # Publishing integrations
+│       │   ├── __init__.py
+│       │   └── twitter_client.py  # Twitter/X publishing (API + fallback intent URL)
 │       └── ai/             # AI integration module
 │           ├── __init__.py
 │           └── generator.py  # Empty placeholder for now

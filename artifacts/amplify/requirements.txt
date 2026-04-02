@@ -5,3 +5,4 @@ slack-sdk
 requests
 python-dotenv
 waitress
+tweepy
