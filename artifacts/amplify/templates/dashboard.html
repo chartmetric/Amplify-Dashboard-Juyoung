@@ -940,6 +940,7 @@
         <div class="channel-grid" id="channel-grid"></div>
         <div class="content-bottom-bar" id="content-bottom-bar" style="display:none;">
             <span class="approved-counter" id="approved-counter">Approved: 0/0 channels</span>
+            <button class="btn-approve" id="btn-approve-all" onclick="approveAllChannels()">Approve All</button>
             <button class="btn-publish" id="btn-publish" disabled>Publish All Approved &rarr;</button>
         </div>
     </div>
@@ -2802,6 +2803,15 @@ function approveChannel(chKey) {
     });
 }
 
+function approveAllChannels() {
+    var keys = Object.keys(contentViewChannels);
+    for (var i = 0; i < keys.length; i++) {
+        if (!contentViewApproved[keys[i]]) {
+            approveChannel(keys[i]);
+        }
+    }
+}
+
 function undoApproval(chKey) {
     contentViewApproved[chKey] = false;
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
@@ -2852,6 +2862,8 @@ function updateApprovalCounter() {
     if (counter) counter.textContent = 'Approved: ' + approved + '/' + total + ' channels';
     var btn = document.getElementById('btn-publish');
     if (btn) btn.disabled = approved === 0;
+    var approveAllBtn = document.getElementById('btn-approve-all');
+    if (approveAllBtn) approveAllBtn.style.display = (approved >= total) ? 'none' : '';
 }
 
 function exitContentView() {
