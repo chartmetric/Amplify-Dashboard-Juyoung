@@ -1416,6 +1416,15 @@ def publish_twitter():
     if not content:
         return jsonify({"success": False, "error": "content is required"}), 400
 
+    if len(content) > 280:
+        logger.warning(f"[publish/twitter] Tweet too long: {len(content)} chars (max 280)")
+        return jsonify({
+            "success": False,
+            "error": f"Tweet is {len(content)} characters but X allows max 280.",
+            "error_type": "too_long",
+            "hint": f"Your tweet is {len(content)} characters. Please shorten it to 280 or fewer before posting.",
+        }), 400
+
     image_base64 = data.get("image")
     result = publish_tweet(content, image_base64=image_base64)
     status_code = 200 if result.get("success") else 500
