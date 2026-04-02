@@ -4717,6 +4717,51 @@ var CLIPBOARD_TOASTS = {
     article_hmc: 'Article copied! Paste it into your CMS'
 };
 
+function buildRichClipboardData(content) {
+    var hasImage = /\[image: [^\]]+\]/.test(content);
+    var imgDataUrl = (contentViewFeatureImage && contentViewFeatureImage.dataUrl) ? contentViewFeatureImage.dataUrl : null;
+    var plainText = content.replace(/\n?\[image: [^\]]+\]\n?/g, '\n').replace(/^\n+|\n+$/g, '');
+    if (!hasImage || !imgDataUrl) return { plainText: plainText, htmlText: null, imageBlob: null };
+    var htmlContent = simpleMarkdown(content);
+    var htmlText = '<div>' + htmlContent + '</div>';
+    var imageBlob = null;
+    try {
+        var parts = imgDataUrl.split(',');
+        var mime = parts[0].match(/:(.*?);/)[1];
+        var b64 = atob(parts[1]);
+        var arr = new Uint8Array(b64.length);
+        for (var i = 0; i < b64.length; i++) arr[i] = b64.charCodeAt(i);
+        imageBlob = new Blob([arr], { type: mime });
+    } catch(e) {}
+    return { plainText: plainText, htmlText: htmlText, imageBlob: imageBlob };
+}
+
+function richClipboardCopy(content, onSuccess, onFail) {
+    var data = buildRichClipboardData(content);
+
+    function fallbackWriteText() {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(data.plainText).then(onSuccess).catch(onFail);
+        } else {
+            onFail();
+        }
+    }
+
+    if (data.htmlText && navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
+        try {
+            var items = {};
+            items['text/plain'] = new Blob([data.plainText], { type: 'text/plain' });
+            items['text/html'] = new Blob([data.htmlText], { type: 'text/html' });
+            var clipItem = new ClipboardItem(items);
+            navigator.clipboard.write([clipItem]).then(onSuccess).catch(fallbackWriteText);
+        } catch(e) {
+            fallbackWriteText();
+        }
+    } else {
+        fallbackWriteText();
+    }
+}
+
 function clipboardPublish(chKey) {
     var ta = document.getElementById('ta-' + chKey);
     var content = ta ? ta.value : '';
@@ -4732,8 +4777,9 @@ function clipboardPublish(chKey) {
 
     function fallbackCopy() {
         try {
+            var cleanText = content.replace(/\n?\[image: [^\]]+\]\n?/g, '\n').replace(/^\n+|\n+$/g, '');
             var textarea = document.createElement('textarea');
-            textarea.value = content;
+            textarea.value = cleanText;
             textarea.style.position = 'fixed';
             textarea.style.opacity = '0';
             document.body.appendChild(textarea);
@@ -4746,11 +4792,7 @@ function clipboardPublish(chKey) {
         }
     }
 
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(content).then(onCopySuccess).catch(fallbackCopy);
-    } else {
-        fallbackCopy();
-    }
+    richClipboardCopy(content, onCopySuccess, fallbackCopy);
 }
 
 function publishToChannel(chKey, skipConfirm) {
@@ -4834,12 +4876,11 @@ function publishAllApproved() {
             }
             if (allClipTexts.length > 0) {
                 var combined = allClipTexts.join('\n\n');
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(combined).catch(function(){});
-                } else {
+                richClipboardCopy(combined, function(){}, function() {
                     try {
+                        var cleanCombined = combined.replace(/\n?\[image: [^\]]+\]\n?/g, '\n').replace(/^\n+|\n+$/g, '');
                         var tmpTa = document.createElement('textarea');
-                        tmpTa.value = combined;
+                        tmpTa.value = cleanCombined;
                         tmpTa.style.position = 'fixed';
                         tmpTa.style.opacity = '0';
                         document.body.appendChild(tmpTa);
@@ -4847,7 +4888,7 @@ function publishAllApproved() {
                         document.execCommand('copy');
                         document.body.removeChild(tmpTa);
                     } catch(e) {}
-                }
+                });
             }
             if (pending <= 0) showPublishSummary(results);
         }
@@ -5623,15 +5664,18 @@ function renderCombinedPreview() {
 function copyAllCombined() {
     var preview = document.getElementById('combined-preview');
     var text = preview.innerText || preview.textContent || '';
-    navigator.clipboard.writeText(text).then(function() {
+    var cleanText = text.replace(/\n?\[image: [^\]]+\]\n?/g, '\n').replace(/^\n+|\n+$/g, '');
+    richClipboardCopy(text, function() {
         showToast('Copied to clipboard!');
-    }).catch(function() {
-        var ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
+    }, function() {
+        try {
+            var ta = document.createElement('textarea');
+            ta.value = cleanText;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        } catch(e) {}
         showToast('Copied to clipboard!');
     });
 }
