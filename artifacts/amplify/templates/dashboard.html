@@ -601,6 +601,29 @@
             font-size: 14px; color: var(--accent); font-weight: 600; pointer-events: none;
         }
         .img-drop-zone.active { display: flex; }
+        .link-edit-tooltip {
+            position: absolute; z-index: 1000;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 8px; padding: 10px 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+            display: flex; flex-direction: column; gap: 6px;
+            min-width: 300px; font-size: 13px;
+        }
+        .link-edit-tooltip label { color: var(--text-dim); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .link-edit-tooltip input {
+            background: var(--bg-input); color: var(--text); border: 1px solid var(--border);
+            border-radius: 4px; padding: 5px 8px; font-size: 13px; width: 100%;
+            outline: none; box-sizing: border-box;
+        }
+        .link-edit-tooltip input:focus { border-color: var(--accent); }
+        .link-edit-tooltip .link-edit-row { display: flex; flex-direction: column; gap: 2px; }
+        .link-edit-tooltip .link-edit-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
+        .link-edit-tooltip .link-edit-actions button {
+            padding: 4px 12px; border-radius: 4px; border: none; cursor: pointer; font-size: 12px; font-weight: 600;
+        }
+        .link-edit-tooltip .btn-link-save { background: var(--accent); color: #fff; }
+        .link-edit-tooltip .btn-link-remove { background: transparent; color: var(--text-dim); }
+        .link-edit-tooltip .btn-link-remove:hover { color: #ef4444; }
         .channel-card-body { position: relative; }
         .img-preview-wrap {
             padding: 8px 16px 0; display: flex; flex-direction: column; gap: 6px;
@@ -3016,8 +3039,13 @@ function buildChannelCard(chKey, ch) {
     var mdPreview = card.querySelector('.md-preview');
     if (mdPreview) {
         mdPreview.addEventListener('click', function(e) {
-            if (e.target.closest && e.target.closest('a')) return;
-            if (e.target.tagName === 'A') return;
+            var anchor = (e.target.closest && e.target.closest('a')) || (e.target.tagName === 'A' ? e.target : null);
+            if (anchor) {
+                e.preventDefault();
+                e.stopPropagation();
+                openLinkEditorForAnchor(chKey, anchor);
+                return;
+            }
             switchToEdit(chKey);
         });
     }
@@ -3502,8 +3530,175 @@ function setupCardDragDrop(cardEl, chKey, isBatch, batchIdx) {
                     return;
                 }
             }
+            var pasted = (e.clipboardData || window.clipboardData).getData('text');
+            if (pasted && /^https?:\/\/\S+$/i.test(pasted.trim())) {
+                var start = this.selectionStart;
+                var end = this.selectionEnd;
+                var selected = this.value.substring(start, end);
+                if (selected.length > 0) {
+                    e.preventDefault();
+                    var link = '[' + selected + '](' + pasted.trim() + ')';
+                    this.value = this.value.substring(0, start) + link + this.value.substring(end);
+                    this.selectionStart = start + 1;
+                    this.selectionEnd = start + 1 + selected.length;
+                    this.dispatchEvent(new Event('input'));
+                    showLinkEditTooltip(this, start, link, selected, pasted.trim());
+                }
+            }
         });
     }
+}
+
+function showLinkEditTooltip(ta, linkStart, fullLink, linkText, linkUrl) {
+    dismissLinkTooltip();
+    var tooltip = document.createElement('div');
+    tooltip.className = 'link-edit-tooltip';
+    tooltip.id = 'active-link-tooltip';
+
+    tooltip.innerHTML =
+        '<div class="link-edit-row"><label>Text</label><input type="text" id="link-edit-text" value="' + escHtml(linkText) + '"></div>' +
+        '<div class="link-edit-row"><label>URL</label><input type="text" id="link-edit-url" value="' + escHtml(linkUrl) + '"></div>' +
+        '<div class="link-edit-actions">' +
+            '<button class="btn-link-remove" onclick="removeLinkFromTooltip()">Remove link</button>' +
+            '<button class="btn-link-save" onclick="saveLinkFromTooltip()">Save</button>' +
+        '</div>';
+
+    tooltip.dataset.taId = ta.id;
+    tooltip.dataset.linkStart = linkStart;
+    tooltip.dataset.linkEnd = linkStart + fullLink.length;
+
+    var taRect = ta.getBoundingClientRect();
+    document.body.appendChild(tooltip);
+    tooltip.style.left = Math.min(taRect.left + 12, window.innerWidth - 340) + 'px';
+    tooltip.style.top = (taRect.top + window.scrollY - tooltip.offsetHeight - 6) + 'px';
+    if (parseInt(tooltip.style.top) < window.scrollY + 8) {
+        tooltip.style.top = (taRect.bottom + window.scrollY + 6) + 'px';
+    }
+
+    setTimeout(function() {
+        document.getElementById('link-edit-url').select();
+    }, 50);
+
+    setTimeout(function() {
+        document.addEventListener('mousedown', handleLinkTooltipOutsideClick);
+    }, 100);
+
+    var urlInput = document.getElementById('link-edit-url');
+    var textInput = document.getElementById('link-edit-text');
+    if (urlInput) urlInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); saveLinkFromTooltip(); } });
+    if (textInput) textInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); saveLinkFromTooltip(); } });
+}
+
+function handleLinkTooltipOutsideClick(e) {
+    var tooltip = document.getElementById('active-link-tooltip');
+    if (tooltip && !tooltip.contains(e.target)) {
+        saveLinkFromTooltip();
+    }
+}
+
+function saveLinkFromTooltip() {
+    var tooltip = document.getElementById('active-link-tooltip');
+    if (!tooltip) return;
+    var taId = tooltip.dataset.taId;
+    var start = parseInt(tooltip.dataset.linkStart);
+    var end = parseInt(tooltip.dataset.linkEnd);
+    var textInput = document.getElementById('link-edit-text');
+    var urlInput = document.getElementById('link-edit-url');
+    var ta = document.getElementById(taId);
+    if (!ta || !textInput || !urlInput) { dismissLinkTooltip(); return; }
+    var newText = textInput.value;
+    var newUrl = urlInput.value.trim();
+    var replacement;
+    if (newUrl && /^https?:\/\//i.test(newUrl)) {
+        replacement = '[' + newText + '](' + newUrl + ')';
+    } else {
+        replacement = newText;
+    }
+    ta.value = ta.value.substring(0, start) + replacement + ta.value.substring(end);
+    ta.dispatchEvent(new Event('input'));
+    var preview = document.getElementById('md-preview-' + ta.dataset.channel);
+    if (preview) preview.innerHTML = simpleMarkdown(ta.value);
+    dismissLinkTooltip();
+}
+
+function removeLinkFromTooltip() {
+    var tooltip = document.getElementById('active-link-tooltip');
+    if (!tooltip) return;
+    var taId = tooltip.dataset.taId;
+    var start = parseInt(tooltip.dataset.linkStart);
+    var end = parseInt(tooltip.dataset.linkEnd);
+    var textInput = document.getElementById('link-edit-text');
+    var ta = document.getElementById(taId);
+    if (!ta || !textInput) { dismissLinkTooltip(); return; }
+    ta.value = ta.value.substring(0, start) + textInput.value + ta.value.substring(end);
+    ta.dispatchEvent(new Event('input'));
+    var preview = document.getElementById('md-preview-' + ta.dataset.channel);
+    if (preview) preview.innerHTML = simpleMarkdown(ta.value);
+    dismissLinkTooltip();
+}
+
+function dismissLinkTooltip() {
+    document.removeEventListener('mousedown', handleLinkTooltipOutsideClick);
+    var existing = document.getElementById('active-link-tooltip');
+    if (existing) existing.remove();
+}
+
+function openLinkEditorForAnchor(chKey, anchor) {
+    var linkText = anchor.textContent;
+    var linkUrl = anchor.getAttribute('href') || '';
+    var ta = document.getElementById('ta-' + chKey);
+    if (!ta) return;
+    var text = ta.value;
+    var re = /\[([^\]]+)\]\(([^)]+)\)/g;
+    var match;
+    while ((match = re.exec(text)) !== null) {
+        if (match[1] === linkText || match[2] === linkUrl) {
+            var preview = document.getElementById('md-preview-' + chKey);
+            showLinkEditTooltipForPreview(preview || ta, match.index, match[0], match[1], match[2], ta);
+            return;
+        }
+    }
+    switchToEdit(chKey);
+}
+
+function showLinkEditTooltipForPreview(refEl, linkStart, fullLink, linkText, linkUrl, ta) {
+    dismissLinkTooltip();
+    var tooltip = document.createElement('div');
+    tooltip.className = 'link-edit-tooltip';
+    tooltip.id = 'active-link-tooltip';
+
+    tooltip.innerHTML =
+        '<div class="link-edit-row"><label>Text</label><input type="text" id="link-edit-text" value="' + escHtml(linkText) + '"></div>' +
+        '<div class="link-edit-row"><label>URL</label><input type="text" id="link-edit-url" value="' + escHtml(linkUrl) + '"></div>' +
+        '<div class="link-edit-actions">' +
+            '<button class="btn-link-remove" onclick="removeLinkFromTooltip()">Remove link</button>' +
+            '<button class="btn-link-save" onclick="saveLinkFromTooltip()">Save</button>' +
+        '</div>';
+
+    tooltip.dataset.taId = ta.id;
+    tooltip.dataset.linkStart = linkStart;
+    tooltip.dataset.linkEnd = linkStart + fullLink.length;
+
+    var rect = refEl.getBoundingClientRect();
+    document.body.appendChild(tooltip);
+    tooltip.style.left = Math.min(rect.left + 12, window.innerWidth - 340) + 'px';
+    tooltip.style.top = (rect.top + window.scrollY - tooltip.offsetHeight - 6) + 'px';
+    if (parseInt(tooltip.style.top) < window.scrollY + 8) {
+        tooltip.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+    }
+
+    setTimeout(function() {
+        document.getElementById('link-edit-url').select();
+    }, 50);
+
+    setTimeout(function() {
+        document.addEventListener('mousedown', handleLinkTooltipOutsideClick);
+    }, 100);
+
+    var urlInput = document.getElementById('link-edit-url');
+    var textInput = document.getElementById('link-edit-text');
+    if (urlInput) urlInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); saveLinkFromTooltip(); } });
+    if (textInput) textInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); saveLinkFromTooltip(); } });
 }
 
 function renderBatchImagePreview(idx) {
