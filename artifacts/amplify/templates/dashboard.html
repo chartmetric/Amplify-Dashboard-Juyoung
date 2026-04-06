@@ -995,6 +995,33 @@
         }
         .btn-generate-batch:hover { background: var(--accent-hover); }
         .btn-generate-batch:disabled { opacity: 0.4; cursor: not-allowed; }
+        .saved-sets-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .saved-sets-bar .btn-quick { position: relative; }
+        .saved-set-chip {
+            display: inline-flex; align-items: center; gap: 6px; background: var(--bg-card);
+            border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer;
+            font-size: 12px; color: var(--text-body); transition: border-color 0.15s, background-color 0.15s;
+        }
+        .saved-set-chip:hover { border-color: var(--accent); background: var(--accent-bg); }
+        .saved-set-chip .set-count { color: var(--text-dim); font-size: 11px; }
+        .saved-set-chip .set-delete {
+            color: var(--text-dim); font-size: 14px; line-height: 1; padding: 0 2px;
+            cursor: pointer; opacity: 0.5; transition: opacity 0.15s;
+        }
+        .saved-set-chip .set-delete:hover { opacity: 1; color: var(--light-red, #f87171); }
+        .save-set-input {
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .save-set-input input {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+            padding: 5px 8px; font-size: 12px; color: var(--text-body); font-family: inherit; outline: none; width: 140px;
+        }
+        .save-set-input input:focus { border-color: var(--accent); }
+        .save-set-input button {
+            background: var(--accent); color: var(--cta-text); border: none; border-radius: 6px;
+            padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+        }
+        .save-set-input button:hover { background: var(--accent-hover); }
         .batch-progress { margin-bottom: 16px; }
         .batch-progress-text { font-size: 13px; color: var(--text-muted); margin-top: 6px; display: inline-block; }
         .batch-actions-top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
@@ -1584,6 +1611,7 @@
                 <input type="text" class="picker-search" id="picker-search" placeholder="Search features..." oninput="renderFeaturePicker()">
                 <span class="picker-count" id="picker-count">0 features selected</span>
             </div>
+            <div class="saved-sets-bar" id="saved-sets-bar"></div>
             <div class="picker-filters">
                 <span class="filter-label">Min importance</span>
                 <select id="picker-importance" onchange="renderFeaturePicker()">
@@ -1597,6 +1625,7 @@
             <div class="picker-list" id="picker-list"></div>
             <div class="picker-bottom-bar">
                 <span class="picker-count" id="picker-count-bottom">0 features selected</span>
+                <button class="btn-quick" id="btn-save-set" onclick="showSaveSetInput()" style="font-size:12px;">Save Set</button>
                 <button class="btn-generate-batch" id="btn-generate-batch" disabled onclick="prepGoToStep(3)">Generate for 0 features &rarr;</button>
             </div>
         </div>
@@ -5387,6 +5416,7 @@ function selectUseCase(channelKey) {
     prepSelectedIds = {};
     var uc = USE_CASES.find(function(u) { return u.key === channelKey; });
     document.getElementById('step2-title').textContent = 'Prepping: ' + (uc ? uc.name : channelKey);
+    loadSavedSets();
     prepGoToStep(2);
 }
 
@@ -5477,6 +5507,106 @@ function pickerSelectByScore(minScore) {
         if ((f.classification || {}).importance_score >= minScore) prepSelectedIds[f.id] = true;
     });
     renderFeaturePicker();
+}
+
+var savedFeatureSets = [];
+
+function loadSavedSets() {
+    fetch('/api/feature-sets')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            savedFeatureSets = data.sets || [];
+            renderSavedSetsBar();
+        })
+        .catch(function() {});
+}
+
+function renderSavedSetsBar() {
+    var bar = document.getElementById('saved-sets-bar');
+    if (!bar) return;
+    var relevant = savedFeatureSets.filter(function(s) { return s.channel === prepChannel; });
+    if (relevant.length === 0) {
+        bar.innerHTML = '<span style="font-size:12px;color:var(--text-dim);">No saved sets for this channel</span>';
+        return;
+    }
+    bar.innerHTML = relevant.map(function(s) {
+        return '<div class="saved-set-chip" onclick="loadFeatureSet(\'' + escAttr(s.id) + '\')" title="Load this set">' +
+            '<span>' + escHtml(s.name) + '</span>' +
+            '<span class="set-count">(' + s.feature_ids.length + ')</span>' +
+            '<span class="set-delete" onclick="event.stopPropagation();deleteFeatureSet(\'' + escAttr(s.id) + '\')" title="Delete set">&times;</span>' +
+        '</div>';
+    }).join('');
+}
+
+function loadFeatureSet(setId) {
+    var set = savedFeatureSets.find(function(s) { return s.id === setId; });
+    if (!set) return;
+    prepSelectedIds = {};
+    set.feature_ids.forEach(function(fid) {
+        var exists = allFeatures.some(function(f) { return f.id === fid; });
+        if (exists) prepSelectedIds[fid] = true;
+    });
+    renderFeaturePicker();
+    var loaded = Object.keys(prepSelectedIds).length;
+    var total = set.feature_ids.length;
+    if (loaded < total) {
+        showToast('Loaded ' + loaded + ' of ' + total + ' features (some may no longer exist)', 'warning');
+    } else {
+        showToast('Loaded set "' + set.name + '" with ' + loaded + ' features');
+    }
+}
+
+function showSaveSetInput() {
+    var count = Object.keys(prepSelectedIds).length;
+    if (count === 0) { showToast('Select features first', 'warning'); return; }
+    var bar = document.getElementById('saved-sets-bar');
+    var existing = document.getElementById('save-set-inline');
+    if (existing) { existing.remove(); return; }
+    var div = document.createElement('div');
+    div.id = 'save-set-inline';
+    div.className = 'save-set-input';
+    div.innerHTML = '<input type="text" id="save-set-name" placeholder="Set name..." autofocus>' +
+        '<button onclick="doSaveSet()">Save</button>' +
+        '<span class="set-delete" onclick="document.getElementById(\'save-set-inline\').remove()" style="cursor:pointer;opacity:0.7;">&times;</span>';
+    bar.appendChild(div);
+    setTimeout(function() { document.getElementById('save-set-name').focus(); }, 50);
+    document.getElementById('save-set-name').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') doSaveSet();
+        if (e.key === 'Escape') div.remove();
+    });
+}
+
+function doSaveSet() {
+    var nameInput = document.getElementById('save-set-name');
+    var name = (nameInput ? nameInput.value : '').trim();
+    if (!name) { showToast('Enter a name for this set', 'warning'); return; }
+    var featureIds = Object.keys(prepSelectedIds);
+    if (featureIds.length === 0) { showToast('No features selected', 'warning'); return; }
+    fetch('/api/feature-sets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, channel: prepChannel, feature_ids: featureIds })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast('Set "' + name + '" saved!');
+        var inline = document.getElementById('save-set-inline');
+        if (inline) inline.remove();
+        loadSavedSets();
+    })
+    .catch(function(err) { showToast('Failed to save set', 'error'); });
+}
+
+function deleteFeatureSet(setId) {
+    fetch('/api/feature-sets/' + setId, { method: 'DELETE' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { showToast(data.error, 'error'); return; }
+            showToast('Set deleted');
+            loadSavedSets();
+        })
+        .catch(function() { showToast('Failed to delete set', 'error'); });
 }
 
 function startBatchGeneration() {

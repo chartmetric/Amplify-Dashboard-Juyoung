@@ -29,6 +29,7 @@ from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
 from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published
 from ai.classification_overrides import save_override as save_classification_override, get_overrides as get_classification_overrides
+from ai.feature_sets import save_set as save_feature_set, get_sets as get_feature_sets, delete_set as delete_feature_set
 from datetime import datetime, timezone
 
 _app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1227,6 +1228,36 @@ def list_classification_overrides():
     """
     overrides = get_classification_overrides()
     return jsonify({"overrides": overrides, "count": len(overrides)})
+
+
+@app.route("/api/feature-sets", methods=["GET"])
+def list_feature_sets():
+    sets = get_feature_sets()
+    return jsonify({"sets": sets, "count": len(sets)})
+
+
+@app.route("/api/feature-sets", methods=["POST"])
+def create_feature_set():
+    data = request.get_json(force=True)
+    name = (data.get("name") or "").strip()
+    channel = (data.get("channel") or "").strip()
+    feature_ids = data.get("feature_ids", [])
+    if not name:
+        return jsonify({"error": "Set name is required"}), 400
+    if not channel:
+        return jsonify({"error": "Channel is required"}), 400
+    if not feature_ids:
+        return jsonify({"error": "At least one feature must be selected"}), 400
+    entry = save_feature_set(name, channel, feature_ids)
+    return jsonify({"set": entry})
+
+
+@app.route("/api/feature-sets/<set_id>", methods=["DELETE"])
+def remove_feature_set(set_id):
+    removed = delete_feature_set(set_id)
+    if not removed:
+        return jsonify({"error": "Set not found"}), 404
+    return jsonify({"deleted": removed})
 
 
 @app.route("/api/classifier/keywords", methods=["GET"])
