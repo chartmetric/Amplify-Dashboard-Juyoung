@@ -4935,18 +4935,19 @@ function buildRichClipboardData(content) {
     var hasImage = /\[image: [^\]]+\]/.test(content);
     var imgDataUrl = (contentViewFeatureImage && contentViewFeatureImage.dataUrl) ? contentViewFeatureImage.dataUrl : null;
     var plainText = content.replace(/\n?\[image: [^\]]+\]\n?/g, '\n').replace(/^\n+|\n+$/g, '');
-    if (!hasImage || !imgDataUrl) return { plainText: plainText, htmlText: null, imageBlob: null };
     var htmlContent = simpleMarkdown(content);
     var htmlText = '<div>' + htmlContent + '</div>';
     var imageBlob = null;
-    try {
-        var parts = imgDataUrl.split(',');
-        var mime = parts[0].match(/:(.*?);/)[1];
-        var b64 = atob(parts[1]);
-        var arr = new Uint8Array(b64.length);
-        for (var i = 0; i < b64.length; i++) arr[i] = b64.charCodeAt(i);
-        imageBlob = new Blob([arr], { type: mime });
-    } catch(e) {}
+    if (hasImage && imgDataUrl) {
+        try {
+            var parts = imgDataUrl.split(',');
+            var mime = parts[0].match(/:(.*?);/)[1];
+            var b64 = atob(parts[1]);
+            var arr = new Uint8Array(b64.length);
+            for (var i = 0; i < b64.length; i++) arr[i] = b64.charCodeAt(i);
+            imageBlob = new Blob([arr], { type: mime });
+        } catch(e) {}
+    }
     return { plainText: plainText, htmlText: htmlText, imageBlob: imageBlob };
 }
 
