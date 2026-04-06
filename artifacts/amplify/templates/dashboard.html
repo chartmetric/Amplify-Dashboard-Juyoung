@@ -3841,26 +3841,55 @@ function togglePreview(chKey) {
 }
 
 function simpleMarkdown(text) {
-    var html = escHtml(text);
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(m, text, url) {
-        if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) {
-            return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+    var lines = text.split('\n');
+    var result = [];
+    var paraLines = [];
+
+    function flushPara() {
+        if (paraLines.length > 0) {
+            result.push('<p>' + paraLines.join('<br>') + '</p>');
+            paraLines = [];
         }
-        return text;
-    });
-    html = html.replace(/\[image: ([^\]]+)\]/g, function(m, name) {
-        if (contentViewFeatureImage && contentViewFeatureImage.dataUrl) {
-            return '<div style="margin:8px 0;"><img src="' + contentViewFeatureImage.dataUrl + '" alt="' + escHtml(name) + '" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;"></div>';
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+        var line = escHtml(lines[i]);
+        line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        line = line.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(m, text, url) {
+            if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) {
+                return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
+            }
+            return text;
+        });
+
+        var headingMatch;
+        if ((headingMatch = lines[i].match(/^(#{1,3}) (.+)$/))) {
+            flushPara();
+            var level = headingMatch[1].length;
+            var content = escHtml(headingMatch[2]);
+            content = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            content = content.replace(/\*(.+?)\*/g, '<em>$1</em>');
+            result.push('<h' + level + '>' + content + '</h' + level + '>');
+        } else if (/^\[image: [^\]]+\]$/.test(lines[i].trim())) {
+            flushPara();
+            var imgName = lines[i].trim().match(/\[image: ([^\]]+)\]/)[1];
+            if (contentViewFeatureImage && contentViewFeatureImage.dataUrl) {
+                result.push('<div style="margin:8px 0;"><img src="' + contentViewFeatureImage.dataUrl + '" alt="' + escHtml(imgName) + '" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;"></div>');
+            } else {
+                result.push('<p style="color:var(--text-dim);font-style:italic;">[image: ' + escHtml(imgName) + ']</p>');
+            }
+        } else if (lines[i].trim() === '---') {
+            flushPara();
+            result.push('<hr>');
+        } else if (lines[i].trim() === '') {
+            flushPara();
+        } else {
+            paraLines.push(line);
         }
-        return '<span style="color:var(--text-dim);font-style:italic;">[image: ' + escHtml(name) + ']</span>';
-    });
-    html = html.replace(/\n/g, '<br>');
-    return html;
+    }
+    flushPara();
+    return result.join('');
 }
 
 function regenerateChannel(chKey) {
@@ -5995,6 +6024,8 @@ function renderCombinedPreview() {
     .then(function(data) {
         if (data.error) { document.getElementById('combined-preview').textContent = 'Error: ' + data.error; return; }
         var content = data.combined_content || '';
+        window._combinedRawContent = content;
+        window._combinedFormat = data.format || '';
         if (data.format === 'markdown') {
             document.getElementById('combined-preview').innerHTML = simpleMarkdown(content);
         } else {
@@ -6007,10 +6038,13 @@ function renderCombinedPreview() {
 }
 
 function copyAllCombined() {
-    var preview = document.getElementById('combined-preview');
-    var text = preview.innerText || preview.textContent || '';
-    var cleanText = text.replace(/\n?\[image: [^\]]+\]\n?/g, '\n').replace(/^\n+|\n+$/g, '');
-    richClipboardCopy(text, function() {
+    var rawContent = window._combinedRawContent || '';
+    if (!rawContent) {
+        var preview = document.getElementById('combined-preview');
+        rawContent = preview.innerText || preview.textContent || '';
+    }
+    var cleanText = rawContent.replace(/\n?\[image: [^\]]+\]\n?/g, '\n').replace(/^\n+|\n+$/g, '');
+    richClipboardCopy(rawContent, function() {
         showToast('Copied to clipboard!');
     }, function() {
         try {
