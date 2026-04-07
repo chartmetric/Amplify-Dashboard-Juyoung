@@ -166,14 +166,26 @@ def _get_keyword_pattern(keyword: str) -> re.Pattern:
     return _keyword_pattern_cache[keyword]
 
 
+TITLE_ONLY_KEYWORDS = {"remove", "removal"}
+
+SKIP_IF_TITLE_CONTAINS = {"redesign", "revamp", "overhaul", "rework", "rebuild"}
+
+
 def quick_classify(feature: dict) -> dict | None:
     title = feature.get("title", "")
     description = feature.get("description", "")
     combined = f"{title} {description}"
+    title_lower = title.lower()
+
+    for skip_word in SKIP_IF_TITLE_CONTAINS:
+        if skip_word in title_lower:
+            logger.info(f"[quick_classify] Skipping auto-classify for '{title[:60]}' — title contains '{skip_word}'")
+            return None
 
     for keyword, category in QUICK_CLASSIFY_KEYWORDS.items():
         pattern = _get_keyword_pattern(keyword)
-        if not pattern.search(combined):
+        search_text = title if keyword in TITLE_ONLY_KEYWORDS else combined
+        if not pattern.search(search_text):
             continue
 
         stats = _get_keyword_stats(keyword)
