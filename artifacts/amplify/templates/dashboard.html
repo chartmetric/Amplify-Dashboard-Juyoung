@@ -2454,6 +2454,8 @@ function featureMatchesSearch(f, query) {
     if ((f.description || '').toLowerCase().indexOf(query) !== -1) return true;
     if (f.slack_url && f.slack_url.toLowerCase().indexOf(query) !== -1) return true;
     if (f.asana_url && f.asana_url.toLowerCase().indexOf(query) !== -1) return true;
+    if ((f.id || '').toLowerCase().indexOf(query) !== -1) return true;
+    if (f.github_url && f.github_url.toLowerCase().indexOf(query) !== -1) return true;
     var cl = f.classification || {};
     if ((cl.marketing_summary || '').toLowerCase().indexOf(query) !== -1) return true;
     return false;
@@ -2471,9 +2473,15 @@ function getFilteredFeatures() {
     var autoSkipped = [];
     var asanaOnly = [];
 
+    var isSearching = !!featureSearchQuery;
+
     for (var i = 0; i < allFeatures.length; i++) {
         var f = allFeatures[i];
-        if (featureSearchQuery && !featureMatchesSearch(f, featureSearchQuery)) continue;
+        if (isSearching) {
+            if (!featureMatchesSearch(f, featureSearchQuery)) continue;
+            classified.push(f);
+            continue;
+        }
         var cl = f.classification;
         var isAsanaOnly = f.source === 'asana_only';
         var isAutoSkipped = cl && cl.classification_method === 'quick_keyword';
