@@ -166,7 +166,10 @@ def _get_keyword_pattern(keyword: str) -> re.Pattern:
     return _keyword_pattern_cache[keyword]
 
 
-TITLE_ONLY_KEYWORDS = {"remove", "removal"}
+TITLE_ONLY_KEYWORDS = {
+    "fix", "test", "remove", "removal", "migration", "migrate",
+    "logging", "login", "deprecated", "refactor",
+}
 
 SKIP_IF_TITLE_CONTAINS = {"redesign", "revamp", "overhaul", "rework", "rebuild"}
 
