@@ -2918,8 +2918,8 @@ function attachShowMore() {
                 e.stopPropagation();
                 var fullText = link.getAttribute('data-full');
                 var descText = link.parentElement.querySelector('.desc-text');
-                if (link.textContent === 'Show more...') { descText.textContent = fullText; link.textContent = 'Show less'; }
-                else { descText.textContent = fullText.substring(0, 500) + '...'; link.textContent = 'Show more...'; }
+                if (link.textContent === 'Show more...') { descText.innerHTML = linkifyText(fullText); link.textContent = 'Show less'; }
+                else { descText.innerHTML = linkifyText(fullText.substring(0, 500) + '...'); link.textContent = 'Show more...'; }
             });
         })(links[i]);
     }
@@ -2960,12 +2960,19 @@ function classifySingle(fid, btn, card) {
         });
 }
 
+function linkifyText(text) {
+    var escaped = escHtml(text);
+    return escaped.replace(/(https?:\/\/[^\s<>&"]+)/gi, function(url) {
+        return '<a href="' + url + '" target="_blank" rel="noopener noreferrer" style="color:#58a6ff;text-decoration:none;" onclick="event.stopPropagation();">' + url + '</a>';
+    });
+}
+
 function buildDescBlock(f) {
     var desc = f.description || '';
     if (!desc) return '';
     var truncated = desc.length > 500;
     var displayDesc = truncated ? desc.substring(0, 500) + '...' : desc;
-    var html = '<div class="desc-block"><span class="desc-text">' + escHtml(displayDesc) + '</span>';
+    var html = '<div class="desc-block"><span class="desc-text">' + linkifyText(displayDesc) + '</span>';
     if (truncated) html += '<br><span class="show-more-link" data-full="' + escAttr(desc) + '">Show more...</span>';
     html += '</div>';
     return html;
