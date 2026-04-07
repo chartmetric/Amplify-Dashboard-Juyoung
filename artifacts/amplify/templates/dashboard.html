@@ -511,6 +511,23 @@
         .empty-state h3, .error-state h3 { color: var(--text-primary); font-size: 16px; margin-bottom: 8px; }
         .empty-state p { color: var(--text-muted); font-size: 13px; }
         .error-state p { color: #ff6b6b; font-size: 13px; }
+        .feature-search-bar {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+            background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px;
+            padding: 6px 14px; transition: border-color 0.2s, background-color 0.2s;
+        }
+        .feature-search-bar:focus-within { border-color: var(--accent); }
+        .feature-search-bar .search-icon { color: var(--text-faint); font-size: 14px; flex-shrink: 0; }
+        .feature-search-input {
+            flex: 1; background: transparent; color: var(--text-body); border: none;
+            font-size: 13px; font-family: inherit; outline: none; padding: 8px 0;
+        }
+        .feature-search-input::placeholder { color: var(--text-faint); }
+        .feature-search-clear {
+            background: none; border: none; color: var(--text-dim); font-size: 16px;
+            cursor: pointer; padding: 2px 4px; opacity: 0.5; transition: opacity 0.15s;
+        }
+        .feature-search-clear:hover { opacity: 1; }
         .paste-bar {
             display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
             background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px;
@@ -1459,6 +1476,12 @@
             </div>
         </div>
 
+        <div class="feature-search-bar" id="feature-search-bar">
+            <span class="search-icon">&#128269;</span>
+            <input type="text" id="feature-search-input" class="feature-search-input" placeholder="Search by name, Slack thread URL, or Asana task URL..." oninput="onFeatureSearch()">
+            <button class="feature-search-clear" id="feature-search-clear" onclick="clearFeatureSearch()" style="display:none;" title="Clear search">&times;</button>
+        </div>
+
         <div class="paste-bar" id="paste-bar">
             <input type="text" id="paste-input" class="paste-input" placeholder="Paste Slack thread, Asana task, or GitHub PR URL... (or type a feature title)">
         </div>
@@ -1695,6 +1718,7 @@ var categoryFilter = 'all';
 var activeCategoryFilters = ['all'];
 var activeSourceFilters = ['announced'];
 var activePublishFilter = null;
+var featureSearchQuery = '';
 var activePublishChannelFilters = [];
 var serverPublishedMap = {};
 var pollInterval = null;
@@ -2405,6 +2429,36 @@ function updateFunnelAfterFilter() {
 
 function applyFilters() { currentPage = 1; renderAll(); updateTierStats(); updateFunnelAfterFilter(); }
 
+var _searchDebounce = null;
+function onFeatureSearch() {
+    var input = document.getElementById('feature-search-input');
+    var clearBtn = document.getElementById('feature-search-clear');
+    featureSearchQuery = (input ? input.value : '').trim().toLowerCase();
+    if (clearBtn) clearBtn.style.display = featureSearchQuery ? 'block' : 'none';
+    clearTimeout(_searchDebounce);
+    _searchDebounce = setTimeout(function() { currentPage = 1; renderAll(); }, 150);
+}
+
+function clearFeatureSearch() {
+    var input = document.getElementById('feature-search-input');
+    if (input) input.value = '';
+    featureSearchQuery = '';
+    document.getElementById('feature-search-clear').style.display = 'none';
+    currentPage = 1;
+    renderAll();
+}
+
+function featureMatchesSearch(f, query) {
+    if (!query) return true;
+    if ((f.title || '').toLowerCase().indexOf(query) !== -1) return true;
+    if ((f.description || '').toLowerCase().indexOf(query) !== -1) return true;
+    if (f.slack_url && f.slack_url.toLowerCase().indexOf(query) !== -1) return true;
+    if (f.asana_url && f.asana_url.toLowerCase().indexOf(query) !== -1) return true;
+    var cl = f.classification || {};
+    if ((cl.marketing_summary || '').toLowerCase().indexOf(query) !== -1) return true;
+    return false;
+}
+
 function getFilteredFeatures() {
     var minImp = parseInt(document.getElementById('importance-filter').value);
     var catFilters = activeCategoryFilters;
@@ -2419,6 +2473,7 @@ function getFilteredFeatures() {
 
     for (var i = 0; i < allFeatures.length; i++) {
         var f = allFeatures[i];
+        if (featureSearchQuery && !featureMatchesSearch(f, featureSearchQuery)) continue;
         var cl = f.classification;
         var isAsanaOnly = f.source === 'asana_only';
         var isAutoSkipped = cl && cl.classification_method === 'quick_keyword';
