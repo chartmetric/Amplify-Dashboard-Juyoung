@@ -12,11 +12,11 @@ CHANNEL_CONFIGS = {
     "email_newsletter": {
         "display_name": "Email Newsletter Block",
         "description": "Product update block for the Chartmetric newsletter",
-        "max_chars": 600,
+        "max_chars": 350,
         "tone": "Benefit-first, empowering, direct. Lead with what the user can NOW do, not what was built. Second person ('you'). Warm but concise.",
-        "format_rules": "Structure: Bold feature name as header line, then 2-3 sentences leading with user benefit (start with a verb or 'you' \u2014 e.g., 'Stop doing X. Now you can Y.'). Describe value before mechanics. End with CTA phrase like 'Try it here' or 'Check it out'. No HTML tags. Assume a screenshot will follow the text block. Do NOT include subject lines \u2014 this is a section within a larger newsletter, not a standalone email.",
-        "audience": "Existing Chartmetric users \u2014 artists, managers, labels, publishers who use the platform daily and scan newsletters quickly",
-        "example_output_format": "**[Feature Name]**\n[2-3 benefit-led sentences]. [CTA phrase].",
+        "format_rules": "Structure: Bold feature name as header line, then MAXIMUM 3 SHORT sentences total (including the CTA sentence). Keep it scannable — most users won't read more than 3 sentences. First sentence: lead with user benefit (start with a verb or 'you'). Second sentence: one key detail. Third sentence: CTA like 'Check it out on any Artist Page.' No HTML tags. Assume a screenshot will follow the text block. Do NOT include subject lines — this is a section within a larger newsletter, not a standalone email. STRICT RULE: Never exceed 3 sentences after the header.",
+        "audience": "Existing Chartmetric users — artists, managers, labels, publishers who use the platform daily and scan newsletters quickly",
+        "example_output_format": "**[Feature Name]**\n[1 benefit sentence]. [1 detail sentence]. [CTA sentence].",
         "enabled": True,
     },
     "email_standalone": {
