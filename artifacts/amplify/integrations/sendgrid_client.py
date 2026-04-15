@@ -122,7 +122,6 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 <span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">Chartmetric</span>
 </td></tr>
 <tr><td style="background:#ffffff;padding:32px;border-radius:0 0 8px 8px;">
-<h2 style="margin:0 0 20px 0;color:#1a1d23;font-size:22px;font-weight:700;">{safe_subject}</h2>
 {body_html}
 <hr style="border:none;border-top:1px solid #e8e8eb;margin:28px 0 16px 0;">
 <p style="margin:0;color:#999999;font-size:12px;">Chartmetric &middot; Product Update</p>
