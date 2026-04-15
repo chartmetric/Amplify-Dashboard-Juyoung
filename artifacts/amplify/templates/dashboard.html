@@ -1509,7 +1509,8 @@
         <div class="content-feature-header" id="content-feature-header"></div>
         <div class="feature-image-section" id="feature-image-section" style="display:none;">
             <div class="feature-image-upload" id="feature-image-upload">
-                <button class="btn-feature-image" id="btn-feature-image" onclick="triggerFeatureImagePicker()">&#128247; Upload Image</button>
+                <button class="btn-feature-image" id="btn-feature-image" onclick="triggerFeatureImagePicker()">&#128247; Upload</button>
+                <button class="btn-feature-image btn-paste-image" id="btn-paste-image" onclick="pasteFeatureImageFromClipboard()">&#128203; Paste</button>
             </div>
             <div class="feature-image-preview" id="feature-image-preview" style="display:none;"></div>
         </div>
@@ -3656,6 +3657,8 @@ function enterContentView(feature) {
     document.getElementById('feature-image-preview').style.display = 'none';
     document.getElementById('feature-image-preview').innerHTML = '';
     document.getElementById('btn-feature-image').style.display = '';
+    var pasteBtnReset = document.getElementById('btn-paste-image');
+    if (pasteBtnReset) pasteBtnReset.style.display = '';
     var loadingChannelsEl = document.getElementById('content-loading-channels');
     loadingChannelsEl.textContent = '';
 
@@ -4301,16 +4304,60 @@ function triggerFeatureImagePicker() {
     input.click();
 }
 
+function pasteFeatureImageFromClipboard() {
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+        showToast('Clipboard access not available. Try Ctrl+V / Cmd+V instead.', 'warning');
+        return;
+    }
+    navigator.clipboard.read().then(function(items) {
+        for (var i = 0; i < items.length; i++) {
+            var types = items[i].types;
+            for (var t = 0; t < types.length; t++) {
+                if (types[t].indexOf('image') !== -1) {
+                    items[i].getType(types[t]).then(function(blob) {
+                        var file = new File([blob], 'pasted-image.png', { type: blob.type });
+                        handleImageFile(file, null, false, null);
+                        showToast('Image pasted!', 'success');
+                    });
+                    return;
+                }
+            }
+        }
+        showToast('No image found in clipboard', 'warning');
+    }).catch(function(err) {
+        showToast('Could not read clipboard. Try Ctrl+V / Cmd+V instead.', 'warning');
+    });
+}
+
+document.addEventListener('paste', function(e) {
+    var cv = document.getElementById('content-view');
+    if (!cv || cv.style.display === 'none') return;
+    var active = document.activeElement;
+    if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
+    var items = (e.clipboardData || {}).items || [];
+    for (var i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            e.preventDefault();
+            handleImageFile(items[i].getAsFile(), null, false, null);
+            showToast('Image pasted!', 'success');
+            return;
+        }
+    }
+});
+
 function renderFeatureImagePreview() {
     var preview = document.getElementById('feature-image-preview');
     var uploadBtn = document.getElementById('btn-feature-image');
+    var pasteBtn = document.getElementById('btn-paste-image');
     if (!contentViewFeatureImage) {
         preview.style.display = 'none';
         preview.innerHTML = '';
         uploadBtn.style.display = '';
+        if (pasteBtn) pasteBtn.style.display = '';
         return;
     }
     uploadBtn.style.display = 'none';
+    if (pasteBtn) pasteBtn.style.display = 'none';
     preview.style.display = 'flex';
     preview.innerHTML =
         '<img src="' + contentViewFeatureImage.dataUrl + '" alt="Feature image">' +
