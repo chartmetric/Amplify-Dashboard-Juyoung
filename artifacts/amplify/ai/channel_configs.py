@@ -19,6 +19,16 @@ CHANNEL_CONFIGS = {
         "example_output_format": "**[Feature Name]**\n[1 benefit sentence]. [1 detail sentence]. [CTA sentence].",
         "enabled": True,
     },
+    "email_standalone": {
+        "display_name": "Email Standalone",
+        "description": "Standalone product update email",
+        "max_chars": 1500,
+        "tone": "Professional but warm. Benefit-led, second person. Room to paint the picture of the problem solved and highlight key use cases.",
+        "format_rules": "Structure: 'Subject: [compelling subject line]' on first line, blank line, then a SHORT intro header line (a catchy one-liner — must be DIFFERENT from the subject line), blank line, then 2-4 paragraphs with optional bullet points. First paragraph: hook with the user's pain point or aspiration. Remaining paragraphs: feature highlights, use cases, and CTA. No HTML. IMPORTANT: The subject line and the intro header must convey different angles.",
+        "audience": "Chartmetric users, trial users, and prospects",
+        "example_output_format": "Subject: [subject line]\n\n[Short intro header — different from subject]\n\n[Pain point hook paragraph]\n\n[Feature highlights]\n\n[CTA paragraph]",
+        "enabled": True,
+    },
     "email_short": {
         "display_name": "Email Short",
         "description": "Quick, concise product update email — to the point",

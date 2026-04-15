@@ -72,7 +72,7 @@ def _get_video_thumbnail(url: str) -> str:
     return 'https://via.placeholder.com/480x270/e0e0e0/999999?text=Video'
 
 
-def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None) -> str:
+def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None, from_name: str = None) -> str:
     import re
     safe_subject = _esc(subject)
     image_map = images or {}
@@ -145,6 +145,8 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
             else:
                 body_html += f'<p style="margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(stripped)}</p>'
 
+    display_name = _esc(from_name or "Chartmetric")
+
     return f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -153,12 +155,12 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 <tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 <tr><td style="background:#1a1d23;padding:20px 32px;border-radius:8px 8px 0 0;">
-<span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">Chartmetric</span>
+<span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">{display_name}</span>
 </td></tr>
 <tr><td style="background:#ffffff;padding:32px;border-radius:0 0 8px 8px;">
 {body_html}
 <hr style="border:none;border-top:1px solid #e8e8eb;margin:28px 0 16px 0;">
-<p style="margin:0;color:#999999;font-size:12px;">Chartmetric &middot; Product Update</p>
+<p style="margin:0;color:#999999;font-size:12px;">{display_name} &middot; Product Update</p>
 </td></tr>
 </table>
 </td></tr>
@@ -167,7 +169,7 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 </html>"""
 
 
-def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: bool, attachments: list = None) -> dict | None:
+def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: bool, attachments: list = None, from_name: str = None, template_id: str = None) -> dict | None:
     import time as _time
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
@@ -177,15 +179,19 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
     import resend
     resend.api_key = resend_api_key
 
-    sender = f"Chartmetric <{from_email}>"
+    display_name = from_name or "Chartmetric"
+    sender = f"{display_name} <{from_email}>"
     email_list = []
     for addr in to_emails:
         params = {
             "from": sender,
             "to": [addr],
             "subject": subject,
-            "html": html_content,
         }
+        if template_id:
+            params["template"] = {"id": template_id}
+        else:
+            params["html"] = html_content
         if attachments:
             params["attachments"] = attachments
         email_list.append(params)
@@ -226,7 +232,7 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
     return None
 
 
-def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None) -> dict:
+def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None, from_name: str = None, template_id: str = None) -> dict:
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     # sg_api_key = os.environ.get("SENDGRID_API_KEY", "")  # SendGrid disabled — using Resend only
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
@@ -237,7 +243,7 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
 
     if not has_resend:
         logger.warning("[email] No email provider configured (need RESEND_API_KEY+RESEND_FROM_EMAIL)")
-        preview_html = render_email_html(subject, body, images=images)
+        preview_html = render_email_html(subject, body, images=images, from_name=from_name)
         return {
             "success": True,
             "method": "fallback",
@@ -259,8 +265,8 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     cid_map, cid_attachments = _build_cid_attachments(images)
     recipients_str = ", ".join(recipients)
 
-    html_cid = render_email_html(final_subject, body, images=images, cid_map=cid_map if cid_attachments else None)
-    result = _send_via_resend(final_subject, html_cid, recipients, is_test, attachments=cid_attachments or None)
+    html_cid = render_email_html(final_subject, body, images=images, cid_map=cid_map if cid_attachments else None, from_name=from_name)
+    result = _send_via_resend(final_subject, html_cid, recipients, is_test, attachments=cid_attachments or None, from_name=from_name, template_id=template_id)
     if result:
         return result
 
@@ -333,4 +339,22 @@ def list_resend_contacts(audience_id: str) -> list:
         return [resp] if resp else []
     except Exception as e:
         logger.error(f"[resend] Failed to list contacts for audience {audience_id}: {e}")
+        return []
+
+
+def list_resend_templates() -> list:
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    if not resend_api_key:
+        return []
+    import resend
+    resend.api_key = resend_api_key
+    try:
+        resp = resend.Templates.list()
+        if isinstance(resp, dict):
+            return resp.get("data", [])
+        elif isinstance(resp, list):
+            return resp
+        return [resp] if resp else []
+    except Exception as e:
+        logger.error(f"[resend] Failed to list templates: {e}")
         return []

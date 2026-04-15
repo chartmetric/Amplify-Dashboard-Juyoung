@@ -3863,6 +3863,7 @@ function enterContentView(feature) {
                 card.style.animationDelay = (idx * 100) + 'ms';
                 grid.appendChild(card);
                 if (chKey === 'email_standalone') loadResendAudiences(chKey);
+                if (isEmail) loadResendTemplates(chKey);
                 if (contentViewApproved[chKey]) updateChannelStatus(chKey);
                 if (contentViewPublished[chKey]) updateChannelStatus(chKey);
                 idx++;
@@ -3933,6 +3934,8 @@ function buildChannelCard(chKey, ch) {
             '</label>' +
         '</div>' +
         (isStandaloneEmail ? '<div class="email-subject-row" style="padding:8px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Subject</label><input type="text" id="subject-' + chKey + '" class="email-subject-input" value="' + escHtml(emailSubject) + '" placeholder="Email subject line" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
+        (isEmail ? '<div class="email-fromname-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">From Name</label><input type="text" id="fromname-' + chKey + '" value="Chartmetric" placeholder="Sender display name" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
+        (isEmail ? '<div class="email-template-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Template</label><select id="template-' + chKey + '" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;"><option value="">Built-in (Chartmetric)</option></select></div>' : '') +
         (isStandaloneEmail ? '<div class="email-audience-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Send To</label><div style="display:flex;gap:6px;align-items:center;"><select id="audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onAudienceChange(\'' + chKey + '\')"><option value="">Test recipients only</option></select><span id="audience-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div></div>' : '') +
         '<div class="channel-card-body">' +
             '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(bodyContent) + '</textarea>' +
@@ -4670,6 +4673,37 @@ var imageUndoStack = [];
 var resendAudiences = null;
 var selectedAudience = {};
 var audienceContacts = {};
+var resendTemplates = null;
+
+function loadResendTemplates(chKey) {
+    var sel = document.getElementById('template-' + chKey);
+    if (!sel) return;
+    if (resendTemplates !== null) {
+        populateTemplateDropdown(chKey, resendTemplates);
+        return;
+    }
+    fetch('/api/resend/templates')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        resendTemplates = data.templates || [];
+        populateTemplateDropdown(chKey, resendTemplates);
+    })
+    .catch(function() {
+        resendTemplates = [];
+    });
+}
+
+function populateTemplateDropdown(chKey, templates) {
+    var sel = document.getElementById('template-' + chKey);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Built-in (Chartmetric)</option>';
+    for (var i = 0; i < templates.length; i++) {
+        var t = templates[i];
+        var id = t.id || '';
+        var name = t.name || id;
+        sel.innerHTML += '<option value="' + escHtml(id) + '">' + escHtml(name) + '</option>';
+    }
+}
 
 function loadResendAudiences(chKey) {
     var sel = document.getElementById('audience-' + chKey);
@@ -5261,6 +5295,14 @@ function previewEmailHtml(chKey) {
     var subjectInput = document.getElementById('subject-' + chKey);
     var subject = (subjectInput ? subjectInput.value.trim() : '') || 'Chartmetric Product Update';
     var payload = { content: content, subject: subject };
+    var fromNameInput = document.getElementById('fromname-' + chKey);
+    if (fromNameInput && fromNameInput.value.trim()) {
+        payload.from_name = fromNameInput.value.trim();
+    }
+    var templateSel = document.getElementById('template-' + chKey);
+    if (templateSel && templateSel.value) {
+        payload.template_id = templateSel.value;
+    }
     var imgMap = contentViewImageMap[chKey];
     if (imgMap && Object.keys(imgMap).length > 0) {
         payload.images = imgMap;
@@ -5303,6 +5345,12 @@ function doPublishToChannel(chKey) {
         var subjectInput = document.getElementById('subject-' + chKey);
         var subjectVal = subjectInput ? subjectInput.value.trim() : '';
         if (subjectVal) payload.subject = subjectVal;
+        var fromNameInput = document.getElementById('fromname-' + chKey);
+        var fromNameVal = fromNameInput ? fromNameInput.value.trim() : '';
+        if (fromNameVal) payload.from_name = fromNameVal;
+        var templateSel = document.getElementById('template-' + chKey);
+        var templateVal = templateSel ? templateSel.value : '';
+        if (templateVal) payload.template_id = templateVal;
         var imgMap = contentViewImageMap[chKey];
         if (imgMap && Object.keys(imgMap).length > 0) {
             payload.images = imgMap;

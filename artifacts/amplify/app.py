@@ -1594,7 +1594,10 @@ def publish_email():
         if recipient_count > 5 and is_test:
             return jsonify({"success": False, "error": "Cannot send to more than 5 recipients in test mode. Select an audience to send to a larger group."}), 400
 
-    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images)
+    from_name = data.get("from_name", "").strip() or None
+    template_id = data.get("template_id", "").strip() or None
+
+    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id)
     if result.get("success") and result.get("method") in ("sendgrid", "resend") and feature_id:
         mark_published(feature_id, channel)
     status_code = 200 if result.get("success") else 500
@@ -1610,13 +1613,60 @@ def preview_email():
         content = data.get("content", "")
         subject = data.get("subject", "Chartmetric Product Update")
         images = data.get("images", None)
+        from_name = data.get("from_name", "").strip() or "Chartmetric"
+        template_id = data.get("template_id", "").strip() or ""
     else:
         content = request.args.get("content", "")
         subject = request.args.get("subject", "Chartmetric Product Update")
         images = None
+        from_name = request.args.get("from_name", "Chartmetric")
+        template_id = ""
 
-    html = render_email_html(subject, content, images=images)
+    if template_id:
+        from markupsafe import escape
+        safe_subject = escape(subject)
+        safe_from = escape(from_name)
+        safe_tid = escape(template_id)
+        html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:24px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+<tr><td style="background:#1a1d23;padding:20px 32px;border-radius:8px 8px 0 0;">
+<span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">{safe_from}</span>
+</td></tr>
+<tr><td style="background:#ffffff;padding:32px;border-radius:0 0 8px 8px;">
+<div style="background:#fffbe6;border:1px solid #ffe58f;border-radius:6px;padding:16px;margin-bottom:20px;">
+<p style="margin:0 0 8px 0;font-weight:700;color:#8b6914;">Resend Template Selected</p>
+<p style="margin:0;color:#666;font-size:14px;">This email will be sent using the Resend template <strong>(ID: {safe_tid})</strong>. The template layout is managed in the Resend dashboard and cannot be previewed locally.</p>
+</div>
+<p style="margin:0 0 8px 0;color:#333;font-size:14px;"><strong>Subject:</strong> {safe_subject}</p>
+<p style="margin:0;color:#333;font-size:14px;"><strong>From:</strong> {safe_from}</p>
+<hr style="border:none;border-top:1px solid #e8e8eb;margin:28px 0 16px 0;">
+<p style="margin:0;color:#999999;font-size:12px;">{safe_from} &middot; Product Update</p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>"""
+        return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+    html = render_email_html(subject, content, images=images, from_name=from_name)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/api/resend/templates", methods=["GET"])
+def get_resend_templates():
+    from integrations.sendgrid_client import list_resend_templates
+    templates = list_resend_templates()
+    result = []
+    for t in templates:
+        if isinstance(t, dict):
+            result.append({"id": t.get("id", ""), "name": t.get("name", "")})
+        else:
+            result.append({"id": getattr(t, "id", ""), "name": getattr(t, "name", "")})
+    return jsonify({"success": True, "templates": result}), 200
 
 
 @app.route("/api/resend/audiences", methods=["GET"])
