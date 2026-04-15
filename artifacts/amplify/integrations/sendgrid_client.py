@@ -138,7 +138,7 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 </html>"""
 
 
-def _send_via_resend(subject: str, html_content: str, to_email: str, is_test: bool, attachments: list = None) -> dict | None:
+def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: bool, attachments: list = None) -> dict | None:
     import time as _time
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
@@ -150,7 +150,7 @@ def _send_via_resend(subject: str, html_content: str, to_email: str, is_test: bo
 
     params = {
         "from": f"Chartmetric <{from_email}>",
-        "to": [to_email],
+        "to": to_emails,
         "subject": subject,
         "html": html_content,
     }
@@ -162,12 +162,13 @@ def _send_via_resend(subject: str, html_content: str, to_email: str, is_test: bo
         try:
             email_resp = resend.Emails.send(params)
             email_id = email_resp.get("id", "") if isinstance(email_resp, dict) else getattr(email_resp, "id", "")
-            logger.info(f"[resend] Email sent to {to_email}, id={email_id}")
+            to_str = ", ".join(to_emails)
+            logger.info(f"[resend] Email sent to {to_str}, id={email_id}")
             return {
                 "success": True,
                 "method": "resend",
                 "message_id": email_id,
-                "to": to_email,
+                "to": to_str,
                 "is_test": is_test,
             }
         except Exception as e:
@@ -203,10 +204,9 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
             "preview_html": preview_html,
         }
 
-    recipient = to_email
-    if not recipient:
-        recipient = test_email if is_test else None
-    if not recipient:
+    recipients_raw = to_email or (test_email if is_test else "")
+    recipients = [e.strip() for e in recipients_raw.split(",") if e.strip()] if recipients_raw else []
+    if not recipients:
         return {
             "success": False,
             "error": "No recipient email provided. Set SENDGRID_TEST_EMAIL or provide to_email.",
@@ -214,10 +214,11 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
 
     final_subject = f"[TEST] {subject}" if is_test else subject
     cid_map, cid_attachments = _build_cid_attachments(images)
+    recipients_str = ", ".join(recipients)
 
     if has_resend:
         html_cid = render_email_html(final_subject, body, images=images, cid_map=cid_map if cid_attachments else None)
-        result = _send_via_resend(final_subject, html_cid, recipient, is_test, attachments=cid_attachments or None)
+        result = _send_via_resend(final_subject, html_cid, recipients, is_test, attachments=cid_attachments or None)
         if result:
             return result
         logger.warning("[email] Resend failed, falling back to SendGrid")
@@ -231,19 +232,19 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
 
             message = Mail(
                 from_email=from_email,
-                to_emails=recipient,
+                to_emails=recipients,
                 subject=final_subject,
                 html_content=html_content,
             )
             sg = SendGridAPIClient(sg_api_key)
             response = sg.send(message)
             message_id = response.headers.get("X-Message-Id", "")
-            logger.info(f"[sendgrid] Email sent to {recipient}, status={response.status_code}, id={message_id}")
+            logger.info(f"[sendgrid] Email sent to {recipients_str}, status={response.status_code}, id={message_id}")
             return {
                 "success": True,
                 "method": "sendgrid",
                 "message_id": message_id,
-                "to": recipient,
+                "to": recipients_str,
                 "is_test": is_test,
                 "status_code": response.status_code,
             }
