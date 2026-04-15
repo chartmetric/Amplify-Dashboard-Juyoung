@@ -31,6 +31,48 @@ def _inline_markdown(text: str) -> str:
     return safe
 
 
+def _get_base_url() -> str:
+    deploy_url = os.environ.get("REPLIT_DEPLOYMENT_URL", "")
+    if deploy_url:
+        return deploy_url.rstrip("/")
+    dev_domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
+    if dev_domain:
+        return f"https://{dev_domain}"
+    return "http://localhost:5000"
+
+
+def _build_hosted_image_map(images: dict) -> dict:
+    if not images:
+        return {}
+    import re as _re
+    base_url = _get_base_url()
+
+    hosted = {}
+    for img_name, data_url in images.items():
+        if not data_url:
+            continue
+        if data_url.startswith("http"):
+            hosted[img_name] = data_url
+        elif data_url.startswith("data:image/"):
+            from ai.publish_store import save_image as _save_img, IMAGES_DIR
+            import uuid as _uuid, base64 as _b64, json as _json
+            m = _re.match(r"data:image/(\w+);base64,(.+)", data_url)
+            if not m:
+                continue
+            ext = m.group(1)
+            img_id = _uuid.uuid4().hex[:12]
+            img_dir = os.path.join(IMAGES_DIR, f"_hosted_{img_id}")
+            os.makedirs(img_dir, exist_ok=True)
+            with open(os.path.join(img_dir, "image.dat"), "w") as f:
+                f.write(data_url)
+            with open(os.path.join(img_dir, "meta.json"), "w") as f:
+                _json.dump({"name": str(img_name)[:200], "ext": ext, "id": img_id}, f)
+            hosted[img_name] = f"{base_url}/api/publish/image/hosted/{img_id}"
+        else:
+            hosted[img_name] = data_url
+    return hosted
+
+
 def _build_cid_attachments(images: dict) -> tuple:
     import re as _re, base64 as _b64
     cid_map = {}
@@ -272,11 +314,11 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
         }
 
     final_subject = f"[TEST] {subject}" if is_test else subject
-    cid_map, cid_attachments = _build_cid_attachments(images)
     recipients_str = ", ".join(recipients)
 
-    html_cid = render_email_html(final_subject, body, images=images, cid_map=cid_map if cid_attachments else None, from_name=from_name, videos=videos)
-    result = _send_via_resend(final_subject, html_cid, recipients, is_test, attachments=cid_attachments or None, from_name=from_name, template_id=template_id)
+    hosted_images = _build_hosted_image_map(images)
+    html_content = render_email_html(final_subject, body, images=hosted_images, from_name=from_name, videos=videos)
+    result = _send_via_resend(final_subject, html_content, recipients, is_test, from_name=from_name, template_id=template_id)
     if result:
         return result
 

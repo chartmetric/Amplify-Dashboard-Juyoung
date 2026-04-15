@@ -1853,6 +1853,52 @@ def save_image_endpoint():
     return jsonify({"success": True}), 200
 
 
+@app.route("/api/publish/image/hosted/<img_id>")
+def serve_hosted_image(img_id):
+    import base64 as _b64
+    import re as _re
+    from flask import send_file
+    from io import BytesIO
+    from ai.publish_store import IMAGES_DIR
+    safe_id = _re.sub(r'[^a-f0-9]', '', img_id)
+    img_dir = os.path.join(IMAGES_DIR, f"_hosted_{safe_id}")
+    img_dir = os.path.realpath(img_dir)
+    if not img_dir.startswith(IMAGES_DIR):
+        return "Not found", 404
+    dat_path = os.path.join(img_dir, "image.dat")
+    meta_path = os.path.join(img_dir, "meta.json")
+    if not os.path.exists(dat_path) or not os.path.exists(meta_path):
+        return "Not found", 404
+    with open(dat_path, "r") as f:
+        data_url = f.read()
+    m = _re.match(r"data:image/(\w+);base64,(.+)", data_url)
+    if not m:
+        return "Invalid image", 500
+    ext = m.group(1)
+    raw = _b64.b64decode(m.group(2))
+    mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
+    return send_file(BytesIO(raw), mimetype=mime_map.get(ext, f"image/{ext}"))
+
+
+@app.route("/api/publish/image/serve/<feature_id>")
+def serve_feature_image(feature_id):
+    import base64 as _b64
+    import re as _re
+    from flask import send_file
+    from io import BytesIO
+    img_data = get_publish_image(feature_id)
+    if not img_data or not img_data.get("dataUrl"):
+        return "Not found", 404
+    data_url = img_data["dataUrl"]
+    m = _re.match(r"data:image/(\w+);base64,(.+)", data_url)
+    if not m:
+        return "Invalid image data", 500
+    ext = m.group(1)
+    raw = _b64.b64decode(m.group(2))
+    mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp", "svg": "image/svg+xml"}
+    return send_file(BytesIO(raw), mimetype=mime_map.get(ext, f"image/{ext}"), download_name=img_data.get("name", f"image.{ext}"))
+
+
 @app.route("/api/publish/image", methods=["DELETE"])
 def delete_image_endpoint():
     data = request.get_json() or {}
