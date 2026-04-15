@@ -101,18 +101,50 @@ def render_email_html(subject: str, body: str, images: dict = None) -> str:
 </html>"""
 
 
-def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None) -> dict:
-    api_key = os.environ.get("SENDGRID_API_KEY")
-    from_email = os.environ.get("SENDGRID_FROM_EMAIL")
-    test_email = os.environ.get("SENDGRID_TEST_EMAIL")
+def _send_via_resend(subject: str, html_content: str, to_email: str, is_test: bool) -> dict | None:
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
+    if not resend_api_key or not from_email:
+        return None
 
-    if not api_key or not from_email:
-        logger.warning("[sendgrid] Missing SENDGRID_API_KEY or SENDGRID_FROM_EMAIL")
+    try:
+        import resend
+        resend.api_key = resend_api_key
+
+        params = {
+            "from": f"Chartmetric <{from_email}>",
+            "to": [to_email],
+            "subject": subject,
+            "html": html_content,
+        }
+        email_resp = resend.Emails.send(params)
+        email_id = email_resp.get("id", "") if isinstance(email_resp, dict) else getattr(email_resp, "id", "")
+        logger.info(f"[resend] Email sent to {to_email}, id={email_id}")
+        return {
+            "success": True,
+            "method": "resend",
+            "message_id": email_id,
+            "to": to_email,
+            "is_test": is_test,
+        }
+    except Exception as e:
+        logger.error(f"[resend] Send failed: {e}")
+        return None
+
+
+def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None) -> dict:
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    sg_api_key = os.environ.get("SENDGRID_API_KEY", "")
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
+    test_email = os.environ.get("SENDGRID_TEST_EMAIL", "") or os.environ.get("RESEND_FROM_EMAIL", "")
+
+    if not resend_api_key and (not sg_api_key or not from_email):
+        logger.warning("[email] No email provider configured (RESEND_API_KEY or SENDGRID_API_KEY)")
         preview_html = render_email_html(subject, body, images=images)
         return {
             "success": True,
             "method": "fallback",
-            "message": "Email draft ready. SendGrid not configured.",
+            "message": "Email draft ready. No email provider configured.",
             "subject": subject,
             "body": body,
             "preview_html": preview_html,
@@ -130,31 +162,43 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     final_subject = f"[TEST] {subject}" if is_test else subject
     html_content = render_email_html(final_subject, body, images=images)
 
-    try:
-        from sendgrid import SendGridAPIClient
-        from sendgrid.helpers.mail import Mail
+    if resend_api_key:
+        result = _send_via_resend(final_subject, html_content, recipient, is_test)
+        if result:
+            return result
+        logger.warning("[email] Resend failed, falling back to SendGrid")
 
-        message = Mail(
-            from_email=from_email,
-            to_emails=recipient,
-            subject=final_subject,
-            html_content=html_content,
-        )
-        sg = SendGridAPIClient(api_key)
-        response = sg.send(message)
-        message_id = response.headers.get("X-Message-Id", "")
-        logger.info(f"[sendgrid] Email sent to {recipient}, status={response.status_code}, id={message_id}")
-        return {
-            "success": True,
-            "method": "sendgrid",
-            "message_id": message_id,
-            "to": recipient,
-            "is_test": is_test,
-            "status_code": response.status_code,
-        }
-    except Exception as e:
-        logger.error(f"[sendgrid] Send failed: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-        }
+    if sg_api_key and from_email:
+        try:
+            from sendgrid import SendGridAPIClient
+            from sendgrid.helpers.mail import Mail
+
+            message = Mail(
+                from_email=from_email,
+                to_emails=recipient,
+                subject=final_subject,
+                html_content=html_content,
+            )
+            sg = SendGridAPIClient(sg_api_key)
+            response = sg.send(message)
+            message_id = response.headers.get("X-Message-Id", "")
+            logger.info(f"[sendgrid] Email sent to {recipient}, status={response.status_code}, id={message_id}")
+            return {
+                "success": True,
+                "method": "sendgrid",
+                "message_id": message_id,
+                "to": recipient,
+                "is_test": is_test,
+                "status_code": response.status_code,
+            }
+        except Exception as e:
+            logger.error(f"[sendgrid] Send failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+            }
+
+    return {
+        "success": False,
+        "error": "All email providers failed.",
+    }

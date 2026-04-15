@@ -117,6 +117,7 @@ def health():
             "anthropic": bool(config.ANTHROPIC_API_KEY),
             "asana": bool(config.ASANA_ACCESS_TOKEN),
             "slack": bool(config.SLACK_BOT_TOKEN),
+            "resend": bool(config.RESEND_API_KEY),
         },
     })
 
@@ -1584,7 +1585,7 @@ def publish_email():
 
     images = data.get("images", None)
     result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images)
-    if result.get("success") and result.get("method") == "sendgrid" and feature_id:
+    if result.get("success") and result.get("method") in ("sendgrid", "resend") and feature_id:
         mark_published(feature_id, channel)
     status_code = 200 if result.get("success") else 500
     return jsonify(result), status_code
