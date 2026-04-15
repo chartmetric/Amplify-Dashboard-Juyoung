@@ -1457,8 +1457,14 @@
                 <button class="cat-filter-pill pub-ch-filter" data-pub-ch="email_newsletter" onclick="togglePublishChannelFilter('email_newsletter', this)">
                     <span class="cat-pill-dot" style="background:#f97316;"></span>Newsletter
                 </button>
-                <button class="cat-filter-pill pub-ch-filter" data-pub-ch="email_standalone" onclick="togglePublishChannelFilter('email_standalone', this)">
-                    <span class="cat-pill-dot" style="background:#ef4444;"></span>Email
+                <button class="cat-filter-pill pub-ch-filter" data-pub-ch="email_short" onclick="togglePublishChannelFilter('email_short', this)">
+                    <span class="cat-pill-dot" style="background:#ef4444;"></span>Email Short
+                </button>
+                <button class="cat-filter-pill pub-ch-filter" data-pub-ch="email_medium" onclick="togglePublishChannelFilter('email_medium', this)">
+                    <span class="cat-pill-dot" style="background:#ef4444;"></span>Email Medium
+                </button>
+                <button class="cat-filter-pill pub-ch-filter" data-pub-ch="email_long" onclick="togglePublishChannelFilter('email_long', this)">
+                    <span class="cat-pill-dot" style="background:#ef4444;"></span>Email Long
                 </button>
                 <button class="cat-filter-pill pub-ch-filter" data-pub-ch="inapp" onclick="togglePublishChannelFilter('inapp', this)">
                     <span class="cat-pill-dot" style="background:#a855f7;"></span>In-App
@@ -2713,7 +2719,7 @@ function buildCard(f, isAutoSkippedCard) {
     var c = f.classification || {};
     var score = c.importance_score || 0;
     var summary = c.marketing_summary || '';
-    var channels = c.recommended_channels || [];
+    var channels = (c.recommended_channels || []).map(migrateChannelKey);
     var preFiltered = c.pre_filtered || false;
     var isOverridden = c.manual_override || false;
     var isAutoClassified = c.classification_method === 'quick_keyword';
@@ -3283,7 +3289,7 @@ function commitOverride(f, c, reason, onDone) {
 }
 
 var CHANNEL_ICONS = {
-    twitter: '\uD83D\uDC26', email_newsletter: '\uD83D\uDCE7', email_standalone: '\uD83D\uDCE8',
+    twitter: '\uD83D\uDC26', email_newsletter: '\uD83D\uDCE7', email_short: '\uD83D\uDCE8', email_medium: '\uD83D\uDCE8', email_long: '\uD83D\uDCE8',
     inapp: '\uD83D\uDCF1', linkedin: '\uD83D\uDCBC', notion_monthly: '\uD83D\uDCCB', article_hmc: '\uD83D\uDCDD',
     did_you_know: '\uD83D\uDCA1'
 };
@@ -3299,10 +3305,14 @@ var contentViewRegenFeedback = {};
 var publishedFeatureState = {};
 
 var CHANNEL_DISPLAY_SHORT = {
-    twitter: 'Twitter', email_newsletter: 'Newsletter', email_standalone: 'Email',
+    twitter: 'Twitter', email_newsletter: 'Newsletter', email_short: 'Email Short', email_medium: 'Email Medium', email_long: 'Email Long',
     inapp: 'In-App', linkedin: 'LinkedIn', notion_monthly: 'Notion', article_hmc: 'HMC',
     did_you_know: 'Did You Know?'
 };
+
+function migrateChannelKey(ch) {
+    return ch === 'email_standalone' ? 'email_medium' : ch;
+}
 
 var dykEnabled = false;
 var dykTips = {};
@@ -3645,7 +3655,7 @@ function enterContentView(feature) {
         '<div class="content-feature-meta">' + scoreBadge + catBadges + '</div>' +
         (cl.marketing_summary ? '<div class="content-feature-summary">' + escHtml(cl.marketing_summary) + '</div>' : '');
 
-    var channels = (cl.recommended_channels || []).slice();
+    var channels = (cl.recommended_channels || []).map(migrateChannelKey);
     if (channels.length === 0) channels = ['twitter', 'linkedin', 'inapp'];
     if (channels.indexOf('did_you_know') === -1) channels.push('did_you_know');
 
@@ -3782,7 +3792,7 @@ function enterContentView(feature) {
                 card.classList.add('fade-in-up');
                 card.style.animationDelay = (idx * 100) + 'ms';
                 grid.appendChild(card);
-                if (chKey === 'email_standalone') loadResendAudiences(chKey);
+                if (chKey === 'email_short' || chKey === 'email_medium' || chKey === 'email_long') loadResendAudiences(chKey);
                 if (contentViewApproved[chKey]) updateChannelStatus(chKey);
                 if (contentViewPublished[chKey]) updateChannelStatus(chKey);
                 idx++;
@@ -3810,7 +3820,8 @@ function buildChannelCard(chKey, ch) {
     var maxChars = ch.max_chars || 9999;
     var charClass = content.length <= maxChars ? 'ok' : 'over';
     var isArticle = chKey === 'article_hmc';
-    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_short' || chKey === 'email_medium' || chKey === 'email_long');
+    var isStandaloneEmail = (chKey === 'email_short' || chKey === 'email_medium' || chKey === 'email_long');
 
     var emailSubject = '';
     var bodyContent = content;
@@ -3841,7 +3852,7 @@ function buildChannelCard(chKey, ch) {
             '</label>' +
         '</div>' +
         (isEmail ? '<div class="email-subject-row" style="padding:8px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Subject</label><input type="text" id="subject-' + chKey + '" class="email-subject-input" value="' + escHtml(emailSubject) + '" placeholder="Email subject line" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
-        (isEmail && chKey === 'email_standalone' ? '<div class="email-audience-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Send To</label><div style="display:flex;gap:6px;align-items:center;"><select id="audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onAudienceChange(\'' + chKey + '\')"><option value="">Test recipients only</option></select><span id="audience-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div></div>' : '') +
+        (isStandaloneEmail ? '<div class="email-audience-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Send To</label><div style="display:flex;gap:6px;align-items:center;"><select id="audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onAudienceChange(\'' + chKey + '\')"><option value="">Test recipients only</option></select><span id="audience-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div></div>' : '') +
         '<div class="channel-card-body">' +
             '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(bodyContent) + '</textarea>' +
             '<div class="md-preview" id="md-preview-' + chKey + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(bodyContent, {isEmail: isEmail}) + '</div>' +
@@ -3929,7 +3940,7 @@ function switchToPreview(chKey) {
     var ta = document.getElementById('ta-' + chKey);
     var preview = document.getElementById('md-preview-' + chKey);
     if (!ta || !preview) return;
-    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_short' || chKey === 'email_medium' || chKey === 'email_long');
     preview.innerHTML = simpleMarkdown(ta.value, {isEmail: isEmail});
     preview.style.display = 'block';
     ta.style.display = 'none';
@@ -4021,7 +4032,7 @@ function regenerateChannel(chKey) {
 
     var currentTa = document.getElementById('ta-' + chKey);
     var currentContent = currentTa ? currentTa.value : '';
-    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_short' || chKey === 'email_medium' || chKey === 'email_long');
     if (isEmail) {
         var subjectInput = document.getElementById('subject-' + chKey);
         var subjectVal = subjectInput ? subjectInput.value.trim() : '';
@@ -4198,7 +4209,7 @@ function undoApproval(chKey) {
 
 var CHANNEL_IMAGE_LAYOUT = {
     twitter: 'twitter', linkedin: 'linkedin',
-    email_newsletter: 'email', email_standalone: 'email',
+    email_newsletter: 'email', email_short: 'email', email_medium: 'email', email_long: 'email',
     inapp: 'inapp', notion_monthly: 'hero', article_hmc: 'hero'
 };
 
@@ -4864,7 +4875,9 @@ function removeBatchImage(idx) {
 var PUBLISHABLE_CHANNELS = {
     twitter: '/api/publish/twitter',
     email_newsletter: '/api/publish/email',
-    email_standalone: '/api/publish/email',
+    email_short: '/api/publish/email',
+    email_medium: '/api/publish/email',
+    email_long: '/api/publish/email',
     inapp: '/api/publish/inapp'
 };
 var publishingInFlight = {};
@@ -4887,7 +4900,7 @@ function updateChannelStatus(chKey) {
             var approveBtn = actionsEl.querySelector('.btn-approve');
             if (approveBtn) approveBtn.style.display = 'none';
             var publishDdEl = actionsEl.querySelector('.publish-post-preview-dd');
-            var isEmailCh = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+            var isEmailCh = (chKey === 'email_newsletter' || chKey === 'email_short' || chKey === 'email_medium' || chKey === 'email_long');
             if (publishDdEl) {
                 var ddToggle = publishDdEl.querySelector('.dd-label');
                 var ddItems = publishDdEl.querySelectorAll('.custom-dropdown-item');
@@ -4983,7 +4996,7 @@ function updateChannelStatus(chKey) {
                 var ddWrapper = document.createElement('div');
                 ddWrapper.className = 'custom-dropdown publish-dropdown publish-post-preview-dd';
                 ddWrapper.id = ddId;
-                var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+                var isEmail = (chKey === 'email_newsletter' || chKey === 'email_short' || chKey === 'email_medium' || chKey === 'email_long');
                 if (isEmail) {
                     var prevPubbed = contentViewPublished[chKey];
                     var toggleLabel = prevPubbed ? 'Resend or Preview' : 'Send or Preview';
@@ -5150,7 +5163,7 @@ function doPublishToChannel(chKey) {
     }
 
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
-    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_short' || chKey === 'email_medium' || chKey === 'email_long');
     var isInapp = (chKey === 'inapp');
     var payload = { content: content, feature_id: fid };
 
@@ -5355,7 +5368,7 @@ function publishToChannel(chKey, skipConfirm) {
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to publish', 'error'); return; }
 
-    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_short' || chKey === 'email_medium' || chKey === 'email_long');
 
     if (skipConfirm) {
         doPublishToChannel(chKey);
@@ -5403,7 +5416,7 @@ function publishAllApproved() {
     if (allKeys.length === 0) { showToast('No unpublished approved channels', 'warning'); return; }
 
     var twitterKeys = publishableKeys.filter(function(k) { return k === 'twitter'; });
-    var emailKeys = publishableKeys.filter(function(k) { return k === 'email_newsletter' || k === 'email_standalone'; });
+    var emailKeys = publishableKeys.filter(function(k) { return k === 'email_newsletter' || k === 'email_short' || k === 'email_medium' || k === 'email_long'; });
     var inappKeys = publishableKeys.filter(function(k) { return k === 'inapp'; });
     var parts = [];
     if (twitterKeys.length > 0) parts.push('post ' + twitterKeys.length + ' to X');
@@ -5458,7 +5471,7 @@ function publishAllApproved() {
                 var content = ta ? ta.value : '';
                 if (!content) { results[chKey] = { status: 'failed', error: 'No content' }; pending--; if (pending <= 0) showPublishSummary(results); return; }
 
-                var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+                var isEmail = (chKey === 'email_newsletter' || chKey === 'email_short' || chKey === 'email_medium' || chKey === 'email_long');
                 var isInapp = (chKey === 'inapp');
                 var payload = { content: content, feature_id: fid };
                 if (isEmail) { payload.channel = chKey; payload.is_test = true; var si = document.getElementById('subject-' + chKey); var sv = si ? si.value.trim() : ''; if (sv) payload.subject = sv; var imgMap = contentViewImageMap[chKey]; if (imgMap && Object.keys(imgMap).length > 0) payload.images = imgMap; }
@@ -5566,7 +5579,9 @@ function exitContentView() {
 var USE_CASES = [
     { key: 'notion_monthly', icon: '\uD83D\uDCCB', name: 'All Hands / Monthly Meeting', desc: 'Feature summaries for your monthly product meeting notes' },
     { key: 'email_newsletter', icon: '\uD83D\uDCE7', name: 'Newsletter', desc: 'Product update blocks for the Chartmetric newsletter' },
-    { key: 'email_standalone', icon: '\uD83D\uDCE8', name: 'Standalone Email Blast', desc: 'Dedicated feature launch or update emails' },
+    { key: 'email_short', icon: '\uD83D\uDCE8', name: 'Email Short', desc: 'Quick, concise product update emails' },
+    { key: 'email_medium', icon: '\uD83D\uDCE8', name: 'Email Medium', desc: 'Feature update emails with key use cases' },
+    { key: 'email_long', icon: '\uD83D\uDCE8', name: 'Email Long', desc: 'Comprehensive feature breakdown emails' },
     { key: 'twitter', icon: '\uD83D\uDC26', name: 'Twitter / X Thread', desc: 'Short-form social posts for X' },
     { key: 'linkedin', icon: '\uD83D\uDCBC', name: 'LinkedIn Post', desc: 'Professional thought-leadership posts for LinkedIn' },
     { key: 'inapp', icon: '\uD83D\uDCF1', name: 'In-App Announcements', desc: 'Product announcements inside Chartmetric' },
@@ -6486,8 +6501,8 @@ var genallPublishedState = {};
 var genallInitialDrafts = {};
 var genallRegenFeedback = {};
 var genallCollapsed = {};
-var GENALL_CHANNELS = ['twitter', 'email_standalone', 'inapp'];
-var GENALL_CHANNEL_NAMES = { twitter: 'Twitter / X', email_standalone: 'Email', inapp: 'In-App' };
+var GENALL_CHANNELS = ['twitter', 'email_medium', 'inapp'];
+var GENALL_CHANNEL_NAMES = { twitter: 'Twitter / X', email_medium: 'Email Medium', inapp: 'In-App' };
 
 function generateAllTopFeatures() {
     var result = getFilteredFeatures();
@@ -6942,7 +6957,7 @@ function genallPublishAllApproved() {
 
     var parts = [];
     var twitterCount = approvedKeys.filter(function(k) { return k.split('-').slice(1).join('-') === 'twitter'; }).length;
-    var emailCount = approvedKeys.filter(function(k) { var ch = k.split('-').slice(1).join('-'); return ch === 'email_standalone' || ch === 'email_newsletter'; }).length;
+    var emailCount = approvedKeys.filter(function(k) { var ch = k.split('-').slice(1).join('-'); return ch === 'email_short' || ch === 'email_medium' || ch === 'email_long' || ch === 'email_newsletter'; }).length;
     var inappCount = approvedKeys.filter(function(k) { return k.split('-').slice(1).join('-') === 'inapp'; }).length;
     if (twitterCount > 0) parts.push('post ' + twitterCount + ' to X');
     if (emailCount > 0) parts.push('send ' + emailCount + ' email(s)');
@@ -6984,7 +6999,7 @@ function genallPublishAllApproved() {
                 return;
             }
 
-            var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+            var isEmail = (chKey === 'email_newsletter' || chKey === 'email_short' || chKey === 'email_medium' || chKey === 'email_long');
             var isInapp = (chKey === 'inapp');
             var payload = { content: content, feature_id: fid };
             if (isEmail) { payload.channel = chKey; payload.is_test = true; }

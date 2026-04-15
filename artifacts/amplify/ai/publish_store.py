@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 PUBLISH_FILE = os.path.join(os.path.dirname(__file__), "..", ".publish_state.json")
 IMAGES_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", ".publish_images"))
 
-VALID_CHANNELS = {"twitter", "email_newsletter", "email_standalone", "inapp", "linkedin", "notion_monthly", "article_hmc"}
+VALID_CHANNELS = {"twitter", "email_newsletter", "email_short", "email_medium", "email_long", "email_standalone", "inapp", "linkedin", "notion_monthly", "article_hmc"}
 _SAFE_RE = re.compile(r"[^a-zA-Z0-9_\-.]")
 
 
@@ -104,12 +104,18 @@ def mark_published(feature_id, channel, tweet_url=None):
 def is_published(feature_id, channel):
     data = _load()
     entry = data.get(_key(feature_id, channel), {})
+    if not entry.get("published") and channel in ("email_short", "email_medium", "email_long"):
+        entry = data.get(_key(feature_id, "email_standalone"), {})
     return entry.get("published", False)
 
 
 def get_publish_info(feature_id, channel):
     data = _load()
     return data.get(_key(feature_id, channel), {})
+
+
+def _migrate_channel_key(ch):
+    return "email_medium" if ch == "email_standalone" else ch
 
 
 def get_all_published():
@@ -122,6 +128,7 @@ def get_all_published():
         if len(parts) != 2:
             continue
         fid, ch = parts
+        ch = _migrate_channel_key(ch)
         if fid not in result:
             result[fid] = []
         result[fid].append(ch)

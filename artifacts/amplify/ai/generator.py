@@ -46,7 +46,11 @@ def _cache_key(feature_id, channel):
 def get_cached_content(feature_id, channel):
     key = _cache_key(feature_id, channel)
     with _content_cache_lock:
-        return _content_cache.get(key)
+        result = _content_cache.get(key)
+        if result is None and channel == "email_medium":
+            legacy_key = _cache_key(feature_id, "email_standalone")
+            result = _content_cache.get(legacy_key)
+        return result
 
 
 def set_cached_content(feature_id, channel, result):

@@ -19,10 +19,22 @@ FEW_SHOT_EXAMPLES = {
             "content": "**New Insights, powered by Chartmetric Intelligence, Available on Artist Pages**\nStop piecing together your own story from raw numbers. New insights powered by Chartmetric intelligence on artist performance and audience now appear inline across Artist Page tabs, giving you instant context on what\u2019s happening with an artist and why it matters, without leaving the page.\nTry it here"
         }
     ],
-    "email_standalone": [
+    "email_short": [
         {
             "feature_context": "New AI-powered insights feature showing contextual analysis on Artist Pages",
-            "content": "Subject: Your Artist Pages just got smarter\n\nYou know the drill \u2014 flip between tabs, compare numbers, try to piece together what\u2019s actually happening with an artist. It takes time, and the story isn\u2019t always obvious.\n\nNow, Chartmetric Intelligence surfaces contextual insights directly on Artist Page tabs. You\u2019ll see plain-language analysis on performance trends, audience shifts, and what\u2019s driving changes \u2014 right where you\u2019re already working.\n\nHead to any Artist Page to see your first insight."
+            "content": "Subject: Your Artist Pages just got smarter\n\nSee What\u2019s Really Happening \u2014 At a Glance\n\nChartmetric Intelligence now surfaces plain-language insights directly on Artist Page tabs \u2014 performance trends, audience shifts, and what\u2019s driving changes, right where you\u2019re already working. Head to any Artist Page to try it."
+        }
+    ],
+    "email_medium": [
+        {
+            "feature_context": "New AI-powered insights feature showing contextual analysis on Artist Pages",
+            "content": "Subject: Your Artist Pages just got smarter\n\nStop Guessing, Start Understanding\n\nYou know the drill \u2014 flip between tabs, compare numbers, try to piece together what\u2019s actually happening with an artist. It takes time, and the story isn\u2019t always obvious.\n\nNow, Chartmetric Intelligence surfaces contextual insights directly on Artist Page tabs. You\u2019ll see plain-language analysis on performance trends, audience shifts, and what\u2019s driving changes \u2014 right where you\u2019re already working.\n\nHead to any Artist Page to see your first insight."
+        }
+    ],
+    "email_long": [
+        {
+            "feature_context": "New AI-powered insights feature showing contextual analysis on Artist Pages",
+            "content": "Subject: Your Artist Pages just got smarter\n\nThe Data Story You\u2019ve Been Piecing Together Manually? It\u2019s Now Automatic.\n\nEvery day, thousands of music professionals open Chartmetric to answer one question: what\u2019s actually happening with this artist? Until now, answering that meant toggling between tabs, comparing time ranges, and connecting dots across metrics.\n\nWe built Chartmetric Intelligence to do that work for you. Starting today, contextual insights appear directly on Artist Page tabs \u2014 plain-language analysis of what\u2019s changing and why it matters.\n\nHere\u2019s what you\u2019ll see:\n\n\u2022 Performance trend summaries that explain spikes, dips, and sustained growth\n\u2022 Audience shift analysis showing where and how an artist\u2019s listener base is evolving\n\u2022 Cross-platform correlation insights connecting streaming, social, and playlist activity\n\u2022 Anomaly detection highlighting unusual patterns worth investigating\n\nImagine you\u2019re preparing a pitch for a label meeting. Instead of screenshotting charts and writing your own narrative, you open the Artist Page and the story is already there \u2014 backed by data, ready to share.\n\nHead to any Artist Page to see your first insight. We\u2019d love to hear what you think."
         }
     ],
     "inapp": [

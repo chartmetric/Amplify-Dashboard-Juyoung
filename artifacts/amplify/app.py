@@ -1567,7 +1567,7 @@ def publish_email():
         return jsonify({"success": False, "error": "content is required"}), 400
 
     subject = data.get("subject", "").strip()
-    channel = data.get("channel", "email_standalone")
+    channel = data.get("channel", "email_medium")
     to_email = data.get("to_email", "").strip() or None
     is_test = data.get("is_test", True)
     feature_id = data.get("feature_id", "")
@@ -2183,7 +2183,7 @@ def combine_content_endpoint():
             if i > 0:
                 combined_parts.append("\n---\n")
             combined_parts.append(item.get("content", ""))
-    elif channel == "email_standalone":
+    elif channel in ("email_short", "email_medium", "email_long", "email_standalone"):
         for item in items:
             combined_parts.append(item.get("content", ""))
             combined_parts.append("\n\n")

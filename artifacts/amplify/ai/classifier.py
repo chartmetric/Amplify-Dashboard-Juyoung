@@ -250,16 +250,18 @@ RULES FOR is_user_facing:
 CHANNEL USE CASES (understand these before recommending):
 - "twitter": High frequency. Any time an important user-facing feature releases. Good for quick announcements with data hooks. Use for score >= 3 if user-facing.
 - "email_newsletter": Low frequency (monthly). Holistic product update with 3-4 key features. Only the most important features make the cut. Use for score >= 4 only.
-- "email_standalone": Weekly/biweekly/monthly opt-in "what's new" digest. More inclusive than newsletter. Use for score >= 3 if user-facing.
+- "email_short": Quick product update email (≤500 chars). Concise and scannable. Use for score >= 3 if user-facing.
+- "email_medium": Feature update email with key use cases (≤1000 chars). More inclusive than newsletter. Use for score >= 3 if user-facing.
+- "email_long": Comprehensive feature breakdown email (≤1500 chars). Full detail with scenarios. Use for score >= 4.
 - "inapp": High frequency. Any time an important user-facing feature releases. Users see this inside the product. Use for score >= 3 if user-facing.
 - "linkedin": Thought-leadership posts connecting features to industry trends. Use for score >= 4 when there's a compelling industry narrative.
 - "notion_monthly": Low frequency (monthly). Internal doc listing 10-12 key features of the month. Use for score >= 3.
 - "article_hmc": Low frequency. Long-form blog articles combining multiple features around a theme (marketing, content, playlist, influencer). Rarely for a single feature unless score = 5. Use for score >= 5, or flag with note "combine with related features" for score 4.
 
 RULES FOR recommended_channels:
-- importance_score 5: twitter, email_newsletter, email_standalone, inapp, linkedin, notion_monthly, article_hmc (all channels)
-- importance_score 4: twitter, email_newsletter, email_standalone, inapp, notion_monthly (+ linkedin if industry-relevant, + article_hmc only if thematic)
-- importance_score 3 (user-facing): twitter, email_standalone, inapp, notion_monthly
+- importance_score 5: twitter, email_newsletter, email_short, email_medium, email_long, inapp, linkedin, notion_monthly, article_hmc (all channels)
+- importance_score 4: twitter, email_newsletter, email_short, email_medium, email_long, inapp, notion_monthly (+ linkedin if industry-relevant, + article_hmc only if thematic)
+- importance_score 3 (user-facing): twitter, email_short, email_medium, inapp, notion_monthly
 - importance_score 3 (not user-facing): notion_monthly only
 - importance_score 2: notion_monthly only
 - importance_score 1: (none -- skip marketing entirely)
@@ -325,12 +327,29 @@ def _enforce_classification_rules(classification: dict):
         classification["recommended_channels"] = []
 
 
+def _migrate_channels(classification: dict) -> dict:
+    channels = classification.get("recommended_channels", [])
+    if "email_standalone" in channels:
+        idx = channels.index("email_standalone")
+        channels[idx] = "email_medium"
+        if "email_short" not in channels:
+            channels.insert(idx, "email_short")
+        classification["recommended_channels"] = channels
+    return classification
+
+
 def get_cached_classification(feature_id: str) -> dict | None:
-    return CLASSIFICATION_CACHE.get(feature_id)
+    result = CLASSIFICATION_CACHE.get(feature_id)
+    if result:
+        return _migrate_channels(result)
+    return result
 
 
 def get_all_cached_classifications() -> dict:
-    return dict(CLASSIFICATION_CACHE)
+    result = {}
+    for k, v in CLASSIFICATION_CACHE.items():
+        result[k] = _migrate_channels(v)
+    return result
 
 
 def clear_cache():
@@ -505,6 +524,7 @@ def apply_manual_overrides(classified_features: list[dict]) -> list[dict]:
                 feature["classification"] = {}
             feature["classification"].update(override)
             feature["classification"]["manual_override"] = True
+            _migrate_channels(feature["classification"])
     classified_features.sort(
         key=lambda f: f.get("classification", {}).get("importance_score", 0),
         reverse=True,

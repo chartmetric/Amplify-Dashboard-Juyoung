@@ -38,7 +38,7 @@ artifacts-monorepo/
 │       ├── integrations/    # Publishing integrations
 │       │   ├── __init__.py
 │       │   ├── twitter_client.py  # Twitter/X publishing (API + fallback intent URL)
-│       │   ├── sendgrid_client.py # SendGrid email sending
+│       │   ├── sendgrid_client.py # Resend email sending (Resend-only, individual sends via Batch API)
 │       │   └── inapp_client.py    # In-app announcements (in-memory store)
 │       └── ai/             # AI integration module
 │           ├── __init__.py
@@ -66,8 +66,9 @@ Product marketing autopilot that ingests feature data from multiple sources and 
 - **Paths**: `/` and `/api` (owns both route prefixes)
 - **Python packages**: flask, anthropic, asana, slack-sdk, requests, python-dotenv, waitress
 - **Publishing channels**:
-  - **API-backed**: twitter (X API + intent URL fallback), email_newsletter/email_standalone (SendGrid), inapp (in-memory announcements)
+  - **API-backed**: twitter (X API + intent URL fallback), email_newsletter/email_short/email_medium/email_long (Resend), inapp (in-memory announcements)
   - **Clipboard**: linkedin, notion_monthly, article_hmc (copy to clipboard with channel-specific paste instructions)
+  - **Email variants**: email_short (≤500 chars, concise), email_medium (≤1000 chars, use cases), email_long (≤1500 chars, comprehensive). Legacy `email_standalone` data is auto-migrated to `email_medium`.
 - **Manual features**: POST /api/features/manual - adds feature, classifies via Claude, returns to list
 - **Source registry**: SOURCE_REGISTRY dict mapping "asana", "slack", "manual" to adapter instances
 - **Routes**:
@@ -97,7 +98,7 @@ Product marketing autopilot that ingests feature data from multiple sources and 
   - `sources/slack_source.py` — SlackSource: extracts features from #product-updates release messages as bullets with stable IDs (slack-{ts}-{idx}), parses Slack link format `<URL|text>`, extracts prefixes (PE/Devin/FE/BE), release versions, reactions, thread URLs
   - `sources/asana_source.py` — AsanaSource: enrichment-only via `enrich_feature()` (3-tier: URL match → title search → no match); `list_unannounced_tasks()` for Asana-only features; workspace GID=1198197264916217
   - `sources/manual_source.py` — ManualSource (stateless, returns FeatureContext from kwargs)
-  - `ai/generator.py` — Content generation across 7 channels (twitter, email_newsletter, email_standalone, inapp, linkedin, notion_monthly, article_hmc)
+  - `ai/generator.py` — Content generation across 9 channels (twitter, email_newsletter, email_short, email_medium, email_long, inapp, linkedin, notion_monthly, article_hmc)
   - `ai/classifier.py` — Tiered classification: `quick_classify()` (keyword-based, no API call) + Claude API for everything else; adaptive learning disables keywords after 3+ overrides; word-boundary matching to prevent false positives
   - `ai/classification_overrides.py` — In-memory override store + learning context
 - **Pipeline**: `_get_slack_first_features(days)` → Slack extraction → parallel Asana enrichment (ThreadPoolExecutor, 5 workers) → unannounced task scan → 120s TTL cache
