@@ -10,6 +10,8 @@ dependencies = [
     "gunicorn>=25.3.0",
     "python-dotenv>=1.2.2",
     "requests>=2.33.0",
+    "sendgrid>=6.12.5",
     "slack-sdk>=3.41.0",
+    "tweepy>=4.16.0",
     "waitress>=3.0.2",
 ]
