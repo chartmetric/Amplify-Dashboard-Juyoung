@@ -5070,7 +5070,7 @@ function doPublishToChannel(chKey) {
         }
         if (isEmail) {
             if (data.method === 'fallback') {
-                showToast('Email draft ready. SendGrid not configured - opening preview.', 'warning');
+                showToast('Email draft ready. No email provider configured - opening preview.', 'warning');
                 if (data.preview_html) {
                     var w = window.open('', '_blank');
                     if (w) { w.document.write(data.preview_html); w.document.close(); }
@@ -5217,7 +5217,7 @@ function publishToChannel(chKey, skipConfirm) {
     if (skipConfirm) {
         doPublishToChannel(chKey);
     } else if (isEmail) {
-        var msg = 'Send this email via SendGrid?';
+        var msg = 'Send this email via Resend?';
         showPublishConfirm(msg, function() {
             doPublishToChannel(chKey);
         }, { title: 'Send Email', icon: '\uD83D\uDCE7', confirmText: 'Yes, send it' });
@@ -5350,7 +5350,7 @@ function showPublishSummary(results) {
         var icon, label;
         if (r.status === 'published') { icon = '\u2705'; label = 'Published'; published++; }
         else if (r.status === 'clipboard') { icon = '\uD83D\uDCCB'; label = 'Copied to Clipboard'; clipboard++; }
-        else if (r.status === 'draft') { icon = '\uD83D\uDCDD'; label = 'Draft (SendGrid not configured)'; clipboard++; }
+        else if (r.status === 'draft') { icon = '\uD83D\uDCDD'; label = 'Draft (email not configured)'; clipboard++; }
         else if (r.status === 'fallback') { icon = '\u2197\uFE0F'; label = 'Opened in browser'; clipboard++; }
         else { icon = '\u274C'; label = 'Failed: ' + (r.error || ''); failed++; }
         html += '<div style="padding:4px 0;display:flex;align-items:center;gap:8px;">';
@@ -6884,7 +6884,7 @@ function genallShowPublishDone(results, btn) {
     var parts = [];
     if (published > 0) parts.push(published + ' published');
     if (clipboard > 0) parts.push(clipboard + ' copied to clipboard');
-    if (draft > 0) parts.push(draft + ' saved as draft (SendGrid not configured)');
+    if (draft > 0) parts.push(draft + ' saved as draft (email not configured)');
     if (fallback > 0) parts.push(fallback + ' opened in browser');
     if (failed > 0) parts.push(failed + ' failed');
     showToast(parts.join(', '), failed > 0 ? 'warning' : 'success');
