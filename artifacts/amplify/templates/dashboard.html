@@ -769,6 +769,18 @@
             height: 64px; width: auto; max-width: 120px; border-radius: 8px; object-fit: cover;
         }
         .feature-image-preview .img-meta { flex: 1; }
+        .feature-link-preview {
+            display: flex; align-items: center; gap: 14px; flex: 1;
+        }
+        .feature-link-preview .link-meta { flex: 1; display: flex; align-items: center; gap: 8px; }
+        .feature-link-preview .link-meta span { font-size: 12px; color: var(--text-muted); word-break: break-all; }
+        .feature-link-preview .link-meta a { font-size: 12px; color: var(--accent); text-decoration: underline; word-break: break-all; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+        .feature-link-preview .link-meta button { background: none; border: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 2px 6px; }
+        .feature-link-preview .link-meta button:hover { text-decoration: underline; }
+        .feature-link-preview .link-meta .link-remove { color: var(--text-muted); }
+        .feature-link-preview .link-meta .link-remove:hover { color: #f87171; }
+        .btn-insert-link { background: none; border: 1px solid #2d8cf0; color: #2d8cf0; padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-left: 4px; font-family: inherit; transition: all 0.15s; }
+        .btn-insert-link:hover { background: #2d8cf0; color: #fff; }
         .ch-img-toggle { display: flex; align-items: center; gap: 4px; margin-left: auto; font-size: 11px; color: var(--text-muted); cursor: pointer; }
         .ch-img-toggle input { cursor: pointer; accent-color: var(--accent); }
         .ch-img-toggle:hover { color: var(--text-body); }
@@ -1519,8 +1531,10 @@
                 <button class="btn-feature-image" id="btn-feature-image" onclick="triggerFeatureImagePicker()">&#128247; Upload</button>
                 <button class="btn-feature-image btn-paste-image" id="btn-paste-image" onclick="pasteFeatureImageFromClipboard()">&#128203; Paste</button>
                 <button class="btn-feature-image" id="btn-add-video" onclick="showVideoMenu(this)" style="background:#6c63ff;">&#127910; Video</button>
+                <button class="btn-feature-image" id="btn-add-link" onclick="promptFeatureLink()" style="background:#2d8cf0;">&#128279; Link</button>
             </div>
             <div class="feature-image-preview" id="feature-image-preview" style="display:none;"></div>
+            <div class="feature-link-preview" id="feature-link-preview" style="display:none;"></div>
         </div>
         <div class="content-loading" id="content-loading" style="display:none;">
             <div class="spinner"></div>
@@ -3695,6 +3709,7 @@ function enterContentView(feature) {
     contentViewRegenFeedback = {};
     contentViewFeatureImage = null;
     contentViewImageInclude = {};
+    contentViewFeatureLink = null;
     window.contentViewVideos = {};
     imageUndoStack = [];
 
@@ -3757,7 +3772,11 @@ function enterContentView(feature) {
     document.getElementById('feature-image-section').style.display = 'none';
     document.getElementById('feature-image-preview').style.display = 'none';
     document.getElementById('feature-image-preview').innerHTML = '';
+    document.getElementById('feature-link-preview').style.display = 'none';
+    document.getElementById('feature-link-preview').innerHTML = '';
     document.getElementById('btn-feature-image').style.display = '';
+    var linkBtnReset = document.getElementById('btn-add-link');
+    if (linkBtnReset) linkBtnReset.style.display = '';
     var pasteBtnReset = document.getElementById('btn-paste-image');
     if (pasteBtnReset) pasteBtnReset.style.display = '';
     var loadingChannelsEl = document.getElementById('content-loading-channels');
@@ -3882,6 +3901,11 @@ function enterContentView(feature) {
                 contentViewFeatureImage = localFeatImg;
                 renderFeatureImagePreview();
             }
+            var localFeatLink = getPersistedFeatureLink(fid);
+            if (localFeatLink) {
+                contentViewFeatureLink = localFeatLink;
+                renderFeatureLinkPreview();
+            }
             var idx = 0;
             function revealNext() {
                 if (idx >= keys.length) {
@@ -3891,6 +3915,7 @@ function enterContentView(feature) {
                     refreshFeatureCardPublishStatus(fid);
                     showImageToggles();
                     restoreImageIncludes(fid, keys);
+                    if (contentViewFeatureLink) showInsertLinkButtons();
                     return;
                 }
                 var chKey = keys[idx];
@@ -3971,6 +3996,7 @@ function buildChannelCard(chKey, ch) {
                 '<input type="checkbox" id="img-cb-' + chKey + '" onchange="toggleChannelImage(\'' + chKey + '\')">' +
                 '<span>Image</span>' +
             '</label>' +
+            '<button class="btn-insert-link" id="insert-link-' + chKey + '" style="display:none;" onclick="insertLinkIntoChannel(\'' + chKey + '\')" title="Insert stored hyperlink into selected text">&#128279; Insert Link</button>' +
         '</div>' +
         (isStandaloneEmail ? '<div class="email-subject-row" style="padding:8px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Subject</label><input type="text" id="subject-' + chKey + '" class="email-subject-input" value="' + escHtml(emailSubject) + '" placeholder="Email subject line" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
         (isStandaloneEmail ? '<div class="email-fromname-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">From Name</label><input type="text" id="fromname-' + chKey + '" value="Chartmetric" placeholder="Sender display name" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
@@ -4819,6 +4845,136 @@ function removeImageMarkerFromChannel(chKey) {
     ta.value = ta.value.replace(/\n?\[image: [^\]]+\]/g, '');
     ta.dispatchEvent(new Event('input'));
     switchToPreview(chKey);
+}
+
+var contentViewFeatureLink = null;
+
+function _featureLinkKey(fid) { return 'ampFeatureLink:' + fid; }
+
+function persistFeatureLink(fid, url) {
+    try {
+        if (url) {
+            localStorage.setItem(_featureLinkKey(fid), url);
+        } else {
+            localStorage.removeItem(_featureLinkKey(fid));
+        }
+    } catch(e) {}
+}
+
+function getPersistedFeatureLink(fid) {
+    try {
+        return localStorage.getItem(_featureLinkKey(fid)) || null;
+    } catch(e) { return null; }
+}
+
+function promptFeatureLink() {
+    var current = contentViewFeatureLink || '';
+    var url = prompt('Enter a URL for the hyperlink:', current);
+    if (url === null) return;
+    url = url.trim();
+    if (!url) {
+        showToast('No URL entered', 'warning');
+        return;
+    }
+    if (!/^https?:\/\//i.test(url) && !/^mailto:/i.test(url)) {
+        url = 'https://' + url;
+    }
+    contentViewFeatureLink = url;
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    if (fid) persistFeatureLink(fid, url);
+    renderFeatureLinkPreview();
+    showInsertLinkButtons();
+    showToast('Link stored!', 'success');
+}
+
+function renderFeatureLinkPreview() {
+    var preview = document.getElementById('feature-link-preview');
+    var linkBtn = document.getElementById('btn-add-link');
+    if (!preview) return;
+    if (!contentViewFeatureLink) {
+        preview.style.display = 'none';
+        preview.innerHTML = '';
+        if (linkBtn) linkBtn.style.display = '';
+        return;
+    }
+    if (linkBtn) linkBtn.style.display = 'none';
+    preview.style.display = 'flex';
+    preview.innerHTML =
+        '<div class="link-meta">' +
+            '<span>&#128279;</span>' +
+            '<a href="' + escHtml(contentViewFeatureLink) + '" target="_blank" rel="noopener noreferrer" title="' + escHtml(contentViewFeatureLink) + '">' + escHtml(contentViewFeatureLink) + '</a>' +
+            '<button onclick="promptFeatureLink()">Replace</button>' +
+            '<button class="link-remove" onclick="removeFeatureLink()">Remove \u2715</button>' +
+        '</div>';
+}
+
+function removeFeatureLink() {
+    contentViewFeatureLink = null;
+    renderFeatureLinkPreview();
+    hideInsertLinkButtons();
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    if (fid) persistFeatureLink(fid, null);
+    showToast('Link removed', 'success');
+}
+
+function showInsertLinkButtons() {
+    if (!contentViewFeatureLink) return;
+    var allChKeys = Object.keys(contentViewChannels);
+    for (var i = 0; i < allChKeys.length; i++) {
+        var btn = document.getElementById('insert-link-' + allChKeys[i]);
+        if (btn) btn.style.display = '';
+    }
+}
+
+function hideInsertLinkButtons() {
+    var allChKeys = Object.keys(contentViewChannels);
+    for (var i = 0; i < allChKeys.length; i++) {
+        var btn = document.getElementById('insert-link-' + allChKeys[i]);
+        if (btn) btn.style.display = 'none';
+    }
+}
+
+function insertLinkIntoChannel(chKey) {
+    if (!contentViewFeatureLink) {
+        showToast('No link stored. Add a link first.', 'warning');
+        return;
+    }
+    var ta = document.getElementById('ta-' + chKey);
+    if (!ta) return;
+    var preview = document.getElementById('md-preview-' + chKey);
+    var wasInPreview = preview && preview.style.display === 'block';
+    if (wasInPreview) {
+        preview.style.display = 'none';
+        ta.style.display = 'block';
+    }
+    var start = ta.selectionStart;
+    var end = ta.selectionEnd;
+    var text = ta.value;
+    var selectedText = text.substring(start, end);
+    var markdown;
+    if (selectedText.length > 0) {
+        markdown = '[' + selectedText + '](' + contentViewFeatureLink + ')';
+        ta.value = text.substring(0, start) + markdown + text.substring(end);
+        var newCursorPos = start + markdown.length;
+        ta.selectionStart = newCursorPos;
+        ta.selectionEnd = newCursorPos;
+    } else {
+        markdown = '[Link](' + contentViewFeatureLink + ')';
+        ta.value = text.replace(/\s+$/, '') + '\n' + markdown;
+        ta.selectionStart = ta.value.length;
+        ta.selectionEnd = ta.value.length;
+    }
+    ta.dispatchEvent(new Event('input'));
+    autoSaveDraft(chKey);
+    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+    if (wasInPreview && preview) {
+        preview.innerHTML = simpleMarkdown(ta.value, {isEmail: isEmail});
+        preview.style.display = 'block';
+        ta.style.display = 'none';
+    } else if (!wasInPreview) {
+        ta.focus();
+    }
+    showToast('Link inserted!', 'success');
 }
 
 function restoreImageIncludes(fid, keys) {
