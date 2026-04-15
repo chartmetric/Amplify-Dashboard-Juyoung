@@ -334,6 +334,10 @@ def _migrate_channels(classification: dict) -> dict:
         channels[idx] = "email_medium"
         if "email_short" not in channels:
             channels.insert(idx, "email_short")
+        score = classification.get("importance_score", 0)
+        if score >= 4 and "email_long" not in channels:
+            long_idx = channels.index("email_medium") + 1
+            channels.insert(long_idx, "email_long")
         classification["recommended_channels"] = channels
     return classification
 
