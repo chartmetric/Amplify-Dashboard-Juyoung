@@ -3862,8 +3862,9 @@ function enterContentView(feature) {
                 card.classList.add('fade-in-up');
                 card.style.animationDelay = (idx * 100) + 'ms';
                 grid.appendChild(card);
+                var isEmailCh = (chKey === 'email_newsletter' || chKey === 'email_standalone');
                 if (chKey === 'email_standalone') loadResendAudiences(chKey);
-                if (isEmail) loadResendTemplates(chKey);
+                if (isEmailCh) loadResendTemplates(chKey);
                 if (contentViewApproved[chKey]) updateChannelStatus(chKey);
                 if (contentViewPublished[chKey]) updateChannelStatus(chKey);
                 idx++;
