@@ -67,10 +67,14 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
     image_map = images or {}
     lines = body.strip().split("\n")
     body_html = ""
+    first_text_done = False
     for line in lines:
         stripped = line.strip()
         if not stripped:
             body_html += "<br>"
+        elif not first_text_done and not re.match(r'^\[image:\s*(.+)\]$', stripped) and not stripped.startswith('#'):
+            first_text_done = True
+            body_html += f'<h2 style="margin:0 0 20px 0;color:#1a1d23;font-size:22px;font-weight:700;">{_inline_markdown(stripped)}</h2>'
         elif re.match(r'^\[image:\s*(.+)\]$', stripped):
             img_name = re.match(r'^\[image:\s*(.+)\]$', stripped).group(1).strip()
             if cid_map and img_name in cid_map:
@@ -82,6 +86,7 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
             else:
                 body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Image: {_esc(img_name)}]</p>'
         elif re.match(r'^#{1,3}\s+', stripped):
+            first_text_done = True
             hm = re.match(r'^(#{1,3})\s+(.+)$', stripped)
             if hm:
                 level = len(hm.group(1))
@@ -122,7 +127,6 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 <span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">Chartmetric</span>
 </td></tr>
 <tr><td style="background:#ffffff;padding:32px;border-radius:0 0 8px 8px;">
-<h2 style="margin:0 0 20px 0;color:#1a1d23;font-size:22px;font-weight:700;">{safe_subject}</h2>
 {body_html}
 <hr style="border:none;border-top:1px solid #e8e8eb;margin:28px 0 16px 0;">
 <p style="margin:0;color:#999999;font-size:12px;">Chartmetric &middot; Product Update</p>

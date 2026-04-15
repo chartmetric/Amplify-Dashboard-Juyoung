@@ -24,9 +24,9 @@ CHANNEL_CONFIGS = {
         "description": "Dedicated product update or feature launch email",
         "max_chars": 1200,
         "tone": "Professional but warm. Benefit-led, second person. Slightly more expansive than the newsletter block \u2014 room to paint the picture of the problem solved.",
-        "format_rules": "Structure: 'Subject: [compelling subject line]' on first line, blank line, then 2-3 short paragraphs. First paragraph: hook with the user's pain point or aspiration. Second paragraph: what's new and how it helps. Third paragraph: CTA with specific next step. Keep paragraphs to 2-3 sentences each. No HTML.",
+        "format_rules": "Structure: 'Subject: [compelling subject line]' on first line, blank line, then a SHORT intro header line (a catchy one-liner that summarizes the email — must be DIFFERENT from the subject line), blank line, then 2-3 short paragraphs. First paragraph: hook with the user's pain point or aspiration. Second paragraph: what's new and how it helps. Third paragraph: CTA with specific next step. Keep paragraphs to 2-3 sentences each. No HTML. IMPORTANT: The subject line and the intro header must convey different angles — e.g. if the subject is curiosity-driven, the intro header should be benefit-driven, or vice versa.",
         "audience": "Chartmetric users and trial users \u2014 may not be daily active, so context-set briefly",
-        "example_output_format": "Subject: [subject]\n\n[Pain point hook paragraph]\n\n[Feature + benefit paragraph]\n\n[CTA paragraph]",
+        "example_output_format": "Subject: [subject line]\n\n[Short intro header — different from subject]\n\n[Pain point hook paragraph]\n\n[Feature + benefit paragraph]\n\n[CTA paragraph]",
         "enabled": True,
     },
     "inapp": {

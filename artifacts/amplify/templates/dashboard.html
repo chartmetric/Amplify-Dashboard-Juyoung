@@ -3839,7 +3839,7 @@ function buildChannelCard(chKey, ch) {
         (isEmail ? '<div class="email-subject-row" style="padding:8px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Subject</label><input type="text" id="subject-' + chKey + '" class="email-subject-input" value="' + escHtml(emailSubject) + '" placeholder="Email subject line" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
         '<div class="channel-card-body">' +
             '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(bodyContent) + '</textarea>' +
-            '<div class="md-preview" id="md-preview-' + chKey + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(bodyContent) + '</div>' +
+            '<div class="md-preview" id="md-preview-' + chKey + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(bodyContent, {isEmail: isEmail}) + '</div>' +
         '</div>' +
         '<div class="channel-card-loading" id="ch-loading-' + chKey + '"><div class="spinner"></div><span>Regenerating...</span></div>' +
         '<div class="channel-card-actions" id="ch-actions-' + chKey + '">' +
@@ -3924,7 +3924,8 @@ function switchToPreview(chKey) {
     var ta = document.getElementById('ta-' + chKey);
     var preview = document.getElementById('md-preview-' + chKey);
     if (!ta || !preview) return;
-    preview.innerHTML = simpleMarkdown(ta.value);
+    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+    preview.innerHTML = simpleMarkdown(ta.value, {isEmail: isEmail});
     preview.style.display = 'block';
     ta.style.display = 'none';
 }
@@ -3943,10 +3944,12 @@ function togglePreview(chKey) {
     }
 }
 
-function simpleMarkdown(text) {
+function simpleMarkdown(text, opts) {
+    var isEmail = opts && opts.isEmail;
     var lines = text.split('\n');
     var result = [];
     var paraLines = [];
+    var firstTextDone = false;
 
     function flushPara() {
         if (paraLines.length > 0) {
@@ -3969,11 +3972,16 @@ function simpleMarkdown(text) {
         var headingMatch;
         if ((headingMatch = lines[i].match(/^(#{1,3}) (.+)$/))) {
             flushPara();
+            firstTextDone = true;
             var level = headingMatch[1].length;
             var content = escHtml(headingMatch[2]);
             content = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
             content = content.replace(/\*(.+?)\*/g, '<em>$1</em>');
             result.push('<h' + level + '>' + content + '</h' + level + '>');
+        } else if (isEmail && !firstTextDone && lines[i].trim() !== '' && !/^\[image: [^\]]+\]$/.test(lines[i].trim())) {
+            flushPara();
+            firstTextDone = true;
+            result.push('<h3 style="margin:0 0 12px 0;font-weight:700;color:#1a1d23;">' + line + '</h3>');
         } else if (/^\[image: [^\]]+\]$/.test(lines[i].trim())) {
             flushPara();
             var imgName = lines[i].trim().match(/\[image: ([^\]]+)\]/)[1];
