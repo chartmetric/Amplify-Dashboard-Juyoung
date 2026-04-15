@@ -3,18 +3,25 @@ import os
 import re
 import tempfile
 import logging
+import base64
+import subprocess
+import uuid
 
 logger = logging.getLogger(__name__)
 
 PUBLISH_FILE = os.path.join(os.path.dirname(__file__), "..", ".publish_state.json")
 IMAGES_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", ".publish_images"))
+VIDEOS_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", ".publish_videos"))
 
 VALID_CHANNELS = {"twitter", "email_newsletter", "email_short", "email_medium", "email_long", "email_standalone", "inapp", "linkedin", "notion_monthly", "article_hmc"}
 _SAFE_RE = re.compile(r"[^a-zA-Z0-9_\-.]")
 
+MAX_VIDEO_SIZE = 50 * 1024 * 1024
+
 
 def _ensure_dirs():
     os.makedirs(IMAGES_DIR, exist_ok=True)
+    os.makedirs(VIDEOS_DIR, exist_ok=True)
 
 
 def _sanitize(val):
@@ -242,3 +249,118 @@ def get_feature_state(feature_id, channels):
         if ch_state:
             result[ch] = ch_state
     return result
+
+
+_VIDEO_ID_RE = re.compile(r'^[a-f0-9\-]{8,36}$')
+_ALLOWED_VIDEO_MIME_PREFIXES = (b'\x00\x00\x00', b'\x1a\x45\xdf\xa3', b'RIFF')
+
+
+def _video_dir(video_id):
+    if not _VIDEO_ID_RE.match(video_id):
+        raise ValueError("Invalid video_id format")
+    safe_id = _SAFE_RE.sub("_", video_id)
+    vdir = os.path.realpath(os.path.join(VIDEOS_DIR, safe_id))
+    if not vdir.startswith(VIDEOS_DIR):
+        raise ValueError("Invalid video path")
+    return vdir
+
+
+def save_video(feature_id, data_url, filename):
+    _ensure_dirs()
+
+    if "," not in data_url or not data_url.startswith("data:video/"):
+        raise ValueError("Invalid video data URL format. Expected data:video/...;base64,...")
+
+    header, b64data = data_url.split(",", 1)
+    try:
+        raw = base64.b64decode(b64data, validate=True)
+    except Exception:
+        raise ValueError("Invalid base64 data")
+
+    if len(raw) > MAX_VIDEO_SIZE:
+        raise ValueError("Video file too large (max 50MB)")
+
+    if len(raw) < 8:
+        raise ValueError("File too small to be a valid video")
+
+    if not any(raw[:4].startswith(prefix) for prefix in _ALLOWED_VIDEO_MIME_PREFIXES):
+        logger.warning(f"[publish_store] Video magic bytes check: header={raw[:8].hex()}")
+
+    video_id = str(uuid.uuid4())
+    vdir = _video_dir(video_id)
+    os.makedirs(vdir, exist_ok=True)
+
+    ext = os.path.splitext(filename)[1].lower() or ".mp4"
+    if ext not in (".mp4", ".mov", ".webm", ".avi", ".mkv"):
+        ext = ".mp4"
+    video_path = os.path.join(vdir, "video" + ext)
+    thumb_path = os.path.join(vdir, "thumb.jpg")
+
+    with open(video_path, "wb") as f:
+        f.write(raw)
+
+    thumb_ok = False
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", video_path, "-ss", "00:00:00", "-vframes", "1",
+             "-vf", "scale=640:-2", "-q:v", "3", thumb_path],
+            capture_output=True, timeout=30
+        )
+        thumb_ok = result.returncode == 0 and os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0
+    except Exception as e:
+        logger.warning(f"[publish_store] ffmpeg thumbnail failed for {video_id}: {e}")
+
+    meta = {
+        "video_id": video_id,
+        "feature_id": feature_id,
+        "filename": str(filename)[:200],
+        "ext": ext,
+        "size": len(raw),
+        "has_thumb": thumb_ok,
+    }
+    with open(os.path.join(vdir, "meta.json"), "w") as f:
+        json.dump(meta, f)
+
+    logger.info(f"[publish_store] Saved video {video_id} for feature {feature_id} ({filename}, {len(raw)} bytes, thumb={thumb_ok})")
+    return video_id
+
+
+def get_video_path(video_id):
+    vdir = _video_dir(video_id)
+    meta_path = os.path.join(vdir, "meta.json")
+    if not os.path.exists(meta_path):
+        return None, None
+    with open(meta_path) as f:
+        meta = json.load(f)
+    ext = meta.get("ext", ".mp4")
+    video_path = os.path.join(vdir, "video" + ext)
+    if not os.path.exists(video_path):
+        return None, None
+    return video_path, meta
+
+
+def get_video_thumb_path(video_id):
+    vdir = _video_dir(video_id)
+    thumb_path = os.path.join(vdir, "thumb.jpg")
+    if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
+        return thumb_path
+    return None
+
+
+def list_feature_videos(feature_id):
+    _ensure_dirs()
+    results = []
+    if not os.path.exists(VIDEOS_DIR):
+        return results
+    for entry in os.listdir(VIDEOS_DIR):
+        meta_path = os.path.join(VIDEOS_DIR, entry, "meta.json")
+        if not os.path.exists(meta_path):
+            continue
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+            if meta.get("feature_id") == feature_id:
+                results.append(meta)
+        except Exception:
+            pass
+    return results

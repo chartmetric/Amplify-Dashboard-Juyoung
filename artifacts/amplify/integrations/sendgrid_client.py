@@ -72,10 +72,11 @@ def _get_video_thumbnail(url: str) -> str:
     return 'https://via.placeholder.com/480x270/e0e0e0/999999?text=Video'
 
 
-def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None, from_name: str = None) -> str:
+def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None, from_name: str = None, videos: dict = None) -> str:
     import re
     safe_subject = _esc(subject)
     image_map = images or {}
+    video_map = videos or {}
     lines = body.strip().split("\n")
     body_html = ""
     first_text_done = False
@@ -87,14 +88,23 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
             first_text_done = True
             body_html += f'<h2 style="margin:0 0 20px 0;color:#1a1d23;font-size:22px;font-weight:700;">{_inline_markdown(stripped)}</h2>'
         elif re.match(r'^\[video:\s*(.+)\]$', stripped):
-            vid_url = re.match(r'^\[video:\s*(.+)\]$', stripped).group(1).strip()
-            if not re.match(r'^https?://', vid_url, re.IGNORECASE):
-                body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Video: invalid URL]</p>'
+            vid_ref = re.match(r'^\[video:\s*(.+)\]$', stripped).group(1).strip()
+            if re.match(r'^https?://', vid_ref, re.IGNORECASE):
+                thumb_url = _get_video_thumbnail(vid_ref)
+                vid_link = vid_ref
+            elif vid_ref in video_map:
+                vid_info = video_map[vid_ref]
+                thumb_url = vid_info.get("thumb_url", "")
+                vid_link = vid_info.get("video_url", "")
+            else:
+                body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Video: {_esc(vid_ref)}]</p>'
                 continue
-            thumb_url = _get_video_thumbnail(vid_url)
+            if not thumb_url or not vid_link:
+                body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Video: {_esc(vid_ref)}]</p>'
+                continue
             body_html += (
                 f'<div style="text-align:center;margin:16px 0;">'
-                f'<a href="{_esc(vid_url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">'
+                f'<a href="{_esc(vid_link)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">'
                 f'<img src="{_esc(thumb_url)}" alt="Video thumbnail" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto;">'
                 f'<div style="margin-top:-60px;margin-bottom:20px;position:relative;">'
                 f'<span style="display:inline-block;width:48px;height:48px;background:rgba(0,0,0,0.7);border-radius:50%;line-height:48px;text-align:center;font-size:20px;color:#fff;">&#9654;</span>'
@@ -232,18 +242,16 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
     return None
 
 
-def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None, from_name: str = None, template_id: str = None) -> dict:
+def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None, from_name: str = None, template_id: str = None, videos: dict = None) -> dict:
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
-    # sg_api_key = os.environ.get("SENDGRID_API_KEY", "")  # SendGrid disabled — using Resend only
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
     test_email = os.environ.get("SENDGRID_TEST_EMAIL", "") or os.environ.get("RESEND_FROM_EMAIL", "")
 
     has_resend = bool(resend_api_key and from_email)
-    # has_sendgrid = bool(sg_api_key and from_email)  # SendGrid disabled
 
     if not has_resend:
         logger.warning("[email] No email provider configured (need RESEND_API_KEY+RESEND_FROM_EMAIL)")
-        preview_html = render_email_html(subject, body, images=images, from_name=from_name)
+        preview_html = render_email_html(subject, body, images=images, from_name=from_name, videos=videos)
         return {
             "success": True,
             "method": "fallback",
@@ -265,7 +273,7 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     cid_map, cid_attachments = _build_cid_attachments(images)
     recipients_str = ", ".join(recipients)
 
-    html_cid = render_email_html(final_subject, body, images=images, cid_map=cid_map if cid_attachments else None, from_name=from_name)
+    html_cid = render_email_html(final_subject, body, images=images, cid_map=cid_map if cid_attachments else None, from_name=from_name, videos=videos)
     result = _send_via_resend(final_subject, html_cid, recipients, is_test, attachments=cid_attachments or None, from_name=from_name, template_id=template_id)
     if result:
         return result

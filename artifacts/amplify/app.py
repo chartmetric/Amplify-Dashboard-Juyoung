@@ -27,7 +27,7 @@ from ai.pre_filter import pre_filter_batch  # kept for backward compat, not used
 from ai.generator import generate_for_channel, generate_all_channels
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
-from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published
+from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published, save_video as save_publish_video, get_video_path, get_video_thumb_path, list_feature_videos
 from ai.classification_overrides import save_override as save_classification_override, get_overrides as get_classification_overrides
 from ai.feature_sets import save_set as save_feature_set, get_sets as get_feature_sets, delete_set as delete_feature_set
 from datetime import datetime, timezone
@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 _app_dir = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(_app_dir, "templates"), static_folder=os.path.join(_app_dir, "static"))
 app.secret_key = config.SESSION_SECRET
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 75 * 1024 * 1024
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1557,6 +1557,30 @@ def get_publish_state():
     return jsonify(state), 200
 
 
+def _build_video_map(feature_id):
+    if not feature_id:
+        return {}
+    vids = list_feature_videos(feature_id)
+    if not vids:
+        return {}
+    base = os.environ.get("REPLIT_DEV_DOMAIN", "")
+    scheme = "https" if base else "http"
+    if not base:
+        base = "localhost:5000"
+    fallback_thumb = "https://via.placeholder.com/640x360/222222/999999?text=Video"
+    video_map = {}
+    for v in vids:
+        vid_id = v.get("video_id", "")
+        fname = v.get("filename", "")
+        if vid_id and fname:
+            has_thumb = v.get("has_thumb", True)
+            video_map[fname] = {
+                "thumb_url": f"{scheme}://{base}/api/videos/{vid_id}/thumb" if has_thumb else fallback_thumb,
+                "video_url": f"{scheme}://{base}/api/videos/{vid_id}",
+            }
+    return video_map
+
+
 @app.route("/api/publish/email", methods=["POST"])
 def publish_email():
     from integrations.sendgrid_client import send_email
@@ -1597,7 +1621,8 @@ def publish_email():
     from_name = data.get("from_name", "").strip() or None
     template_id = data.get("template_id", "").strip() or None
 
-    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id)
+    videos = _build_video_map(feature_id)
+    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id, videos=videos)
     if result.get("success") and result.get("method") in ("sendgrid", "resend") and feature_id:
         mark_published(feature_id, channel)
     status_code = 200 if result.get("success") else 500
@@ -1652,7 +1677,9 @@ def preview_email():
 </body></html>"""
         return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
-    html = render_email_html(subject, content, images=images, from_name=from_name)
+    feature_id = data.get("feature_id", "") if request.method == "POST" else request.args.get("feature_id", "")
+    videos = _build_video_map(feature_id)
+    html = render_email_html(subject, content, images=images, from_name=from_name, videos=videos)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
@@ -1838,6 +1865,52 @@ def delete_image_endpoint():
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
     return jsonify({"success": True}), 200
+
+
+@app.route("/api/publish/video", methods=["POST"])
+def save_video_endpoint():
+    data = request.get_json() or {}
+    feature_id = data.get("feature_id", "")
+    data_url = data.get("dataUrl", "")
+    filename = data.get("name", "video.mp4")
+    if not feature_id or not data_url:
+        return jsonify({"success": False, "error": "feature_id, dataUrl required"}), 400
+    try:
+        video_id = save_publish_video(feature_id, data_url, filename)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logging.error(f"[video] Upload failed: {e}")
+        return jsonify({"success": False, "error": "Video upload failed"}), 500
+    thumb_url = f"/api/videos/{video_id}/thumb"
+    video_url = f"/api/videos/{video_id}"
+    return jsonify({"success": True, "video_id": video_id, "thumb_url": thumb_url, "video_url": video_url}), 200
+
+
+@app.route("/api/videos/<video_id>")
+def serve_video(video_id):
+    from flask import send_file
+    try:
+        video_path, meta = get_video_path(video_id)
+    except ValueError:
+        return "Not found", 404
+    if not video_path:
+        return "Not found", 404
+    ext = meta.get("ext", ".mp4")
+    mimetypes = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm", ".avi": "video/x-msvideo", ".mkv": "video/x-matroska"}
+    return send_file(video_path, mimetype=mimetypes.get(ext, "video/mp4"))
+
+
+@app.route("/api/videos/<video_id>/thumb")
+def serve_video_thumb(video_id):
+    from flask import send_file, redirect
+    try:
+        thumb_path = get_video_thumb_path(video_id)
+    except ValueError:
+        return "Not found", 404
+    if not thumb_path:
+        return redirect("https://via.placeholder.com/640x360/222222/999999?text=Video")
+    return send_file(thumb_path, mimetype="image/jpeg")
 
 
 @app.route("/api/generate", methods=["POST"])

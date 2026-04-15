@@ -64,7 +64,8 @@ Product marketing autopilot that ingests feature data from multiple sources and 
 - **Config**: `artifacts/amplify/config.py` (module-level env vars: ANTHROPIC_API_KEY, ASANA_ACCESS_TOKEN, SLACK_BOT_TOKEN)
 - **Port**: 5000
 - **Paths**: `/` and `/api` (owns both route prefixes)
-- **Python packages**: flask, anthropic, asana, slack-sdk, requests, python-dotenv, waitress
+- **Python packages**: flask, anthropic, asana, slack-sdk, requests, python-dotenv, waitress, ffmpeg (system)
+- **Video uploads**: Local video file upload to `.publish_videos/` via `/api/publish/video` (POST, base64 data URL); ffmpeg extracts first-frame thumbnail; served via `/api/videos/<id>` and `/api/videos/<id>/thumb`; `[video: filename]` markers in email content render as clickable thumbnail with play button overlay
 - **Publishing channels**:
   - **API-backed**: twitter (X API + intent URL fallback), email_newsletter/email_standalone (Resend), inapp (in-memory announcements)
   - **Clipboard**: linkedin, notion_monthly, article_hmc (copy to clipboard with channel-specific paste instructions)
