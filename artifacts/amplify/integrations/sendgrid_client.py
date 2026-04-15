@@ -31,7 +31,37 @@ def _inline_markdown(text: str) -> str:
     return safe
 
 
-def render_email_html(subject: str, body: str, images: dict = None) -> str:
+def _build_cid_attachments(images: dict) -> tuple:
+    import re as _re, base64 as _b64
+    cid_map = {}
+    attachments = []
+    if not images:
+        return cid_map, attachments
+    for idx, (img_name, data_url) in enumerate(images.items()):
+        if not data_url or not data_url.startswith("data:"):
+            continue
+        m = _re.match(r"data:image/(\w+);base64,(.+)", data_url)
+        if not m:
+            continue
+        ext = m.group(1)
+        b64_data = m.group(2)
+        try:
+            decoded = list(_b64.b64decode(b64_data))
+        except Exception:
+            logger.warning(f"[email] Skipping image '{img_name}': invalid base64 data")
+            continue
+        cid = f"ampimg{idx}"
+        cid_map[img_name] = cid
+        attachments.append({
+            "filename": img_name or f"image{idx}.{ext}",
+            "content": decoded,
+            "content_type": f"image/{ext}",
+            "content_id": cid,
+        })
+    return cid_map, attachments
+
+
+def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None) -> str:
     import re
     safe_subject = _esc(subject)
     image_map = images or {}
@@ -43,8 +73,11 @@ def render_email_html(subject: str, body: str, images: dict = None) -> str:
             body_html += "<br>"
         elif re.match(r'^\[image:\s*(.+)\]$', stripped):
             img_name = re.match(r'^\[image:\s*(.+)\]$', stripped).group(1).strip()
-            img_src = image_map.get(img_name)
-            if img_src:
+            if cid_map and img_name in cid_map:
+                cid = cid_map[img_name]
+                body_html += f'<div style="margin:16px 0;"><img src="cid:{cid}" alt="{_esc(img_name)}" style="max-width:100%;height:auto;border-radius:6px;display:block;"></div>'
+            elif image_map.get(img_name):
+                img_src = image_map[img_name]
                 body_html += f'<div style="margin:16px 0;"><img src="{_esc(img_src)}" alt="{_esc(img_name)}" style="max-width:100%;height:auto;border-radius:6px;display:block;"></div>'
             else:
                 body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Image: {_esc(img_name)}]</p>'
@@ -101,7 +134,7 @@ def render_email_html(subject: str, body: str, images: dict = None) -> str:
 </html>"""
 
 
-def _send_via_resend(subject: str, html_content: str, to_email: str, is_test: bool) -> dict | None:
+def _send_via_resend(subject: str, html_content: str, to_email: str, is_test: bool, attachments: list = None) -> dict | None:
     import time as _time
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
@@ -117,6 +150,8 @@ def _send_via_resend(subject: str, html_content: str, to_email: str, is_test: bo
         "subject": subject,
         "html": html_content,
     }
+    if attachments:
+        params["attachments"] = attachments
 
     max_retries = 3
     for attempt in range(max_retries):
@@ -174,13 +209,16 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
         }
 
     final_subject = f"[TEST] {subject}" if is_test else subject
-    html_content = render_email_html(final_subject, body, images=images)
+    cid_map, cid_attachments = _build_cid_attachments(images)
 
     if has_resend:
-        result = _send_via_resend(final_subject, html_content, recipient, is_test)
+        html_cid = render_email_html(final_subject, body, images=images, cid_map=cid_map if cid_attachments else None)
+        result = _send_via_resend(final_subject, html_cid, recipient, is_test, attachments=cid_attachments or None)
         if result:
             return result
         logger.warning("[email] Resend failed, falling back to SendGrid")
+
+    html_content = render_email_html(final_subject, body, images=images)
 
     if has_sendgrid:
         try:

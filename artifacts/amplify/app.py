@@ -1572,16 +1572,17 @@ def publish_email():
     is_test = data.get("is_test", True)
     feature_id = data.get("feature_id", "")
 
+    lines = content.split("\n", 1)
+    has_subject_line = lines[0].lower().startswith("subject:")
+    if has_subject_line:
+        content = lines[1].strip() if len(lines) > 1 else content
     if not subject:
-        if channel == "email_newsletter":
+        if has_subject_line:
+            subject = lines[0][len("subject:"):].strip()
+        elif channel == "email_newsletter":
             subject = "Chartmetric Product Update"
         else:
-            lines = content.split("\n", 1)
-            if lines[0].lower().startswith("subject:"):
-                subject = lines[0][len("subject:"):].strip()
-                content = lines[1].strip() if len(lines) > 1 else content
-            else:
-                subject = "Chartmetric Product Update"
+            subject = "Chartmetric Product Update"
 
     images = data.get("images", None)
     result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images)

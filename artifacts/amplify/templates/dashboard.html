@@ -3809,6 +3809,7 @@ function buildChannelCard(chKey, ch) {
     var maxChars = ch.max_chars || 9999;
     var charClass = content.length <= maxChars ? 'ok' : 'over';
     var isArticle = chKey === 'article_hmc';
+    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
 
     card.innerHTML =
         '<div class="channel-card-header">' +
@@ -3825,6 +3826,7 @@ function buildChannelCard(chKey, ch) {
                 '<span>Image</span>' +
             '</label>' +
         '</div>' +
+        (isEmail ? '<div class="email-subject-row" style="padding:8px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Subject (optional override)</label><input type="text" id="subject-' + chKey + '" class="email-subject-input" placeholder="Leave empty to use first line of body" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
         '<div class="channel-card-body">' +
             '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(content) + '</textarea>' +
             '<div class="md-preview" id="md-preview-' + chKey + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(content) + '</div>' +
@@ -5014,11 +5016,13 @@ function previewEmailHtml(chKey) {
     var ta = document.getElementById('ta-' + chKey);
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to preview', 'error'); return; }
-    var subject = 'Chartmetric Product Update';
+    var subjectInput = document.getElementById('subject-' + chKey);
+    var customSubject = subjectInput ? subjectInput.value.trim() : '';
+    var subject = customSubject || 'Chartmetric Product Update';
     if (chKey === 'email_standalone') {
         var lines = content.split('\n');
         if (lines[0].toLowerCase().startsWith('subject:')) {
-            subject = lines[0].substring(8).trim();
+            if (!customSubject) subject = lines[0].substring(8).trim();
             content = lines.slice(1).join('\n').trim();
         }
     }
@@ -5063,6 +5067,9 @@ function doPublishToChannel(chKey) {
     if (isEmail) {
         payload.channel = chKey;
         payload.is_test = true;
+        var subjectInput = document.getElementById('subject-' + chKey);
+        var customSubject = subjectInput ? subjectInput.value.trim() : '';
+        if (customSubject) payload.subject = customSubject;
         var imgMap = contentViewImageMap[chKey];
         if (imgMap && Object.keys(imgMap).length > 0) {
             payload.images = imgMap;
@@ -5341,7 +5348,7 @@ function publishAllApproved() {
                 var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
                 var isInapp = (chKey === 'inapp');
                 var payload = { content: content, feature_id: fid };
-                if (isEmail) { payload.channel = chKey; payload.is_test = true; var imgMap = contentViewImageMap[chKey]; if (imgMap && Object.keys(imgMap).length > 0) payload.images = imgMap; }
+                if (isEmail) { payload.channel = chKey; payload.is_test = true; var si = document.getElementById('subject-' + chKey); var cs = si ? si.value.trim() : ''; if (cs) payload.subject = cs; var imgMap = contentViewImageMap[chKey]; if (imgMap && Object.keys(imgMap).length > 0) payload.images = imgMap; }
                 else if (isInapp) { payload.feature_title = contentViewFeature ? (contentViewFeature.title || '') : ''; payload.category = contentViewFeature ? (contentViewFeature.category || '') : ''; }
                 else { if (contentViewFeatureImage && contentViewImageInclude[chKey] && contentViewFeatureImage.dataUrl) payload.image = contentViewFeatureImage.dataUrl.split(',')[1]; }
 
