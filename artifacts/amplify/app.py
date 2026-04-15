@@ -1567,7 +1567,7 @@ def publish_email():
         return jsonify({"success": False, "error": "content is required"}), 400
 
     subject = data.get("subject", "").strip()
-    channel = data.get("channel", "email_medium")
+    channel = data.get("channel", "email_standalone")
     to_email = data.get("to_email", "").strip() or None
     is_test = data.get("is_test", True)
     feature_id = data.get("feature_id", "")

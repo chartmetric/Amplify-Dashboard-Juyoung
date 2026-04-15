@@ -101,21 +101,26 @@ def mark_published(feature_id, channel, tweet_url=None):
     logger.info(f"[publish_store] Marked {k} as published")
 
 
+def _normalize_email_channel(ch):
+    if ch in ("email_short", "email_medium", "email_long"):
+        return "email_standalone"
+    return ch
+
+
 def is_published(feature_id, channel):
     data = _load()
     entry = data.get(_key(feature_id, channel), {})
-    if not entry.get("published") and channel in ("email_short", "email_medium", "email_long"):
-        entry = data.get(_key(feature_id, "email_standalone"), {})
+    if not entry.get("published") and channel == "email_standalone":
+        for fallback in ("email_medium", "email_short", "email_long"):
+            entry = data.get(_key(feature_id, fallback), {})
+            if entry.get("published"):
+                break
     return entry.get("published", False)
 
 
 def get_publish_info(feature_id, channel):
     data = _load()
     return data.get(_key(feature_id, channel), {})
-
-
-def _migrate_channel_key(ch):
-    return "email_medium" if ch == "email_standalone" else ch
 
 
 def get_all_published():
@@ -128,10 +133,11 @@ def get_all_published():
         if len(parts) != 2:
             continue
         fid, ch = parts
-        ch = _migrate_channel_key(ch)
+        ch = _normalize_email_channel(ch)
         if fid not in result:
             result[fid] = []
-        result[fid].append(ch)
+        if ch not in result[fid]:
+            result[fid].append(ch)
     return result
 
 

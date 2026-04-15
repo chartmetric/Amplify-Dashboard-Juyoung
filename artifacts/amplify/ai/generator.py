@@ -47,9 +47,11 @@ def get_cached_content(feature_id, channel):
     key = _cache_key(feature_id, channel)
     with _content_cache_lock:
         result = _content_cache.get(key)
-        if result is None and channel == "email_medium":
-            legacy_key = _cache_key(feature_id, "email_standalone")
-            result = _content_cache.get(legacy_key)
+        if result is None and channel == "email_standalone":
+            for fallback in ("email_medium", "email_short", "email_long"):
+                result = _content_cache.get(_cache_key(feature_id, fallback))
+                if result is not None:
+                    break
         return result
 
 

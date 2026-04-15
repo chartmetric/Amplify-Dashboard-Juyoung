@@ -66,9 +66,9 @@ Product marketing autopilot that ingests feature data from multiple sources and 
 - **Paths**: `/` and `/api` (owns both route prefixes)
 - **Python packages**: flask, anthropic, asana, slack-sdk, requests, python-dotenv, waitress
 - **Publishing channels**:
-  - **API-backed**: twitter (X API + intent URL fallback), email_newsletter/email_short/email_medium/email_long (Resend), inapp (in-memory announcements)
+  - **API-backed**: twitter (X API + intent URL fallback), email_newsletter/email_standalone (Resend), inapp (in-memory announcements)
   - **Clipboard**: linkedin, notion_monthly, article_hmc (copy to clipboard with channel-specific paste instructions)
-  - **Email variants**: email_short (≤500 chars, concise), email_medium (≤1000 chars, use cases), email_long (≤1500 chars, comprehensive). Legacy `email_standalone` data is auto-migrated to `email_medium`.
+  - **Email standalone**: Single UI card with a length dropdown (Short ≤500 / Medium ≤1000 / Long ≤1500). Backend has three separate channel configs (email_short, email_medium, email_long) that define different generation prompts/limits. Frontend maps `email_standalone` to the selected variant key before API calls and remaps responses back. Changing the dropdown triggers regeneration with the new variant config. Legacy cached email_short/medium/long data is auto-migrated to email_standalone in the UI.
 - **Manual features**: POST /api/features/manual - adds feature, classifies via Claude, returns to list
 - **Source registry**: SOURCE_REGISTRY dict mapping "asana", "slack", "manual" to adapter instances
 - **Routes**:

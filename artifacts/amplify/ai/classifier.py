@@ -250,18 +250,16 @@ RULES FOR is_user_facing:
 CHANNEL USE CASES (understand these before recommending):
 - "twitter": High frequency. Any time an important user-facing feature releases. Good for quick announcements with data hooks. Use for score >= 3 if user-facing.
 - "email_newsletter": Low frequency (monthly). Holistic product update with 3-4 key features. Only the most important features make the cut. Use for score >= 4 only.
-- "email_short": Quick product update email (≤500 chars). Concise and scannable. Use for score >= 3 if user-facing.
-- "email_medium": Feature update email with key use cases (≤1000 chars). More inclusive than newsletter. Use for score >= 3 if user-facing.
-- "email_long": Comprehensive feature breakdown email (≤1500 chars). Full detail with scenarios. Use for score >= 4.
+- "email_standalone": Dedicated product update email. Available in three length variants (short/medium/long). More inclusive than newsletter. Use for score >= 3 if user-facing.
 - "inapp": High frequency. Any time an important user-facing feature releases. Users see this inside the product. Use for score >= 3 if user-facing.
 - "linkedin": Thought-leadership posts connecting features to industry trends. Use for score >= 4 when there's a compelling industry narrative.
 - "notion_monthly": Low frequency (monthly). Internal doc listing 10-12 key features of the month. Use for score >= 3.
 - "article_hmc": Low frequency. Long-form blog articles combining multiple features around a theme (marketing, content, playlist, influencer). Rarely for a single feature unless score = 5. Use for score >= 5, or flag with note "combine with related features" for score 4.
 
 RULES FOR recommended_channels:
-- importance_score 5: twitter, email_newsletter, email_short, email_medium, email_long, inapp, linkedin, notion_monthly, article_hmc (all channels)
-- importance_score 4: twitter, email_newsletter, email_short, email_medium, email_long, inapp, notion_monthly (+ linkedin if industry-relevant, + article_hmc only if thematic)
-- importance_score 3 (user-facing): twitter, email_short, email_medium, inapp, notion_monthly
+- importance_score 5: twitter, email_newsletter, email_standalone, inapp, linkedin, notion_monthly, article_hmc (all channels)
+- importance_score 4: twitter, email_newsletter, email_standalone, inapp, notion_monthly (+ linkedin if industry-relevant, + article_hmc only if thematic)
+- importance_score 3 (user-facing): twitter, email_standalone, inapp, notion_monthly
 - importance_score 3 (not user-facing): notion_monthly only
 - importance_score 2: notion_monthly only
 - importance_score 1: (none -- skip marketing entirely)
@@ -329,16 +327,19 @@ def _enforce_classification_rules(classification: dict):
 
 def _migrate_channels(classification: dict) -> dict:
     channels = classification.get("recommended_channels", [])
-    if "email_standalone" in channels:
-        idx = channels.index("email_standalone")
-        channels[idx] = "email_medium"
-        if "email_short" not in channels:
-            channels.insert(idx, "email_short")
-        score = classification.get("importance_score", 0)
-        if score >= 4 and "email_long" not in channels:
-            long_idx = channels.index("email_medium") + 1
-            channels.insert(long_idx, "email_long")
-        classification["recommended_channels"] = channels
+    migrated = False
+    for variant in ("email_short", "email_medium", "email_long"):
+        if variant in channels:
+            channels[channels.index(variant)] = "email_standalone"
+            migrated = True
+    if migrated:
+        seen = set()
+        deduped = []
+        for ch in channels:
+            if ch not in seen:
+                seen.add(ch)
+                deduped.append(ch)
+        classification["recommended_channels"] = deduped
     return classification
 
 
@@ -429,6 +430,7 @@ def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
         if "category" not in classification and classification.get("categories"):
             classification["category"] = classification["categories"][0]
         _enforce_classification_rules(classification)
+        _migrate_channels(classification)
         if feature_id:
             CLASSIFICATION_CACHE[feature_id] = classification
             _mark_dirty()

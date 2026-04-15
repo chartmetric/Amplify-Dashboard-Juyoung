@@ -10,9 +10,9 @@ _OVERRIDES_HISTORY_FILE = os.path.join(os.path.dirname(__file__), "..", ".overri
 _history_lock = threading.Lock()
 
 CHANNEL_RULES_BY_SCORE = {
-    5: ["twitter", "email_newsletter", "email_short", "email_medium", "email_long", "inapp", "linkedin", "notion_monthly", "article_hmc"],
-    4: ["twitter", "email_newsletter", "email_short", "email_medium", "email_long", "inapp", "notion_monthly"],
-    3: ["twitter", "email_short", "email_medium", "inapp", "notion_monthly"],
+    5: ["twitter", "email_newsletter", "email_standalone", "inapp", "linkedin", "notion_monthly", "article_hmc"],
+    4: ["twitter", "email_newsletter", "email_standalone", "inapp", "notion_monthly"],
+    3: ["twitter", "email_standalone", "inapp", "notion_monthly"],
     2: ["notion_monthly"],
     1: [],
 }
