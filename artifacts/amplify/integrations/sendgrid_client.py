@@ -199,15 +199,15 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
 
 def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None) -> dict:
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
-    sg_api_key = os.environ.get("SENDGRID_API_KEY", "")
+    # sg_api_key = os.environ.get("SENDGRID_API_KEY", "")  # SendGrid disabled — using Resend only
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
     test_email = os.environ.get("SENDGRID_TEST_EMAIL", "") or os.environ.get("RESEND_FROM_EMAIL", "")
 
     has_resend = bool(resend_api_key and from_email)
-    has_sendgrid = bool(sg_api_key and from_email)
+    # has_sendgrid = bool(sg_api_key and from_email)  # SendGrid disabled
 
-    if not has_resend and not has_sendgrid:
-        logger.warning("[email] No email provider configured (need RESEND_API_KEY+RESEND_FROM_EMAIL or SENDGRID_API_KEY+SENDGRID_FROM_EMAIL)")
+    if not has_resend:
+        logger.warning("[email] No email provider configured (need RESEND_API_KEY+RESEND_FROM_EMAIL)")
         preview_html = render_email_html(subject, body, images=images)
         return {
             "success": True,
@@ -230,51 +230,45 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     cid_map, cid_attachments = _build_cid_attachments(images)
     recipients_str = ", ".join(recipients)
 
-    if has_resend:
-        html_cid = render_email_html(final_subject, body, images=images, cid_map=cid_map if cid_attachments else None)
-        result = _send_via_resend(final_subject, html_cid, recipients, is_test, attachments=cid_attachments or None)
-        if result:
-            return result
-        logger.warning("[email] Resend failed, falling back to SendGrid")
-
-    html_content = render_email_html(final_subject, body, images=images)
-
-    if has_sendgrid:
-        try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail
-
-            sg = SendGridAPIClient(sg_api_key)
-            last_message_id = ""
-            for addr in recipients:
-                message = Mail(
-                    from_email=from_email,
-                    to_emails=addr,
-                    subject=final_subject,
-                    html_content=html_content,
-                )
-                response = sg.send(message)
-                last_message_id = response.headers.get("X-Message-Id", "")
-                logger.info(f"[sendgrid] Email sent to {addr}, status={response.status_code}, id={last_message_id}")
-            return {
-                "success": True,
-                "method": "sendgrid",
-                "message_id": last_message_id,
-                "to": recipients_str,
-                "count": len(recipients),
-                "is_test": is_test,
-            }
-        except Exception as e:
-            logger.error(f"[sendgrid] Send failed: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-            }
+    html_cid = render_email_html(final_subject, body, images=images, cid_map=cid_map if cid_attachments else None)
+    result = _send_via_resend(final_subject, html_cid, recipients, is_test, attachments=cid_attachments or None)
+    if result:
+        return result
 
     return {
         "success": False,
-        "error": "All email providers failed.",
+        "error": "Resend send failed. Check API key and configuration.",
     }
+
+    # --- SendGrid path (disabled — using Resend only) ---
+    # html_content = render_email_html(final_subject, body, images=images)
+    # if has_sendgrid:
+    #     try:
+    #         from sendgrid import SendGridAPIClient
+    #         from sendgrid.helpers.mail import Mail
+    #         sg = SendGridAPIClient(sg_api_key)
+    #         last_message_id = ""
+    #         for addr in recipients:
+    #             message = Mail(
+    #                 from_email=from_email,
+    #                 to_emails=addr,
+    #                 subject=final_subject,
+    #                 html_content=html_content,
+    #             )
+    #             response = sg.send(message)
+    #             last_message_id = response.headers.get("X-Message-Id", "")
+    #             logger.info(f"[sendgrid] Email sent to {addr}, status={response.status_code}, id={last_message_id}")
+    #         return {
+    #             "success": True,
+    #             "method": "sendgrid",
+    #             "message_id": last_message_id,
+    #             "to": recipients_str,
+    #             "count": len(recipients),
+    #             "is_test": is_test,
+    #         }
+    #     except Exception as e:
+    #         logger.error(f"[sendgrid] Send failed: {e}")
+    #         return {"success": False, "error": str(e)}
 
 
 def list_resend_audiences() -> list:
