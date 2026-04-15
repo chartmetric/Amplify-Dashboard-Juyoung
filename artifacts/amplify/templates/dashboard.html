@@ -3331,9 +3331,12 @@ function migrateChannelKey(ch) {
 function changeEmailLength(variantKey) {
     emailStandaloneVariant = variantKey;
     var maxChars = 1000;
+    var variantLabel = 'Medium';
     for (var i = 0; i < EMAIL_VARIANT_OPTIONS.length; i++) {
-        if (EMAIL_VARIANT_OPTIONS[i].key === variantKey) { maxChars = EMAIL_VARIANT_OPTIONS[i].maxChars; break; }
+        if (EMAIL_VARIANT_OPTIONS[i].key === variantKey) { maxChars = EMAIL_VARIANT_OPTIONS[i].maxChars; variantLabel = EMAIL_VARIANT_OPTIONS[i].label; break; }
     }
+    var nameEl = document.getElementById('ch-name-email_standalone');
+    if (nameEl) nameEl.textContent = 'Email ' + variantLabel;
     var ta = document.getElementById('ta-email_standalone');
     if (ta) ta.setAttribute('data-max', maxChars);
     var badge = document.getElementById('char-email_standalone');
@@ -3917,7 +3920,7 @@ function buildChannelCard(chKey, ch) {
         '<div class="channel-card-header">' +
             '<input type="checkbox" class="ch-select-cb" id="cb-' + chKey + '" data-channel="' + chKey + '" onchange="updateChannelSelection()" title="Select for bulk approve">' +
             '<span class="channel-icon">' + icon + '</span>' +
-            '<span class="channel-name">' + escHtml(ch.channel_display_name || chKey) + '</span>' +
+            '<span class="channel-name" id="ch-name-' + chKey + '">' + escHtml(isStandaloneEmail ? 'Email ' + EMAIL_VARIANT_OPTIONS.filter(function(v){return v.key===emailStandaloneVariant})[0].label : (ch.channel_display_name || chKey)) + '</span>' +
             lengthDropdownHtml +
             '<span class="char-count-badge ' + charClass + '" id="char-' + chKey + '">' + content.length + '/' + maxChars + '</span>' +
             (charClass === 'over' && maxChars < 9999 ? '<span class="char-over-warning" id="char-warn-' + chKey + '">(over limit)</span>' : '') +
