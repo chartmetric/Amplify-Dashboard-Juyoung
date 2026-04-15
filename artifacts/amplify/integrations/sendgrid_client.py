@@ -102,34 +102,45 @@ def render_email_html(subject: str, body: str, images: dict = None) -> str:
 
 
 def _send_via_resend(subject: str, html_content: str, to_email: str, is_test: bool) -> dict | None:
+    import time as _time
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
     if not resend_api_key or not from_email:
         return None
 
-    try:
-        import resend
-        resend.api_key = resend_api_key
+    import resend
+    resend.api_key = resend_api_key
 
-        params = {
-            "from": f"Chartmetric <{from_email}>",
-            "to": [to_email],
-            "subject": subject,
-            "html": html_content,
-        }
-        email_resp = resend.Emails.send(params)
-        email_id = email_resp.get("id", "") if isinstance(email_resp, dict) else getattr(email_resp, "id", "")
-        logger.info(f"[resend] Email sent to {to_email}, id={email_id}")
-        return {
-            "success": True,
-            "method": "resend",
-            "message_id": email_id,
-            "to": to_email,
-            "is_test": is_test,
-        }
-    except Exception as e:
-        logger.error(f"[resend] Send failed: {e}")
-        return None
+    params = {
+        "from": f"Chartmetric <{from_email}>",
+        "to": [to_email],
+        "subject": subject,
+        "html": html_content,
+    }
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            email_resp = resend.Emails.send(params)
+            email_id = email_resp.get("id", "") if isinstance(email_resp, dict) else getattr(email_resp, "id", "")
+            logger.info(f"[resend] Email sent to {to_email}, id={email_id}")
+            return {
+                "success": True,
+                "method": "resend",
+                "message_id": email_id,
+                "to": to_email,
+                "is_test": is_test,
+            }
+        except Exception as e:
+            err_str = str(e).lower()
+            if "rate" in err_str and "limit" in err_str and attempt < max_retries - 1:
+                wait = 2 ** attempt
+                logger.warning(f"[resend] Rate limited, retrying in {wait}s (attempt {attempt + 1}/{max_retries})")
+                _time.sleep(wait)
+                continue
+            logger.error(f"[resend] Send failed: {e}")
+            return None
+    return None
 
 
 def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None) -> dict:
