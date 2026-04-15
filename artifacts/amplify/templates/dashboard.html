@@ -4783,10 +4783,10 @@ function updateChannelStatus(chKey) {
             var approveBtn = actionsEl.querySelector('.btn-approve');
             if (approveBtn) approveBtn.style.display = 'none';
             var publishDdEl = actionsEl.querySelector('.publish-post-preview-dd');
+            var isEmailCh = (chKey === 'email_newsletter' || chKey === 'email_standalone');
             if (publishDdEl) {
                 var ddToggle = publishDdEl.querySelector('.dd-label');
                 var ddItems = publishDdEl.querySelectorAll('.custom-dropdown-item');
-                var isEmailCh = (chKey === 'email_newsletter' || chKey === 'email_standalone');
                 if (isEmailCh) {
                     if (ddToggle) ddToggle.textContent = 'Resend or Preview';
                     if (ddItems[0]) ddItems[0].innerHTML = 'Resend Email &#x1F4E7;';
@@ -4798,6 +4798,31 @@ function updateChannelStatus(chKey) {
                     if (ddItems[0]) ddItems[0].innerHTML = 'Repost to X &#x2192;';
                 }
                 publishDdEl.style.display = '';
+            } else if (PUBLISHABLE_CHANNELS[chKey]) {
+                var ddId = 'publish-dd-' + chKey;
+                var ddWrapper = document.createElement('div');
+                ddWrapper.className = 'custom-dropdown publish-dropdown publish-post-preview-dd';
+                ddWrapper.id = ddId;
+                if (isEmailCh) {
+                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">Resend or Preview</span><span class="dd-arrow">&#9650;</span></button>' +
+                        '<div class="custom-dropdown-menu">' +
+                        '<div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Resend Email &#x1F4E7;</div>' +
+                        '<div class="custom-dropdown-item" onclick="previewEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview HTML &#x2197;</div>' +
+                        '</div>';
+                } else if (chKey === 'inapp') {
+                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">Republish or Preview</span><span class="dd-arrow">&#9650;</span></button>' +
+                        '<div class="custom-dropdown-menu">' +
+                        '<div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Republish In-App &#x1F4F1;</div>' +
+                        '<div class="custom-dropdown-item" onclick="previewEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview &#x2197;</div>' +
+                        '</div>';
+                } else {
+                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">Repost or Preview</span><span class="dd-arrow">&#9650;</span></button>' +
+                        '<div class="custom-dropdown-menu">' +
+                        '<div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Repost to X &#x2192;</div>' +
+                        '<div class="custom-dropdown-item" onclick="previewEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview &#x2197;</div>' +
+                        '</div>';
+                }
+                actionsEl.insertBefore(ddWrapper, actionsEl.firstChild);
             }
             var publishBtn = actionsEl.querySelector('.btn-publish-channel');
             if (publishBtn) publishBtn.style.display = 'none';
