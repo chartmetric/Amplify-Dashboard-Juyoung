@@ -148,27 +148,41 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
     import resend
     resend.api_key = resend_api_key
 
-    params = {
-        "from": f"Chartmetric <{from_email}>",
-        "to": to_emails,
-        "subject": subject,
-        "html": html_content,
-    }
-    if attachments:
-        params["attachments"] = attachments
+    sender = f"Chartmetric <{from_email}>"
+    email_list = []
+    for addr in to_emails:
+        params = {
+            "from": sender,
+            "to": [addr],
+            "subject": subject,
+            "html": html_content,
+        }
+        if attachments:
+            params["attachments"] = attachments
+        email_list.append(params)
 
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            email_resp = resend.Emails.send(params)
-            email_id = email_resp.get("id", "") if isinstance(email_resp, dict) else getattr(email_resp, "id", "")
+            if len(email_list) == 1:
+                email_resp = resend.Emails.send(email_list[0])
+                ids = [email_resp.get("id", "") if isinstance(email_resp, dict) else getattr(email_resp, "id", "")]
+            else:
+                batch_resp = resend.Batch.send(email_list)
+                if isinstance(batch_resp, dict):
+                    ids = [item.get("id", "") for item in batch_resp.get("data", [])]
+                elif isinstance(batch_resp, list):
+                    ids = [getattr(item, "id", "") if not isinstance(item, dict) else item.get("id", "") for item in batch_resp]
+                else:
+                    ids = [str(batch_resp)]
             to_str = ", ".join(to_emails)
-            logger.info(f"[resend] Email sent to {to_str}, id={email_id}")
+            logger.info(f"[resend] Sent {len(to_emails)} individual email(s) to {to_str}, ids={ids}")
             return {
                 "success": True,
                 "method": "resend",
-                "message_id": email_id,
+                "message_id": ids[0] if ids else "",
                 "to": to_str,
+                "count": len(to_emails),
                 "is_test": is_test,
             }
         except Exception as e:
@@ -230,23 +244,25 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
             from sendgrid import SendGridAPIClient
             from sendgrid.helpers.mail import Mail
 
-            message = Mail(
-                from_email=from_email,
-                to_emails=recipients,
-                subject=final_subject,
-                html_content=html_content,
-            )
             sg = SendGridAPIClient(sg_api_key)
-            response = sg.send(message)
-            message_id = response.headers.get("X-Message-Id", "")
-            logger.info(f"[sendgrid] Email sent to {recipients_str}, status={response.status_code}, id={message_id}")
+            last_message_id = ""
+            for addr in recipients:
+                message = Mail(
+                    from_email=from_email,
+                    to_emails=addr,
+                    subject=final_subject,
+                    html_content=html_content,
+                )
+                response = sg.send(message)
+                last_message_id = response.headers.get("X-Message-Id", "")
+                logger.info(f"[sendgrid] Email sent to {addr}, status={response.status_code}, id={last_message_id}")
             return {
                 "success": True,
                 "method": "sendgrid",
-                "message_id": message_id,
+                "message_id": last_message_id,
                 "to": recipients_str,
+                "count": len(recipients),
                 "is_test": is_test,
-                "status_code": response.status_code,
             }
         except Exception as e:
             logger.error(f"[sendgrid] Send failed: {e}")
@@ -259,3 +275,39 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
         "success": False,
         "error": "All email providers failed.",
     }
+
+
+def list_resend_audiences() -> list:
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    if not resend_api_key:
+        return []
+    import resend
+    resend.api_key = resend_api_key
+    try:
+        resp = resend.Audiences.list()
+        if isinstance(resp, dict):
+            return resp.get("data", [])
+        elif isinstance(resp, list):
+            return resp
+        return [resp] if resp else []
+    except Exception as e:
+        logger.error(f"[resend] Failed to list audiences: {e}")
+        return []
+
+
+def list_resend_contacts(audience_id: str) -> list:
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    if not resend_api_key:
+        return []
+    import resend
+    resend.api_key = resend_api_key
+    try:
+        resp = resend.Contacts.list(audience_id=audience_id)
+        if isinstance(resp, dict):
+            return resp.get("data", [])
+        elif isinstance(resp, list):
+            return resp
+        return [resp] if resp else []
+    except Exception as e:
+        logger.error(f"[resend] Failed to list contacts for audience {audience_id}: {e}")
+        return []

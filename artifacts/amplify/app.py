@@ -1585,6 +1585,15 @@ def publish_email():
             subject = "Chartmetric Product Update"
 
     images = data.get("images", None)
+
+    if to_email:
+        recipient_count = len([e for e in to_email.split(",") if e.strip()])
+        max_recipients = 2000
+        if recipient_count > max_recipients:
+            return jsonify({"success": False, "error": f"Too many recipients ({recipient_count}). Maximum is {max_recipients}."}), 400
+        if recipient_count > 5 and is_test:
+            return jsonify({"success": False, "error": "Cannot send to more than 5 recipients in test mode. Select an audience to send to a larger group."}), 400
+
     result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images)
     if result.get("success") and result.get("method") in ("sendgrid", "resend") and feature_id:
         mark_published(feature_id, channel)
@@ -1608,6 +1617,21 @@ def preview_email():
 
     html = render_email_html(subject, content, images=images)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/api/resend/audiences", methods=["GET"])
+def get_resend_audiences():
+    from integrations.sendgrid_client import list_resend_audiences
+    audiences = list_resend_audiences()
+    return jsonify({"success": True, "audiences": audiences}), 200
+
+
+@app.route("/api/resend/audiences/<audience_id>/contacts", methods=["GET"])
+def get_resend_contacts(audience_id):
+    from integrations.sendgrid_client import list_resend_contacts
+    contacts = list_resend_contacts(audience_id)
+    subscribed = [{"email": c.get("email", "")} for c in contacts if not c.get("unsubscribed", False) and c.get("email")]
+    return jsonify({"success": True, "contacts": subscribed, "total": len(subscribed)}), 200
 
 
 @app.route("/api/publish/inapp", methods=["POST"])

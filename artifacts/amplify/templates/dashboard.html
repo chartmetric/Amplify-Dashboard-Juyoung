@@ -3782,6 +3782,7 @@ function enterContentView(feature) {
                 card.classList.add('fade-in-up');
                 card.style.animationDelay = (idx * 100) + 'ms';
                 grid.appendChild(card);
+                if (chKey === 'email_standalone') loadResendAudiences(chKey);
                 if (contentViewApproved[chKey]) updateChannelStatus(chKey);
                 if (contentViewPublished[chKey]) updateChannelStatus(chKey);
                 idx++;
@@ -3840,6 +3841,7 @@ function buildChannelCard(chKey, ch) {
             '</label>' +
         '</div>' +
         (isEmail ? '<div class="email-subject-row" style="padding:8px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Subject</label><input type="text" id="subject-' + chKey + '" class="email-subject-input" value="' + escHtml(emailSubject) + '" placeholder="Email subject line" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
+        (isEmail && chKey === 'email_standalone' ? '<div class="email-audience-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Send To</label><div style="display:flex;gap:6px;align-items:center;"><select id="audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onAudienceChange(\'' + chKey + '\')"><option value="">Test recipients only</option></select><span id="audience-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div></div>' : '') +
         '<div class="channel-card-body">' +
             '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(bodyContent) + '</textarea>' +
             '<div class="md-preview" id="md-preview-' + chKey + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(bodyContent, {isEmail: isEmail}) + '</div>' +
@@ -4513,6 +4515,69 @@ function restoreImageIncludes(fid, keys) {
 
 var contentViewImageMap = {};
 var imageUndoStack = [];
+var resendAudiences = null;
+var selectedAudience = {};
+var audienceContacts = {};
+
+function loadResendAudiences(chKey) {
+    var sel = document.getElementById('audience-' + chKey);
+    if (!sel) return;
+    if (resendAudiences !== null) {
+        populateAudienceDropdown(chKey, resendAudiences);
+        return;
+    }
+    sel.innerHTML = '<option value="">Loading audiences...</option>';
+    fetch('/api/resend/audiences')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        resendAudiences = data.audiences || [];
+        populateAudienceDropdown(chKey, resendAudiences);
+    })
+    .catch(function() {
+        resendAudiences = [];
+        sel.innerHTML = '<option value="">Test recipients only</option>';
+    });
+}
+
+function populateAudienceDropdown(chKey, audiences) {
+    var sel = document.getElementById('audience-' + chKey);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Test recipients only</option>';
+    for (var i = 0; i < audiences.length; i++) {
+        var a = audiences[i];
+        var id = a.id || '';
+        var name = a.name || id;
+        sel.innerHTML += '<option value="' + escHtml(id) + '">' + escHtml(name) + '</option>';
+    }
+    if (selectedAudience[chKey]) {
+        sel.value = selectedAudience[chKey];
+    }
+}
+
+function onAudienceChange(chKey) {
+    var sel = document.getElementById('audience-' + chKey);
+    var countSpan = document.getElementById('audience-count-' + chKey);
+    if (!sel) return;
+    var audienceId = sel.value;
+    selectedAudience[chKey] = audienceId;
+    if (!audienceId) {
+        if (countSpan) countSpan.textContent = '';
+        audienceContacts[chKey] = null;
+        return;
+    }
+    if (countSpan) countSpan.textContent = 'Loading...';
+    fetch('/api/resend/audiences/' + audienceId + '/contacts')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var contacts = data.contacts || [];
+        audienceContacts[chKey] = contacts;
+        if (countSpan) countSpan.textContent = contacts.length + ' contact' + (contacts.length !== 1 ? 's' : '');
+    })
+    .catch(function() {
+        audienceContacts[chKey] = null;
+        if (countSpan) countSpan.textContent = 'Error loading';
+    });
+}
 
 function formatFileSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
@@ -5083,13 +5148,26 @@ function doPublishToChannel(chKey) {
 
     if (isEmail) {
         payload.channel = chKey;
-        payload.is_test = true;
         var subjectInput = document.getElementById('subject-' + chKey);
         var subjectVal = subjectInput ? subjectInput.value.trim() : '';
         if (subjectVal) payload.subject = subjectVal;
         var imgMap = contentViewImageMap[chKey];
         if (imgMap && Object.keys(imgMap).length > 0) {
             payload.images = imgMap;
+        }
+        var audContacts = audienceContacts[chKey];
+        var audSel = document.getElementById('audience-' + chKey);
+        var audId = audSel ? audSel.value : '';
+        if (audId && audContacts && audContacts.length > 0) {
+            var emails = [];
+            for (var ci = 0; ci < audContacts.length; ci++) {
+                var email = audContacts[ci].email;
+                if (email) emails.push(email);
+            }
+            payload.to_email = emails.join(',');
+            payload.is_test = false;
+        } else {
+            payload.is_test = true;
         }
     } else if (isInapp) {
         payload.feature_title = contentViewFeature ? (contentViewFeature.title || '') : '';
@@ -5134,8 +5212,11 @@ function doPublishToChannel(chKey) {
             var fid2 = contentViewFeature ? (contentViewFeature.id || '') : '';
             trackPublish(fid2, chKey, 'posted');
             updateChannelStatus(chKey);
-            var sentTo = data.to || '';
-            showToast(sentTo ? 'Email sent successfully to ' + sentTo + ' \u2705' : 'Email sent successfully! \u2705');
+            var sentCount = data.count || 1;
+            var toastMsg = sentCount > 2
+                ? 'Email sent to ' + sentCount + ' recipients \u2705'
+                : (data.to ? 'Email sent to ' + data.to + ' \u2705' : 'Email sent successfully! \u2705');
+            showToast(toastMsg);
             return;
         }
         if (data.method === 'fallback') {
@@ -5271,7 +5352,14 @@ function publishToChannel(chKey, skipConfirm) {
     if (skipConfirm) {
         doPublishToChannel(chKey);
     } else if (isEmail) {
+        var audSel = document.getElementById('audience-' + chKey);
+        var audId = audSel ? audSel.value : '';
+        var audContacts = audienceContacts[chKey];
         var msg = 'Send this email via Resend?';
+        if (audId && audContacts && audContacts.length > 0) {
+            var audName = audSel.options[audSel.selectedIndex].text;
+            msg = 'Send this email to "' + audName + '" (' + audContacts.length + ' contacts) via Resend? Each contact will receive an individual email.';
+        }
         showPublishConfirm(msg, function() {
             doPublishToChannel(chKey);
         }, { title: 'Send Email', icon: '\uD83D\uDCE7', confirmText: 'Yes, send it' });
