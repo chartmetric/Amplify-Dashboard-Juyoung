@@ -202,19 +202,26 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
         feedback_section = f"FEEDBACK ON PREVIOUS DRAFT \u2014 please improve based on this: {feedback}"
 
     current_content_section = ""
-    if current_content and feedback:
+    if current_content:
         import re as _re
         has_images = bool(_re.search(r'\[image:\s*[^\]]+\]', current_content))
         has_links = bool(_re.search(r'\[([^\]]+)\]\((https?://[^\)]+)\)', current_content))
         preserve_parts = []
         if has_images:
-            preserve_parts.append("image markers (lines like [image: filename.png])")
+            preserve_parts.append("image markers (lines like [image: filename.png]) — copy them VERBATIM into your output")
         if has_links:
-            preserve_parts.append("markdown hyperlinks (like [text](url))")
+            preserve_parts.append("markdown hyperlinks (like [text](url)) — copy them VERBATIM into your output")
         preserve_note = ""
         if preserve_parts:
-            preserve_note = f"\nIMPORTANT: You MUST preserve these elements exactly as they appear in the current draft: {', '.join(preserve_parts)}. Keep them in the same position within the content. Only change the text around them."
-        current_content_section = f"CURRENT DRAFT (revise this based on feedback above):\n{current_content}{preserve_note}"
+            preserve_note = (
+                f"\n\n⚠️ CRITICAL PRESERVATION RULES — FAILURE TO FOLLOW THESE WILL BREAK THE EMAIL:\n"
+                f"1. You MUST include these elements EXACTLY as they appear in the current draft: {', '.join(preserve_parts)}.\n"
+                f"2. Do NOT remove, rephrase, or omit any [image: ...] marker or [text](url) link.\n"
+                f"3. Keep them in approximately the same position within the content.\n"
+                f"4. Only revise the surrounding text based on the feedback. The markers and links are non-negotiable."
+            )
+        context_label = "CURRENT DRAFT (revise this based on feedback above):" if feedback else "CURRENT DRAFT (use as reference — preserve structure, images, and links):"
+        current_content_section = f"{context_label}\n{current_content}{preserve_note}"
 
     examples = FEW_SHOT_EXAMPLES.get(channel_key, [])[:3]
     few_shot_section = ""

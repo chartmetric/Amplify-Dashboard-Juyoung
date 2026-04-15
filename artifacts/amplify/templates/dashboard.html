@@ -4021,6 +4021,14 @@ function regenerateChannel(chKey) {
 
     var currentTa = document.getElementById('ta-' + chKey);
     var currentContent = currentTa ? currentTa.value : '';
+    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+    if (isEmail) {
+        var subjectInput = document.getElementById('subject-' + chKey);
+        var subjectVal = subjectInput ? subjectInput.value.trim() : '';
+        if (subjectVal) {
+            currentContent = 'Subject: ' + subjectVal + '\n\n' + currentContent;
+        }
+    }
 
     fetch('/api/generate/single', {
         method: 'POST',
