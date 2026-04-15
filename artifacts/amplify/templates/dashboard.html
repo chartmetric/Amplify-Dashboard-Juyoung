@@ -1517,6 +1517,7 @@
             <div class="feature-image-upload" id="feature-image-upload">
                 <button class="btn-feature-image" id="btn-feature-image" onclick="triggerFeatureImagePicker()">&#128247; Upload</button>
                 <button class="btn-feature-image btn-paste-image" id="btn-paste-image" onclick="pasteFeatureImageFromClipboard()">&#128203; Paste</button>
+                <button class="btn-feature-image" id="btn-add-video" onclick="promptVideoUrl()" style="background:#6c63ff;">&#127910; Video</button>
             </div>
             <div class="feature-image-preview" id="feature-image-preview" style="display:none;"></div>
         </div>
@@ -3994,14 +3995,34 @@ function simpleMarkdown(text, opts) {
             content = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
             content = content.replace(/\*(.+?)\*/g, '<em>$1</em>');
             result.push('<h' + level + '>' + content + '</h' + level + '>');
-        } else if (isEmail && !firstTextDone && lines[i].trim() !== '' && !/^\[image: [^\]]+\]$/.test(lines[i].trim())) {
+        } else if (isEmail && !firstTextDone && lines[i].trim() !== '' && !/^\[image: [^\]]+\]$/.test(lines[i].trim()) && !/^\[video:\s*[^\]]+\]$/.test(lines[i].trim())) {
             flushPara();
             firstTextDone = true;
             result.push('<h3 style="margin:0 0 12px 0;font-weight:700;color:inherit;">' + line + '</h3>');
+        } else if (/^\[video:\s*[^\]]+\]$/.test(lines[i].trim())) {
+            flushPara();
+            var vidUrl = lines[i].trim().match(/\[video:\s*([^\]]+)\]/)[1].trim();
+            if (!/^https?:\/\//i.test(vidUrl)) {
+                result.push('<p style="color:var(--text-dim);font-style:italic;">[video: invalid URL]</p>');
+                continue;
+            }
+            var thumbUrl = getVideoThumbnail(vidUrl);
+            result.push(
+                '<div style="margin:8px 0;text-align:center;">' +
+                '<a href="' + escHtml(vidUrl) + '" target="_blank" rel="noopener noreferrer" style="display:inline-block;position:relative;text-decoration:none;">' +
+                '<img src="' + escHtml(thumbUrl) + '" alt="Video thumbnail" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;display:block;">' +
+                '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;background:rgba(0,0,0,0.7);border-radius:50%;display:flex;align-items:center;justify-content:center;">' +
+                '<span style="width:0;height:0;border-style:solid;border-width:10px 0 10px 18px;border-color:transparent transparent transparent #fff;margin-left:3px;display:inline-block;"></span>' +
+                '</span>' +
+                '</a>' +
+                '</div>'
+            );
         } else if (/^\[image: [^\]]+\]$/.test(lines[i].trim())) {
             flushPara();
             var imgName = lines[i].trim().match(/\[image: ([^\]]+)\]/)[1];
-            if (contentViewFeatureImage && contentViewFeatureImage.dataUrl) {
+            if (/^https?:\/\/.+/i.test(imgName.trim())) {
+                result.push('<div style="margin:8px 0;"><img src="' + escHtml(imgName.trim()) + '" alt="Image" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;"></div>');
+            } else if (contentViewFeatureImage && contentViewFeatureImage.dataUrl) {
                 result.push('<div style="margin:8px 0;"><img src="' + contentViewFeatureImage.dataUrl + '" alt="' + escHtml(imgName) + '" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;"></div>');
             } else {
                 result.push('<p style="color:var(--text-dim);font-style:italic;">[image: ' + escHtml(imgName) + ']</p>');
@@ -4345,11 +4366,42 @@ function getPersistedImageInclude(fid, chKey) {
 
 function triggerFeatureImagePicker() {
     var input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*';
+    input.type = 'file'; input.accept = 'image/*,.gif';
     input.onchange = function() {
         if (input.files && input.files[0]) handleImageFile(input.files[0], null, false, null);
     };
     input.click();
+}
+
+function promptVideoUrl() {
+    var url = prompt('Enter a video URL (YouTube, Vimeo, or direct .mp4 link):');
+    if (!url || !url.trim()) return;
+    url = url.trim();
+    if (!/^https?:\/\//i.test(url)) {
+        showToast('Please enter a valid URL starting with http:// or https://', 'warning');
+        return;
+    }
+    var emailKeys = ['email_newsletter', 'email_standalone', 'email_short', 'email_medium', 'email_long'];
+    var allChKeys = Object.keys(contentViewChannels);
+    var addedCount = 0;
+    for (var i = 0; i < allChKeys.length; i++) {
+        var chKey = allChKeys[i];
+        if (emailKeys.indexOf(chKey) === -1 && chKey.indexOf('email') === -1) continue;
+        var ta = document.getElementById('ta-' + chKey);
+        if (ta) {
+            var marker = '\n[video: ' + url + ']';
+            ta.value = ta.value.replace(/\s+$/, '') + marker;
+            ta.dispatchEvent(new Event('input'));
+            autoSaveDraft(chKey);
+            switchToPreview(chKey);
+            addedCount++;
+        }
+    }
+    if (addedCount === 0) {
+        showToast('No email channels found to add video to', 'warning');
+    } else {
+        showToast('Video link added to ' + addedCount + ' email channel' + (addedCount > 1 ? 's' : ''), 'success');
+    }
 }
 
 function pasteFeatureImageFromClipboard() {
@@ -4623,7 +4675,7 @@ document.addEventListener('keydown', function(e) {
 
 function triggerImagePicker(chKey, isBatch, batchIdx) {
     var input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*';
+    input.type = 'file'; input.accept = 'image/*,.gif';
     input.onchange = function() {
         if (input.files && input.files[0]) handleImageFile(input.files[0], chKey, isBatch, batchIdx);
     };
@@ -7058,6 +7110,14 @@ function genallShowPublishDone(results, btn) {
 function stripMarkdownLinks(text) {
     if (!text) return '';
     return text.replace(/\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '$2');
+}
+
+function getVideoThumbnail(url) {
+    var ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+    if (ytMatch) return 'https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg';
+    var vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+    if (vimeoMatch) return 'https://vumbnail.com/' + vimeoMatch[1] + '.jpg';
+    return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" fill="%23222"><rect width="320" height="180" rx="8" fill="%23e0e0e0"/><text x="160" y="95" text-anchor="middle" font-family="sans-serif" font-size="14" fill="%23999">Video</text></svg>');
 }
 
 function escHtml(str) {

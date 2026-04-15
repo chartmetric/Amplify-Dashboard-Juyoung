@@ -460,6 +460,14 @@ function esc(s) {
   return d.innerHTML;
 }
 
+function getVideoThumbnail(url) {
+  var ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+  if (ytMatch) return 'https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg';
+  var vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeoMatch) return 'https://vumbnail.com/' + vimeoMatch[1] + '.jpg';
+  return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" rx="8" fill="%23e0e0e0"/><text x="160" y="95" text-anchor="middle" font-family="sans-serif" font-size="14" fill="%23999">Video</text></svg>');
+}
+
 function simpleMarkdown(text) {
   var html = esc(text);
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
@@ -472,6 +480,26 @@ function simpleMarkdown(text) {
       return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
     }
     return text;
+  });
+  html = html.replace(/\[video:\s*([^\]]+)\]/g, function(m, url) {
+    url = url.trim();
+    if (!/^https?:\/\//i.test(url)) return '<p style="color:#999;font-style:italic;">[video: invalid URL]</p>';
+    var thumbUrl = getVideoThumbnail(url);
+    return '<div style="margin:8px 0;text-align:center;">' +
+      '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" style="display:inline-block;position:relative;text-decoration:none;">' +
+      '<img src="' + esc(thumbUrl) + '" alt="Video thumbnail" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;display:block;">' +
+      '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;background:rgba(0,0,0,0.7);border-radius:50%;display:flex;align-items:center;justify-content:center;">' +
+      '<span style="width:0;height:0;border-style:solid;border-width:10px 0 10px 18px;border-color:transparent transparent transparent #fff;margin-left:3px;display:inline-block;"></span>' +
+      '</span>' +
+      '</a>' +
+      '</div>';
+  });
+  html = html.replace(/\[image:\s*([^\]]+)\]/g, function(m, name) {
+    name = name.trim();
+    if (/^https?:\/\//i.test(name)) {
+      return '<div style="margin:8px 0;"><img src="' + esc(name) + '" alt="Image" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;"></div>';
+    }
+    return '<p style="color:#999;font-style:italic;">[image: ' + esc(name) + ']</p>';
   });
   html = html.replace(/\n/g, '<br>');
   return html;

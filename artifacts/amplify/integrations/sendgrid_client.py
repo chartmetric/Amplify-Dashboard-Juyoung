@@ -61,6 +61,17 @@ def _build_cid_attachments(images: dict) -> tuple:
     return cid_map, attachments
 
 
+def _get_video_thumbnail(url: str) -> str:
+    import re as _re
+    yt = _re.search(r'(?:youtube\.com/(?:watch\?v=|embed/|shorts/)|youtu\.be/)([\w-]{11})', url)
+    if yt:
+        return f'https://img.youtube.com/vi/{yt.group(1)}/hqdefault.jpg'
+    vimeo = _re.search(r'vimeo\.com/(\d+)', url)
+    if vimeo:
+        return f'https://vumbnail.com/{vimeo.group(1)}.jpg'
+    return 'https://via.placeholder.com/480x270/e0e0e0/999999?text=Video'
+
+
 def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None) -> str:
     import re
     safe_subject = _esc(subject)
@@ -72,12 +83,30 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
         stripped = line.strip()
         if not stripped:
             body_html += "<br>"
-        elif not first_text_done and not re.match(r'^\[image:\s*(.+)\]$', stripped) and not stripped.startswith('#'):
+        elif not first_text_done and not re.match(r'^\[image:\s*(.+)\]$', stripped) and not re.match(r'^\[video:\s*(.+)\]$', stripped) and not stripped.startswith('#'):
             first_text_done = True
             body_html += f'<h2 style="margin:0 0 20px 0;color:#1a1d23;font-size:22px;font-weight:700;">{_inline_markdown(stripped)}</h2>'
+        elif re.match(r'^\[video:\s*(.+)\]$', stripped):
+            vid_url = re.match(r'^\[video:\s*(.+)\]$', stripped).group(1).strip()
+            if not re.match(r'^https?://', vid_url, re.IGNORECASE):
+                body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Video: invalid URL]</p>'
+                continue
+            thumb_url = _get_video_thumbnail(vid_url)
+            body_html += (
+                f'<div style="text-align:center;margin:16px 0;">'
+                f'<a href="{_esc(vid_url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">'
+                f'<img src="{_esc(thumb_url)}" alt="Video thumbnail" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto;">'
+                f'<div style="margin-top:-60px;margin-bottom:20px;position:relative;">'
+                f'<span style="display:inline-block;width:48px;height:48px;background:rgba(0,0,0,0.7);border-radius:50%;line-height:48px;text-align:center;font-size:20px;color:#fff;">&#9654;</span>'
+                f'</div>'
+                f'</a>'
+                f'</div>'
+            )
         elif re.match(r'^\[image:\s*(.+)\]$', stripped):
             img_name = re.match(r'^\[image:\s*(.+)\]$', stripped).group(1).strip()
-            if cid_map and img_name in cid_map:
+            if re.match(r'^https?://', img_name, re.IGNORECASE):
+                body_html += f'<div style="margin:16px 0;"><img src="{_esc(img_name)}" alt="Image" style="max-width:100%;height:auto;border-radius:6px;display:block;"></div>'
+            elif cid_map and img_name in cid_map:
                 cid = cid_map[img_name]
                 body_html += f'<div style="margin:16px 0;"><img src="cid:{cid}" alt="{_esc(img_name)}" style="max-width:100%;height:auto;border-radius:6px;display:block;"></div>'
             elif image_map.get(img_name):
