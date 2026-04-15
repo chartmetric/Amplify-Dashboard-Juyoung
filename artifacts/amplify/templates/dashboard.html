@@ -3926,8 +3926,18 @@ function enterContentView(feature) {
                 card.style.animationDelay = (idx * 100) + 'ms';
                 grid.appendChild(card);
                 var isEmailCh = (chKey === 'email_newsletter' || chKey === 'email_standalone');
-                if (chKey === 'email_standalone') loadResendAudiences(chKey);
-                if (chKey === 'email_standalone') loadResendTemplates(chKey);
+                if (chKey === 'email_standalone') {
+                    loadResendAudiences(chKey);
+                    loadResendTemplates(chKey);
+                    var savedSubject = localStorage.getItem('ampSubject:' + chKey);
+                    var savedFromName = localStorage.getItem('ampFromName:' + chKey);
+                    var subjectEl = document.getElementById('subject-' + chKey);
+                    var fromNameEl = document.getElementById('fromname-' + chKey);
+                    if (savedSubject && subjectEl) subjectEl.value = savedSubject;
+                    if (savedFromName && fromNameEl) fromNameEl.value = savedFromName;
+                    if (subjectEl) subjectEl.addEventListener('input', function() { localStorage.setItem('ampSubject:' + chKey, this.value); });
+                    if (fromNameEl) fromNameEl.addEventListener('input', function() { localStorage.setItem('ampFromName:' + chKey, this.value); });
+                }
                 if (contentViewApproved[chKey]) updateChannelStatus(chKey);
                 if (contentViewPublished[chKey]) updateChannelStatus(chKey);
                 idx++;
