@@ -138,8 +138,11 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
     test_email = os.environ.get("SENDGRID_TEST_EMAIL", "") or os.environ.get("RESEND_FROM_EMAIL", "")
 
-    if not resend_api_key and (not sg_api_key or not from_email):
-        logger.warning("[email] No email provider configured (RESEND_API_KEY or SENDGRID_API_KEY)")
+    has_resend = bool(resend_api_key and from_email)
+    has_sendgrid = bool(sg_api_key and from_email)
+
+    if not has_resend and not has_sendgrid:
+        logger.warning("[email] No email provider configured (need RESEND_API_KEY+RESEND_FROM_EMAIL or SENDGRID_API_KEY+SENDGRID_FROM_EMAIL)")
         preview_html = render_email_html(subject, body, images=images)
         return {
             "success": True,
@@ -162,13 +165,13 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     final_subject = f"[TEST] {subject}" if is_test else subject
     html_content = render_email_html(final_subject, body, images=images)
 
-    if resend_api_key:
+    if has_resend:
         result = _send_via_resend(final_subject, html_content, recipient, is_test)
         if result:
             return result
         logger.warning("[email] Resend failed, falling back to SendGrid")
 
-    if sg_api_key and from_email:
+    if has_sendgrid:
         try:
             from sendgrid import SendGridAPIClient
             from sendgrid.helpers.mail import Mail
