@@ -3819,6 +3819,9 @@ function buildChannelCard(chKey, ch) {
             emailSubject = lines[0].substring(8).trim();
             bodyContent = lines.slice(1).join('\n').replace(/^\n+/, '');
         }
+        if (!emailSubject) {
+            emailSubject = (contentViewFeature && contentViewFeature.title) ? contentViewFeature.title : 'Chartmetric Product Update';
+        }
     }
 
     card.innerHTML =
@@ -3981,7 +3984,7 @@ function simpleMarkdown(text, opts) {
         } else if (isEmail && !firstTextDone && lines[i].trim() !== '' && !/^\[image: [^\]]+\]$/.test(lines[i].trim())) {
             flushPara();
             firstTextDone = true;
-            result.push('<h3 style="margin:0 0 12px 0;font-weight:700;color:#1a1d23;">' + line + '</h3>');
+            result.push('<h3 style="margin:0 0 12px 0;font-weight:700;color:inherit;">' + line + '</h3>');
         } else if (/^\[image: [^\]]+\]$/.test(lines[i].trim())) {
             flushPara();
             var imgName = lines[i].trim().match(/\[image: ([^\]]+)\]/)[1];
