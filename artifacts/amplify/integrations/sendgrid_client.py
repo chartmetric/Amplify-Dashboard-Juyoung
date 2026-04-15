@@ -144,8 +144,11 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
                 bare_url = re.search(r'(https?://\S+)', stripped)
                 if md_link:
                     url = _esc(md_link.group(2))
-                    rest = stripped[:md_link.start()] + stripped[md_link.end():]
-                    label = _esc(rest.strip().rstrip('.').rstrip(':').strip() or md_link.group(1))
+                    link_text = md_link.group(1).strip()
+                    rest = (stripped[:md_link.start()] + stripped[md_link.end():]).strip().rstrip('.').rstrip(':').strip()
+                    label = _esc(link_text or rest or "Try it now")
+                    if rest:
+                        body_html += f'<p style="margin:0 0 4px 0;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(rest)}</p>'
                     body_html += f'<div style="text-align:center;margin:24px 0;"><a href="{url}" style="display:inline-block;background:#00C9A7;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:700;font-size:15px;">{label}</a></div>'
                 elif bare_url:
                     url = _esc(bare_url.group(1).rstrip(').,;'))
