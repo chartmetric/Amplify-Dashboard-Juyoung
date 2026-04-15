@@ -1913,6 +1913,28 @@ def serve_video_thumb(video_id):
     return send_file(thumb_path, mimetype="image/jpeg")
 
 
+@app.route("/api/features/<feature_id>/videos")
+def get_feature_videos(feature_id):
+    vids = list_feature_videos(feature_id)
+    base = os.environ.get("REPLIT_DEV_DOMAIN", "")
+    scheme = "https" if base else "http"
+    if not base:
+        base = "localhost:5000"
+    result = []
+    for v in vids:
+        vid_id = v.get("video_id", "")
+        fname = v.get("filename", "")
+        has_thumb = v.get("has_thumb", True)
+        if vid_id and fname:
+            result.append({
+                "video_id": vid_id,
+                "filename": fname,
+                "thumb_url": f"{scheme}://{base}/api/videos/{vid_id}/thumb" if has_thumb else "https://via.placeholder.com/640x360/222222/999999?text=Video",
+                "video_url": f"{scheme}://{base}/api/videos/{vid_id}",
+            })
+    return jsonify(result), 200
+
+
 @app.route("/api/generate", methods=["POST"])
 def generate_content_endpoint():
     """Generate content for one feature across multiple channels.

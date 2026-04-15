@@ -3698,6 +3698,30 @@ function enterContentView(feature) {
     window.contentViewVideos = {};
     imageUndoStack = [];
 
+    if (feature && feature.id) {
+      fetch('/api/features/' + encodeURIComponent(feature.id) + '/videos')
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(vids) {
+          if (Array.isArray(vids)) {
+            vids.forEach(function(v) {
+              if (v.filename && v.thumb_url && v.video_url) {
+                window.contentViewVideos[v.filename] = { thumb_url: v.thumb_url, video_url: v.video_url };
+              }
+            });
+            if (vids.length > 0) {
+              document.querySelectorAll('.channel-card').forEach(function(card) {
+                var ta = card.querySelector('textarea');
+                if (ta && ta.value && ta.value.indexOf('[video:') !== -1) {
+                  var previewEl = card.querySelector('.content-preview');
+                  if (previewEl) previewEl.innerHTML = simpleMarkdown(ta.value);
+                }
+              });
+            }
+          }
+        })
+        .catch(function() {});
+    }
+
     document.querySelector('.main').style.display = 'none';
     var contentView = document.getElementById('content-view');
     contentView.style.display = 'block';
