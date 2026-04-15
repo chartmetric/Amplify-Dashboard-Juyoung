@@ -4475,6 +4475,10 @@ function restoreImageIncludes(fid, keys) {
             if (wasPersisted && !hasMarker) {
                 addImageMarkerToChannel(chKey);
                 autoSaveDraft(chKey);
+            } else if (hasMarker) {
+                if (!contentViewImageMap) window.contentViewImageMap = {};
+                if (!contentViewImageMap[chKey]) contentViewImageMap[chKey] = {};
+                contentViewImageMap[chKey][contentViewFeatureImage.name] = contentViewFeatureImage.dataUrl;
             }
         }
     }
