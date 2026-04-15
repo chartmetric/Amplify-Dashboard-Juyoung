@@ -5110,7 +5110,8 @@ function doPublishToChannel(chKey) {
             var fid2 = contentViewFeature ? (contentViewFeature.id || '') : '';
             trackPublish(fid2, chKey, 'posted');
             updateChannelStatus(chKey);
-            showToast('Email sent successfully! \u2705');
+            var sentTo = data.to || '';
+            showToast(sentTo ? 'Email sent successfully to ' + sentTo + ' \u2705' : 'Email sent successfully! \u2705');
             return;
         }
         if (data.method === 'fallback') {
