@@ -7,3 +7,4 @@ python-dotenv
 waitress
 tweepy
 sendgrid
+resend
