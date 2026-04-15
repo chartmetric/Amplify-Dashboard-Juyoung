@@ -1894,6 +1894,7 @@ def generate_single_endpoint():
 
     custom_instructions = data.get("custom_instructions", "")
     feedback = data.get("feedback", "")
+    current_content = data.get("current_content", "")
 
     try:
         print(f"[generate/single] Regenerating '{feature.get('title', 'unknown')}' for channel '{channel}' (feedback: {bool(feedback)})", flush=True)
@@ -1901,6 +1902,7 @@ def generate_single_endpoint():
             feature, channel,
             custom_instructions=custom_instructions or None,
             feedback=feedback or None,
+            current_content=current_content or None,
             skip_cache=True,
         )
         _inc_generate(1)

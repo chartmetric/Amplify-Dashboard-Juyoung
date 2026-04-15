@@ -4006,13 +4006,17 @@ function regenerateChannel(chKey) {
     if (actionsEl) actionsEl.style.display = 'none';
     if (loadingEl) loadingEl.style.display = 'flex';
 
+    var currentTa = document.getElementById('ta-' + chKey);
+    var currentContent = currentTa ? currentTa.value : '';
+
     fetch('/api/generate/single', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             feature: contentViewFeature,
             channel: chKey,
-            feedback: feedback
+            feedback: feedback,
+            current_content: currentContent
         })
     })
     .then(function(r) { return r.json(); })

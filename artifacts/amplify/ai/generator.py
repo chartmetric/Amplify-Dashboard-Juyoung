@@ -140,10 +140,12 @@ EXPECTED OUTPUT FORMAT: {example_output_format}
 
 {feedback_section}
 
+{current_content_section}
+
 Generate the content now. Output ONLY the final content, nothing else."""
 
 
-def generate_for_channel(feature_data: dict, channel_key: str, custom_instructions: str = None, feedback: str = None, skip_cache: bool = False) -> dict:
+def generate_for_channel(feature_data: dict, channel_key: str, custom_instructions: str = None, feedback: str = None, current_content: str = None, skip_cache: bool = False) -> dict:
     feature_id = feature_data.get("id", "")
 
     if not skip_cache and not feedback and not custom_instructions and feature_id:
@@ -199,6 +201,21 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
     if feedback:
         feedback_section = f"FEEDBACK ON PREVIOUS DRAFT \u2014 please improve based on this: {feedback}"
 
+    current_content_section = ""
+    if current_content and feedback:
+        import re as _re
+        has_images = bool(_re.search(r'\[image:\s*[^\]]+\]', current_content))
+        has_links = bool(_re.search(r'\[([^\]]+)\]\((https?://[^\)]+)\)', current_content))
+        preserve_parts = []
+        if has_images:
+            preserve_parts.append("image markers (lines like [image: filename.png])")
+        if has_links:
+            preserve_parts.append("markdown hyperlinks (like [text](url))")
+        preserve_note = ""
+        if preserve_parts:
+            preserve_note = f"\nIMPORTANT: You MUST preserve these elements exactly as they appear in the current draft: {', '.join(preserve_parts)}. Keep them in the same position within the content. Only change the text around them."
+        current_content_section = f"CURRENT DRAFT (revise this based on feedback above):\n{current_content}{preserve_note}"
+
     examples = FEW_SHOT_EXAMPLES.get(channel_key, [])[:3]
     few_shot_section = ""
     if examples:
@@ -242,6 +259,7 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
         feedback_learning_section=feedback_learning_section,
         custom_instructions_section=custom_instructions_section,
         feedback_section=feedback_section,
+        current_content_section=current_content_section,
     )
 
     max_tokens = 4096 if channel_key == "article_hmc" else 1024
