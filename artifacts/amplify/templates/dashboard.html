@@ -3929,14 +3929,18 @@ function enterContentView(feature) {
                 if (chKey === 'email_standalone') {
                     loadResendAudiences(chKey);
                     loadResendTemplates(chKey);
-                    var savedSubject = localStorage.getItem('ampSubject:' + chKey);
-                    var savedFromName = localStorage.getItem('ampFromName:' + chKey);
-                    var subjectEl = document.getElementById('subject-' + chKey);
-                    var fromNameEl = document.getElementById('fromname-' + chKey);
-                    if (savedSubject && subjectEl) subjectEl.value = savedSubject;
-                    if (savedFromName && fromNameEl) fromNameEl.value = savedFromName;
-                    if (subjectEl) subjectEl.addEventListener('input', function() { localStorage.setItem('ampSubject:' + chKey, this.value); });
-                    if (fromNameEl) fromNameEl.addEventListener('input', function() { localStorage.setItem('ampFromName:' + chKey, this.value); });
+                    (function(chKey, fid) {
+                        var subjKey = 'ampSubject:' + fid + ':' + chKey;
+                        var fromKey = 'ampFromName:' + fid + ':' + chKey;
+                        var savedSubject = localStorage.getItem(subjKey);
+                        var savedFromName = localStorage.getItem(fromKey);
+                        var subjectEl = document.getElementById('subject-' + chKey);
+                        var fromNameEl = document.getElementById('fromname-' + chKey);
+                        if (savedSubject && subjectEl) subjectEl.value = savedSubject;
+                        if (savedFromName && fromNameEl) fromNameEl.value = savedFromName;
+                        if (subjectEl) subjectEl.addEventListener('input', function() { localStorage.setItem(subjKey, this.value); });
+                        if (fromNameEl) fromNameEl.addEventListener('input', function() { localStorage.setItem(fromKey, this.value); });
+                    })(chKey, fid);
                 }
                 if (contentViewApproved[chKey]) updateChannelStatus(chKey);
                 if (contentViewPublished[chKey]) updateChannelStatus(chKey);
