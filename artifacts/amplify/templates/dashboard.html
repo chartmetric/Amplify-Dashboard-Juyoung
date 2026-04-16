@@ -4653,8 +4653,26 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
         var imgData = { dataUrl: e.target.result, name: file.name, size: file.size, isGif: _fileIsGif(file) };
         if (isBatch) {
             if (!window.prepBatchImages) window.prepBatchImages = {};
+            var prevImg = window.prepBatchImages[batchIdx];
             window.prepBatchImages[batchIdx] = imgData;
             renderBatchImagePreview(batchIdx);
+            var bta = document.getElementById('batch-ta-' + batchIdx);
+            if (bta) {
+                var stripped = bta.value;
+                if (prevImg && prevImg.name) {
+                    var escPrev = prevImg.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    stripped = stripped.replace(new RegExp('\\n?\\[image:\\s*' + escPrev + '\\s*\\]', 'g'), '');
+                }
+                stripped = stripped.replace(/\n?\[image:\s*[^\]]+\]/g, function(m) {
+                    return m.indexOf(imgData.name) !== -1 ? m : '';
+                });
+                if (stripped.indexOf('[image: ' + imgData.name + ']') === -1) {
+                    stripped = stripped.replace(/\s+$/, '') + '\n[image: ' + imgData.name + ']';
+                }
+                bta.value = stripped;
+                bta.dispatchEvent(new Event('input'));
+                switchToBatchPreview(batchIdx);
+            }
         } else {
             contentViewFeatureImage = imgData;
             renderFeatureImagePreview();
