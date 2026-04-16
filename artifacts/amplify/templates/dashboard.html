@@ -1528,9 +1528,7 @@
         <div class="content-feature-header" id="content-feature-header"></div>
         <div class="feature-image-section" id="feature-image-section" style="display:none;">
             <div class="feature-image-upload" id="feature-image-upload">
-                <button class="btn-feature-image" id="btn-feature-image" onclick="triggerFeatureImagePicker()">&#128247; Upload</button>
-                <button class="btn-feature-image btn-paste-image" id="btn-paste-image" onclick="pasteFeatureImageFromClipboard()">&#128203; Paste</button>
-                <button class="btn-feature-image" id="btn-add-video" onclick="showVideoMenu(this)" style="background:#6c63ff;">&#127910; Video</button>
+                <button class="btn-feature-image" id="btn-attach-media" onclick="showAttachMenu(this)">&#128206; Attach</button>
                 <button class="btn-feature-image" id="btn-add-link" onclick="promptFeatureLink()" style="background:#2d8cf0;">&#128279; Link</button>
             </div>
             <div class="feature-image-preview" id="feature-image-preview" style="display:none;"></div>
@@ -3774,11 +3772,10 @@ function enterContentView(feature) {
     document.getElementById('feature-image-preview').innerHTML = '';
     document.getElementById('feature-link-preview').style.display = 'none';
     document.getElementById('feature-link-preview').innerHTML = '';
-    document.getElementById('btn-feature-image').style.display = '';
+    var attachBtnReset = document.getElementById('btn-attach-media');
+    if (attachBtnReset) attachBtnReset.style.display = '';
     var linkBtnReset = document.getElementById('btn-add-link');
     if (linkBtnReset) linkBtnReset.style.display = '';
-    var pasteBtnReset = document.getElementById('btn-paste-image');
-    if (pasteBtnReset) pasteBtnReset.style.display = '';
     var loadingChannelsEl = document.getElementById('content-loading-channels');
     loadingChannelsEl.textContent = '';
 
@@ -4001,8 +3998,6 @@ function buildChannelCard(chKey, ch) {
             '<span class="channel-icon">' + icon + '</span>' +
             '<span class="channel-name" id="ch-name-' + chKey + '">' + escHtml(isStandaloneEmail ? 'Email ' + EMAIL_VARIANT_OPTIONS.filter(function(v){return v.key===emailStandaloneVariant})[0].label : (ch.channel_display_name || chKey)) + '</span>' +
             lengthDropdownHtml +
-            '<span class="char-count-badge ' + charClass + '" id="char-' + chKey + '">' + content.length + '/' + maxChars + '</span>' +
-            (charClass === 'over' && maxChars < 9999 ? '<span class="char-over-warning" id="char-warn-' + chKey + '">(over limit)</span>' : '') +
             '<span class="status-badge draft" id="status-' + chKey + '">Draft</span>' +
             (ch.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
             (isArticle ? '<button class="btn-preview-toggle" id="preview-toggle-' + chKey + '" onclick="togglePreview(\'' + chKey + '\')">Preview</button>' : '') +
@@ -4017,6 +4012,10 @@ function buildChannelCard(chKey, ch) {
         (isStandaloneEmail ? '<div class="email-template-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Template</label><select id="template-' + chKey + '" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;"><option value="">Built-in (Chartmetric)</option></select></div>' : '') +
         (isStandaloneEmail ? '<div class="email-audience-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Send To</label><div style="display:flex;gap:6px;align-items:center;"><select id="audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onAudienceChange(\'' + chKey + '\')"><option value="">Test recipients only</option><option value="__custom__">Custom emails...</option></select><span id="audience-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div><input type="text" id="custom-emails-' + chKey + '" placeholder="Comma-separated emails (e.g. a@example.com, b@example.com)" style="display:none;width:100%;margin-top:6px;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;background:#1a1d23;color:#e0e0e0;"></div>' : '') +
         (isStandaloneEmail ? '<div class="email-bcc-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">BCC (optional)</label><div style="display:flex;gap:6px;align-items:center;"><select id="bcc-audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onBccAudienceChange(\'' + chKey + '\')"><option value="">+ Add segment to BCC...</option></select><span id="bcc-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div><input type="text" id="bcc-emails-' + chKey + '" placeholder="Comma-separated BCC emails (or pick segment above)" style="width:100%;margin-top:6px;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;background:#1a1d23;color:#e0e0e0;" oninput="onBccInputChange(\'' + chKey + '\')"></div>' : '') +
+        '<div class="channel-editor-meta" style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:8px 16px 0 16px;">' +
+            '<span class="char-count-badge ' + charClass + '" id="char-' + chKey + '">' + content.length + '/' + maxChars + '</span>' +
+            (charClass === 'over' && maxChars < 9999 ? '<span class="char-over-warning" id="char-warn-' + chKey + '">(over limit)</span>' : '') +
+        '</div>' +
         '<div class="channel-card-body">' +
             '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(bodyContent) + '</textarea>' +
             '<div class="md-preview" id="md-preview-' + chKey + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(bodyContent, {isEmail: isEmail}) + '</div>' +
@@ -4550,34 +4549,50 @@ function triggerFeatureImagePicker() {
     input.click();
 }
 
-function showVideoMenu(btn) {
-    var existing = document.getElementById('video-menu-popup');
+function showAttachMenu(btn) {
+    var existing = document.getElementById('attach-menu-popup');
     if (existing) { existing.remove(); return; }
     var menu = document.createElement('div');
-    menu.id = 'video-menu-popup';
-    menu.style.cssText = 'position:absolute;z-index:9999;background:#1e2128;border:1px solid #333;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.5);padding:4px 0;min-width:180px;';
+    menu.id = 'attach-menu-popup';
+    menu.style.cssText = 'position:absolute;z-index:9999;background:#1e2128;border:1px solid #333;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.5);padding:4px 0;min-width:200px;';
     var rect = btn.getBoundingClientRect();
     menu.style.top = (rect.bottom + 4) + 'px';
     menu.style.left = rect.left + 'px';
     menu.innerHTML =
-        '<div class="video-menu-item" onclick="triggerVideoFilePicker(); this.parentElement.remove();" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
-        '<span style="font-size:16px;">&#128193;</span> Upload from device</div>' +
-        '<div class="video-menu-item" onclick="promptVideoUrl(); this.parentElement.remove();" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
+        '<div class="attach-menu-section" style="padding:6px 16px 4px 16px;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;">Image</div>' +
+        '<div class="attach-menu-item" data-action="upload-image" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
+        '<span style="font-size:16px;">&#128247;</span> Upload image</div>' +
+        '<div class="attach-menu-item" data-action="paste-image" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
+        '<span style="font-size:16px;">&#128203;</span> Paste image from clipboard</div>' +
+        '<div class="attach-menu-section" style="padding:8px 16px 4px 16px;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;border-top:1px solid #2a2d35;margin-top:4px;">Video</div>' +
+        '<div class="attach-menu-item" data-action="upload-video" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
+        '<span style="font-size:16px;">&#127910;</span> Upload video</div>' +
+        '<div class="attach-menu-item" data-action="video-url" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
         '<span style="font-size:16px;">&#128279;</span> Paste video URL</div>';
-    var items = menu.querySelectorAll('.video-menu-item');
+    var items = menu.querySelectorAll('.attach-menu-item');
     for (var i = 0; i < items.length; i++) {
         items[i].onmouseenter = function() { this.style.background = '#2a2d35'; };
         items[i].onmouseleave = function() { this.style.background = 'none'; };
+        items[i].onclick = function() {
+            var action = this.getAttribute('data-action');
+            menu.remove();
+            if (action === 'upload-image') triggerFeatureImagePicker();
+            else if (action === 'paste-image') pasteFeatureImageFromClipboard();
+            else if (action === 'upload-video') triggerVideoFilePicker();
+            else if (action === 'video-url') promptVideoUrl();
+        };
     }
     document.body.appendChild(menu);
     setTimeout(function() {
         document.addEventListener('click', function closeMenu(e) {
-            var m = document.getElementById('video-menu-popup');
+            var m = document.getElementById('attach-menu-popup');
             if (m && !m.contains(e.target) && e.target !== btn) { m.remove(); }
             document.removeEventListener('click', closeMenu);
         });
     }, 50);
 }
+
+function showVideoMenu(btn) { showAttachMenu(btn); }
 
 function triggerVideoFilePicker() {
     var input = document.createElement('input');
@@ -4748,17 +4763,11 @@ document.addEventListener('paste', function(e) {
 
 function renderFeatureImagePreview() {
     var preview = document.getElementById('feature-image-preview');
-    var uploadBtn = document.getElementById('btn-feature-image');
-    var pasteBtn = document.getElementById('btn-paste-image');
     if (!contentViewFeatureImage) {
         preview.style.display = 'none';
         preview.innerHTML = '';
-        uploadBtn.style.display = '';
-        if (pasteBtn) pasteBtn.style.display = '';
         return;
     }
-    uploadBtn.style.display = 'none';
-    if (pasteBtn) pasteBtn.style.display = 'none';
     preview.style.display = 'flex';
     preview.innerHTML =
         '<img src="' + contentViewFeatureImage.dataUrl + '" alt="Feature image">' +
