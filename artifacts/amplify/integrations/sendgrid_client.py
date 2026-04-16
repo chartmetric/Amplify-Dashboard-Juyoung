@@ -114,6 +114,80 @@ def _get_video_thumbnail(url: str) -> str:
     return 'https://via.placeholder.com/480x270/e0e0e0/999999?text=Video'
 
 
+_VIDEO_ATTACH_MAX_TOTAL = 35 * 1024 * 1024  # keep under Resend's ~40MB email cap
+
+
+def _build_video_attachments(video_map: dict) -> list:
+    """Build Resend attachment dicts for locally-uploaded videos.
+
+    Skips external URLs (YouTube/Vimeo) and caps total payload size.
+    """
+    if not video_map:
+        return []
+    try:
+        from ai.publish_store import get_video_path
+    except Exception:
+        return []
+    import os as _os
+    import re as _re
+    attachments = []
+    total = 0
+    seen_ids = set()
+    seen_names = set()
+    ctype_by_ext = {
+        "mp4": "video/mp4",
+        "m4v": "video/mp4",
+        "mov": "video/quicktime",
+        "webm": "video/webm",
+        "avi": "video/x-msvideo",
+    }
+    for fname, info in (video_map or {}).items():
+        vurl = ((info or {}).get("video_url") or "").strip()
+        m = _re.search(r'/api/videos/([A-Za-z0-9\-]{8,})(?:$|[/?#])', vurl)
+        if not m:
+            continue
+        vid_id = m.group(1)
+        if vid_id in seen_ids:
+            continue
+        seen_ids.add(vid_id)
+        try:
+            path = get_video_path(vid_id)
+        except Exception:
+            continue
+        if not path or not _os.path.exists(path):
+            continue
+        try:
+            size = _os.path.getsize(path)
+        except Exception:
+            continue
+        if total + size > _VIDEO_ATTACH_MAX_TOTAL:
+            logger.warning(
+                f"[email] Skipping video attachment '{fname}' ({size} bytes) — "
+                f"would exceed {_VIDEO_ATTACH_MAX_TOTAL} byte cap"
+            )
+            continue
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except Exception as e:
+            logger.warning(f"[email] Could not read video '{fname}': {e}")
+            continue
+        safe_name = fname or f"{vid_id}.mp4"
+        if safe_name in seen_names:
+            stem, dot, ext = safe_name.rpartition(".")
+            safe_name = f"{stem or safe_name}-{vid_id[:6]}{dot}{ext}" if dot else f"{safe_name}-{vid_id[:6]}"
+        seen_names.add(safe_name)
+        ext = _os.path.splitext(safe_name)[1].lower().lstrip(".")
+        attachments.append({
+            "filename": safe_name,
+            "content": list(data),
+            "content_type": ctype_by_ext.get(ext, "video/mp4"),
+        })
+        total += size
+        logger.info(f"[email] Attached video '{safe_name}' ({size} bytes) to email")
+    return attachments
+
+
 def _composited_external_thumb_url(remote_thumb_url: str) -> str:
     """Fetch + composite external thumbnail, serve from our own URL.
 
@@ -344,7 +418,8 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     hosted_images = _build_hosted_image_map(images)
     bcc_list = [e.strip() for e in (bcc_email or "").split(",") if e.strip()] if bcc_email else None
     html_content = render_email_html(final_subject, body, images=hosted_images, from_name=from_name, videos=videos)
-    result = _send_via_resend(final_subject, html_content, recipients, is_test, from_name=from_name, template_id=template_id, bcc_emails=bcc_list)
+    video_attachments = _build_video_attachments(videos) if videos else []
+    result = _send_via_resend(final_subject, html_content, recipients, is_test, attachments=video_attachments or None, from_name=from_name, template_id=template_id, bcc_emails=bcc_list)
     if result:
         return result
 
