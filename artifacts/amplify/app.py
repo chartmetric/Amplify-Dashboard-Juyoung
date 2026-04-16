@@ -1620,9 +1620,10 @@ def publish_email():
 
     from_name = data.get("from_name", "").strip() or None
     template_id = data.get("template_id", "").strip() or None
+    bcc_email = data.get("bcc_email", "").strip() or None
 
     videos = _build_video_map(feature_id)
-    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id, videos=videos)
+    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id, videos=videos, bcc_email=bcc_email)
     if result.get("success") and result.get("method") in ("sendgrid", "resend") and feature_id:
         mark_published(feature_id, channel)
     status_code = 200 if result.get("success") else 500

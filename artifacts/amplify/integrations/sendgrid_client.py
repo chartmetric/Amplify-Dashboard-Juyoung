@@ -223,7 +223,7 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 </html>"""
 
 
-def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: bool, attachments: list = None, from_name: str = None, template_id: str = None) -> dict | None:
+def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: bool, attachments: list = None, from_name: str = None, template_id: str = None, bcc_emails: list = None) -> dict | None:
     import time as _time
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
@@ -242,6 +242,8 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
             "to": [addr],
             "subject": subject,
         }
+        if bcc_emails:
+            params["bcc"] = bcc_emails
         if template_id:
             params["template"] = {"id": template_id}
         else:
@@ -286,7 +288,7 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
     return None
 
 
-def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None, from_name: str = None, template_id: str = None, videos: dict = None) -> dict:
+def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None, from_name: str = None, template_id: str = None, videos: dict = None, bcc_email: str = None) -> dict:
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
     test_email = os.environ.get("SENDGRID_TEST_EMAIL", "") or os.environ.get("RESEND_FROM_EMAIL", "")
@@ -317,8 +319,9 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     recipients_str = ", ".join(recipients)
 
     hosted_images = _build_hosted_image_map(images)
+    bcc_list = [e.strip() for e in (bcc_email or "").split(",") if e.strip()] if bcc_email else None
     html_content = render_email_html(final_subject, body, images=hosted_images, from_name=from_name, videos=videos)
-    result = _send_via_resend(final_subject, html_content, recipients, is_test, from_name=from_name, template_id=template_id)
+    result = _send_via_resend(final_subject, html_content, recipients, is_test, from_name=from_name, template_id=template_id, bcc_emails=bcc_list)
     if result:
         return result
 

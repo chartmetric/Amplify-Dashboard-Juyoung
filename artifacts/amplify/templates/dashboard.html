@@ -4016,6 +4016,7 @@ function buildChannelCard(chKey, ch) {
         (isStandaloneEmail ? '<div class="email-fromname-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">From Name</label><input type="text" id="fromname-' + chKey + '" value="Chartmetric" placeholder="Sender display name" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
         (isStandaloneEmail ? '<div class="email-template-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Template</label><select id="template-' + chKey + '" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;"><option value="">Built-in (Chartmetric)</option></select></div>' : '') +
         (isStandaloneEmail ? '<div class="email-audience-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Send To</label><div style="display:flex;gap:6px;align-items:center;"><select id="audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onAudienceChange(\'' + chKey + '\')"><option value="">Test recipients only</option><option value="__custom__">Custom emails...</option></select><span id="audience-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div><input type="text" id="custom-emails-' + chKey + '" placeholder="Comma-separated emails (e.g. a@example.com, b@example.com)" style="display:none;width:100%;margin-top:6px;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;background:#1a1d23;color:#e0e0e0;"></div>' : '') +
+        (isStandaloneEmail ? '<div class="email-bcc-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">BCC (optional)</label><div style="display:flex;gap:6px;align-items:center;"><select id="bcc-audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onBccAudienceChange(\'' + chKey + '\')"><option value="">+ Add segment to BCC...</option></select><span id="bcc-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div><input type="text" id="bcc-emails-' + chKey + '" placeholder="Comma-separated BCC emails (or pick segment above)" style="width:100%;margin-top:6px;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;background:#1a1d23;color:#e0e0e0;" oninput="onBccInputChange(\'' + chKey + '\')"></div>' : '') +
         '<div class="channel-card-body">' +
             '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(bodyContent) + '</textarea>' +
             '<div class="md-preview" id="md-preview-' + chKey + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(bodyContent, {isEmail: isEmail}) + '</div>' +
@@ -5073,17 +5074,73 @@ function loadResendAudiences(chKey) {
 
 function populateAudienceDropdown(chKey, audiences) {
     var sel = document.getElementById('audience-' + chKey);
-    if (!sel) return;
-    sel.innerHTML = '<option value="">Test recipients only</option><option value="__custom__">Custom emails...</option>';
-    for (var i = 0; i < audiences.length; i++) {
-        var a = audiences[i];
-        var id = a.id || '';
-        var name = a.name || id;
-        sel.innerHTML += '<option value="' + escHtml(id) + '">' + escHtml(name) + '</option>';
+    if (sel) {
+        sel.innerHTML = '<option value="">Test recipients only</option><option value="__custom__">Custom emails...</option>';
+        for (var i = 0; i < audiences.length; i++) {
+            var a = audiences[i];
+            var id = a.id || '';
+            var name = a.name || id;
+            sel.innerHTML += '<option value="' + escHtml(id) + '">' + escHtml(name) + '</option>';
+        }
+        if (selectedAudience[chKey]) {
+            sel.value = selectedAudience[chKey];
+        }
     }
-    if (selectedAudience[chKey]) {
-        sel.value = selectedAudience[chKey];
+    var bccSel = document.getElementById('bcc-audience-' + chKey);
+    if (bccSel) {
+        bccSel.innerHTML = '<option value="">+ Add segment to BCC...</option>';
+        for (var j = 0; j < audiences.length; j++) {
+            var b = audiences[j];
+            var bid = b.id || '';
+            var bname = b.name || bid;
+            bccSel.innerHTML += '<option value="' + escHtml(bid) + '">' + escHtml(bname) + '</option>';
+        }
     }
+}
+
+function onBccAudienceChange(chKey) {
+    var sel = document.getElementById('bcc-audience-' + chKey);
+    var input = document.getElementById('bcc-emails-' + chKey);
+    var countSpan = document.getElementById('bcc-count-' + chKey);
+    if (!sel || !input) return;
+    var audienceId = sel.value;
+    if (!audienceId) return;
+    if (countSpan) countSpan.textContent = 'Loading segment...';
+    fetch('/api/resend/audiences/' + audienceId + '/contacts')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var contacts = data.contacts || [];
+        var existing = input.value.trim();
+        var existingSet = {};
+        if (existing) existing.split(/[,;\s]+/).forEach(function(e) { e = e.trim(); if (e) existingSet[e.toLowerCase()] = true; });
+        var added = 0;
+        var newEmails = existing ? [existing] : [];
+        for (var i = 0; i < contacts.length; i++) {
+            var em = contacts[i].email;
+            if (em && !existingSet[em.toLowerCase()]) {
+                newEmails.push(em);
+                existingSet[em.toLowerCase()] = true;
+                added++;
+            }
+        }
+        input.value = newEmails.join(', ');
+        sel.value = '';
+        onBccInputChange(chKey);
+        if (countSpan) countSpan.textContent = 'Added ' + added + ' from segment';
+    })
+    .catch(function() {
+        if (countSpan) countSpan.textContent = 'Error loading segment';
+    });
+}
+
+function onBccInputChange(chKey) {
+    var input = document.getElementById('bcc-emails-' + chKey);
+    var countSpan = document.getElementById('bcc-count-' + chKey);
+    if (!input || !countSpan) return;
+    var raw = input.value.trim();
+    if (!raw) { countSpan.textContent = ''; return; }
+    var list = raw.split(/[,;\s]+/).map(function(e) { return e.trim(); }).filter(function(e) { return e && e.indexOf('@') > 0; });
+    countSpan.textContent = list.length + ' BCC';
 }
 
 function onAudienceChange(chKey) {
@@ -5720,6 +5777,12 @@ function doPublishToChannel(chKey) {
         var imgMap = contentViewImageMap[chKey];
         if (imgMap && Object.keys(imgMap).length > 0) {
             payload.images = imgMap;
+        }
+        var bccInputEl = document.getElementById('bcc-emails-' + chKey);
+        var bccRaw = bccInputEl ? bccInputEl.value.trim() : '';
+        if (bccRaw) {
+            var bccList = bccRaw.split(/[,;\s]+/).map(function(e) { return e.trim(); }).filter(function(e) { return e && e.indexOf('@') > 0; });
+            if (bccList.length > 0) payload.bcc_email = bccList.join(',');
         }
         var audContacts = audienceContacts[chKey];
         var audSel = document.getElementById('audience-' + chKey);
