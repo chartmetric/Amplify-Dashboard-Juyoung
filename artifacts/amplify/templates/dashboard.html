@@ -3963,7 +3963,7 @@ function enterContentView(feature) {
 
         function revealChannelCards(keys, results, grid) {
             var imgSection = document.getElementById('feature-image-section');
-            imgSection.style.display = 'flex';
+            imgSection.style.display = 'block';
             if (!imgSection._videoDrop) {
                 imgSection._videoDrop = true;
                 imgSection.addEventListener('dragover', function(e) { e.preventDefault(); });
