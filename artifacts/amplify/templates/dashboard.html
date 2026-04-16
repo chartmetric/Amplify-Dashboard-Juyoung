@@ -5074,7 +5074,7 @@ function loadResendAudiences(chKey) {
 function populateAudienceDropdown(chKey, audiences) {
     var sel = document.getElementById('audience-' + chKey);
     if (!sel) return;
-    sel.innerHTML = '<option value="">Test recipients only</option>';
+    sel.innerHTML = '<option value="">Test recipients only</option><option value="__custom__">Custom emails...</option>';
     for (var i = 0; i < audiences.length; i++) {
         var a = audiences[i];
         var id = a.id || '';
