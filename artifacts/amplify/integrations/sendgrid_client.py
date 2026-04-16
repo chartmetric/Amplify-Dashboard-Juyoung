@@ -151,9 +151,10 @@ def _build_video_attachments(video_map: dict) -> list:
             continue
         seen_ids.add(vid_id)
         try:
-            path = get_video_path(vid_id)
+            result = get_video_path(vid_id)
         except Exception:
             continue
+        path = result[0] if isinstance(result, tuple) else result
         if not path or not _os.path.exists(path):
             continue
         try:
