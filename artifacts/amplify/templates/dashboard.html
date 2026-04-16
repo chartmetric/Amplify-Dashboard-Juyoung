@@ -884,6 +884,17 @@
         .ch-media-menu-item .kind.gif { background: rgba(155,89,182,0.2); color: #c79aff; }
         .ch-media-menu-item .kind.video { background: rgba(155,89,182,0.2); color: #c79aff; }
         .ch-media-menu-empty { padding: 10px 14px; font-size: 11px; color: #888; font-style: italic; }
+        .batch-attach-wrap { padding: 8px 12px; border-top: 1px solid #2a2d35; display: flex; flex-direction: column; gap: 6px; }
+        .batch-attach-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #1e2128; border: 1px solid #2a2d35; border-radius: 6px; font-size: 12px; color: #d0d0d0; }
+        .batch-attach-kind { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; padding: 2px 6px; border-radius: 3px; }
+        .batch-attach-kind.video { background: rgba(155,89,182,0.2); color: #c79aff; }
+        .batch-attach-kind.link { background: rgba(45,140,240,0.15); color: #2d8cf0; }
+        .batch-attach-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+        .batch-attach-meta { font-size: 11px; color: #888; margin-right: 6px; }
+        .batch-attach-meta a { color: #888; text-decoration: none; }
+        .batch-attach-meta a:hover { color: #2d8cf0; text-decoration: underline; }
+        .batch-attach-remove { background: none; border: none; color: #888; cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1; }
+        .batch-attach-remove:hover { color: #f87171; }
         .channel-card.drag-highlight { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,201,167,0.15); }
         .publish-dropdown .custom-dropdown-menu { top: auto; bottom: calc(100% + 4px); left: 0; }
         .publish-dropdown .custom-dropdown-toggle { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
@@ -4821,6 +4832,276 @@ function _renderAttachMenu(btn, view) {
 
 function showVideoMenu(btn) { showAttachMenu(btn); }
 
+function showBatchAttachMenu(btn, idx) {
+    var existing = document.getElementById('attach-menu-popup');
+    if (existing) { existing.remove(); return; }
+    _renderBatchAttachMenu(btn, idx, 'root');
+}
+
+function _renderBatchAttachMenu(btn, idx, view) {
+    var prev = document.getElementById('attach-menu-popup');
+    if (prev) prev.remove();
+    var menu = document.createElement('div');
+    menu.id = 'attach-menu-popup';
+    menu.style.cssText = 'position:absolute;z-index:9999;background:#1e2128;border:1px solid #333;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.5);padding:6px 0;min-width:240px;';
+    var rect = btn.getBoundingClientRect();
+    menu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    menu.style.left = (rect.left + window.scrollX) + 'px';
+
+    var itemStyle = 'padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:10px;';
+    var hintStyle = 'margin-left:auto;font-size:11px;color:#888;';
+    var headerStyle = 'padding:8px 16px 6px 16px;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;';
+    var backStyle = 'padding:6px 12px;cursor:pointer;font-size:11px;color:#888;display:flex;align-items:center;gap:6px;border-bottom:1px solid #2a2d35;margin-bottom:4px;';
+
+    var html = '';
+    if (view === 'root') {
+        html =
+            '<div style="' + headerStyle + '">Attach to this feature</div>' +
+            '<div class="attach-menu-item" data-action="type-image" style="' + itemStyle + '">' +
+                '<span style="font-size:18px;">&#128247;</span> Image <span style="' + hintStyle + '">PNG, JPG, WEBP &rsaquo;</span></div>' +
+            '<div class="attach-menu-item" data-action="type-gif" style="' + itemStyle + '">' +
+                '<span style="font-size:18px;">&#127922;</span> GIF <span style="' + hintStyle + '">Animated &rsaquo;</span></div>' +
+            '<div class="attach-menu-item" data-action="type-video" style="' + itemStyle + '">' +
+                '<span style="font-size:18px;">&#127910;</span> Video <span style="' + hintStyle + '">MP4, MOV &rsaquo;</span></div>' +
+            '<div class="attach-menu-item" data-action="type-link" style="' + itemStyle + '">' +
+                '<span style="font-size:18px;">&#128279;</span> Link <span style="' + hintStyle + '">Insert hyperlink</span></div>';
+    } else if (view === 'image') {
+        html =
+            '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
+            '<div style="' + headerStyle + '">Add image</div>' +
+            '<div class="attach-menu-item" data-action="upload-image" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128190;</span> Upload from device</div>';
+    } else if (view === 'gif') {
+        html =
+            '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
+            '<div style="' + headerStyle + '">Add GIF</div>' +
+            '<div class="attach-menu-item" data-action="upload-gif" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128190;</span> Upload GIF file</div>';
+    } else if (view === 'video') {
+        html =
+            '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
+            '<div style="' + headerStyle + '">Add video</div>' +
+            '<div class="attach-menu-item" data-action="upload-video" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128190;</span> Upload video file</div>';
+    }
+    menu.innerHTML = html;
+
+    var back = menu.querySelector('.attach-menu-back');
+    if (back) {
+        back.onmouseenter = function() { this.style.color = '#e0e0e0'; };
+        back.onmouseleave = function() { this.style.color = '#888'; };
+        back.onclick = function(e) { e.stopPropagation(); _renderBatchAttachMenu(btn, idx, 'root'); };
+    }
+
+    var items = menu.querySelectorAll('.attach-menu-item');
+    for (var i = 0; i < items.length; i++) {
+        items[i].onmouseenter = function() { this.style.background = '#2a2d35'; };
+        items[i].onmouseleave = function() { this.style.background = 'none'; };
+        items[i].onclick = function(e) {
+            e.stopPropagation();
+            var action = this.getAttribute('data-action');
+            if (action === 'type-image') { _renderBatchAttachMenu(btn, idx, 'image'); return; }
+            if (action === 'type-gif') { _renderBatchAttachMenu(btn, idx, 'gif'); return; }
+            if (action === 'type-video') { _renderBatchAttachMenu(btn, idx, 'video'); return; }
+            if (action === 'type-link') { menu.remove(); promptBatchLink(idx); return; }
+            menu.remove();
+            if (action === 'upload-image') triggerBatchImagePicker(idx, false);
+            else if (action === 'upload-gif') triggerBatchImagePicker(idx, true);
+            else if (action === 'upload-video') triggerBatchVideoPicker(idx);
+        };
+    }
+    document.body.appendChild(menu);
+    setTimeout(function() {
+        document.addEventListener('click', function closeMenu(e) {
+            var m = document.getElementById('attach-menu-popup');
+            if (m && !m.contains(e.target) && e.target !== btn) { m.remove(); }
+            document.removeEventListener('click', closeMenu);
+        });
+    }, 50);
+}
+
+function triggerBatchImagePicker(idx, forceGif) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = forceGif ? 'image/gif,.gif' : 'image/*,.gif';
+    input.onchange = function() {
+        if (input.files && input.files[0]) handleImageFile(input.files[0], null, true, idx);
+    };
+    input.click();
+}
+
+function triggerBatchVideoPicker(idx) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi';
+    input.onchange = function() {
+        if (input.files && input.files[0]) handleBatchVideoFile(input.files[0], idx);
+    };
+    input.click();
+}
+
+function handleBatchVideoFile(file, idx) {
+    if (!file || !file.type.startsWith('video/')) {
+        showToast('Please select a valid video file', 'warning');
+        return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+        showToast('Video file too large (max 50MB)', 'warning');
+        return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        if (!window.prepBatchVideos) window.prepBatchVideos = {};
+        if (!window.prepBatchVideos[idx]) window.prepBatchVideos[idx] = [];
+        window.prepBatchVideos[idx].push({
+            dataUrl: e.target.result, name: file.name, size: file.size
+        });
+        var ta = document.getElementById('batch-ta-' + idx);
+        if (ta) {
+            ta.value = ta.value.replace(/\s+$/, '') + '\n[video: ' + file.name + ']';
+            ta.dispatchEvent(new Event('input'));
+            switchToBatchPreview(idx);
+        }
+        renderBatchAttachments(idx);
+        showToast('Video attached', 'success');
+    };
+    reader.readAsDataURL(file);
+}
+
+function promptBatchLink(idx) {
+    var existing = document.getElementById('batch-link-popover');
+    if (existing) existing.remove();
+    var btn = document.getElementById('batch-attach-btn-' + idx);
+    if (!btn) return;
+    var pop = document.createElement('div');
+    pop.id = 'batch-link-popover';
+    pop.style.cssText = 'position:absolute;z-index:9999;background:#1e2128;border:1px solid #333;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:12px;min-width:280px;';
+    var rect = btn.getBoundingClientRect();
+    pop.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+    pop.style.left = (rect.left + window.scrollX) + 'px';
+    pop.innerHTML =
+        '<div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:8px;">Add link</div>' +
+        '<div style="margin-bottom:8px;"><label style="display:block;font-size:11px;color:#aaa;margin-bottom:3px;">Text</label>' +
+            '<input id="batch-link-text-' + idx + '" type="text" placeholder="Display text" style="width:100%;padding:6px 8px;font-size:13px;background:#141619;border:1px solid #333;color:#e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' +
+        '<div style="margin-bottom:10px;"><label style="display:block;font-size:11px;color:#aaa;margin-bottom:3px;">URL</label>' +
+            '<input id="batch-link-url-' + idx + '" type="text" placeholder="https://..." style="width:100%;padding:6px 8px;font-size:13px;background:#141619;border:1px solid #333;color:#e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' +
+        '<div style="display:flex;gap:6px;justify-content:flex-end;">' +
+            '<button onclick="document.getElementById(\'batch-link-popover\').remove()" style="padding:5px 10px;font-size:12px;background:none;border:1px solid #333;color:#aaa;border-radius:4px;cursor:pointer;">Cancel</button>' +
+            '<button onclick="confirmBatchLink(' + idx + ')" style="padding:5px 10px;font-size:12px;background:#2d8cf0;border:1px solid #2d8cf0;color:#fff;border-radius:4px;cursor:pointer;">Insert</button>' +
+        '</div>';
+    document.body.appendChild(pop);
+    var ta = document.getElementById('batch-ta-' + idx);
+    var textInput = document.getElementById('batch-link-text-' + idx);
+    if (ta && textInput) {
+        var start = ta.selectionStart || 0;
+        var end = ta.selectionEnd || 0;
+        if (end > start) textInput.value = ta.value.substring(start, end);
+    }
+    setTimeout(function() {
+        var urlInput = document.getElementById('batch-link-url-' + idx);
+        (textInput && !textInput.value ? textInput : urlInput).focus();
+    }, 50);
+    setTimeout(function() {
+        document.addEventListener('click', function closePop(e) {
+            var p = document.getElementById('batch-link-popover');
+            if (p && !p.contains(e.target) && e.target !== btn) { p.remove(); }
+            else { document.addEventListener('click', closePop, {once: true}); return; }
+            document.removeEventListener('click', closePop);
+        }, {once: true});
+    }, 100);
+}
+
+function confirmBatchLink(idx) {
+    var textEl = document.getElementById('batch-link-text-' + idx);
+    var urlEl = document.getElementById('batch-link-url-' + idx);
+    if (!textEl || !urlEl) return;
+    var text = (textEl.value || '').trim();
+    var url = (urlEl.value || '').trim();
+    if (!url) { showToast('URL is required', 'warning'); return; }
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    if (!text) text = url;
+    var md = '[' + text + '](' + url + ')';
+    var ta = document.getElementById('batch-ta-' + idx);
+    if (ta) {
+        switchToBatchEdit(idx);
+        var start = ta.selectionStart || ta.value.length;
+        var end = ta.selectionEnd || ta.value.length;
+        ta.value = ta.value.substring(0, start) + md + ta.value.substring(end);
+        ta.selectionStart = ta.selectionEnd = start + md.length;
+        ta.dispatchEvent(new Event('input'));
+    }
+    if (!window.prepBatchLinks) window.prepBatchLinks = {};
+    if (!window.prepBatchLinks[idx]) window.prepBatchLinks[idx] = [];
+    window.prepBatchLinks[idx].push({ text: text, url: url });
+    renderBatchAttachments(idx);
+    var p = document.getElementById('batch-link-popover');
+    if (p) p.remove();
+    showToast('Link inserted', 'success');
+}
+
+function renderBatchAttachments(idx) {
+    var wrap = document.getElementById('batch-attach-wrap-' + idx);
+    if (!wrap) return;
+    var videos = ((window.prepBatchVideos || {})[idx]) || [];
+    var links = ((window.prepBatchLinks || {})[idx]) || [];
+    if (!videos.length && !links.length) {
+        wrap.innerHTML = '';
+        wrap.style.display = 'none';
+        return;
+    }
+    var html = '';
+    for (var i = 0; i < videos.length; i++) {
+        var v = videos[i];
+        html += '<div class="batch-attach-row">' +
+            '<span class="batch-attach-kind video">VIDEO</span>' +
+            '<span class="batch-attach-name" title="' + escHtml(v.name) + '">' + escHtml(v.name) + '</span>' +
+            '<span class="batch-attach-meta">' + formatFileSize(v.size) + '</span>' +
+            '<button class="batch-attach-remove" onclick="removeBatchVideo(' + idx + ',' + i + ')">&times;</button>' +
+            '</div>';
+    }
+    for (var j = 0; j < links.length; j++) {
+        var l = links[j];
+        html += '<div class="batch-attach-row">' +
+            '<span class="batch-attach-kind link">LINK</span>' +
+            '<span class="batch-attach-name" title="' + escHtml(l.url) + '">' + escHtml(l.text) + '</span>' +
+            '<span class="batch-attach-meta"><a href="' + escHtml(l.url) + '" target="_blank" rel="noopener">' + escHtml(l.url.length > 40 ? l.url.substring(0,40) + '\u2026' : l.url) + '</a></span>' +
+            '<button class="batch-attach-remove" onclick="removeBatchLink(' + idx + ',' + j + ')">&times;</button>' +
+            '</div>';
+    }
+    wrap.innerHTML = html;
+    wrap.style.display = 'block';
+}
+
+function removeBatchVideo(idx, i) {
+    var arr = (window.prepBatchVideos || {})[idx] || [];
+    if (i < 0 || i >= arr.length) return;
+    var removed = arr.splice(i, 1)[0];
+    var ta = document.getElementById('batch-ta-' + idx);
+    if (ta && removed) {
+        var esc = removed.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        ta.value = ta.value.replace(new RegExp('\\n?\\[video:\\s*' + esc + '\\s*\\]', 'g'), '').replace(/\s+$/, '');
+        ta.dispatchEvent(new Event('input'));
+        switchToBatchPreview(idx);
+    }
+    renderBatchAttachments(idx);
+}
+
+function removeBatchLink(idx, i) {
+    var arr = (window.prepBatchLinks || {})[idx] || [];
+    if (i < 0 || i >= arr.length) return;
+    var removed = arr.splice(i, 1)[0];
+    var ta = document.getElementById('batch-ta-' + idx);
+    if (ta && removed) {
+        var escText = removed.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var escUrl = removed.url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var re = new RegExp('\\[' + escText + '\\]\\(' + escUrl + '\\)', 'g');
+        ta.value = ta.value.replace(re, '');
+        ta.dispatchEvent(new Event('input'));
+        switchToBatchPreview(idx);
+    }
+    renderBatchAttachments(idx);
+}
+
 function triggerVideoFilePicker() {
     var input = document.createElement('input');
     input.type = 'file';
@@ -6794,6 +7075,8 @@ function exitPrepWorkflow() {
     prepBatchInitialDrafts = {};
     prepBatchRegenFeedback = {};
     window.prepBatchImages = {};
+    window.prepBatchVideos = {};
+    window.prepBatchLinks = {};
 }
 
 function prepGoToStep(step) {
@@ -7058,6 +7341,8 @@ function startBatchGeneration() {
     prepBatchInitialDrafts = {};
     prepBatchRegenFeedback = {};
     window.prepBatchImages = {};
+    window.prepBatchVideos = {};
+    window.prepBatchLinks = {};
     window.prepBatchChannel = prepChannel;
     document.getElementById('batch-results-list').innerHTML = '';
     document.getElementById('batch-actions-top').style.display = 'none';
@@ -7127,10 +7412,11 @@ function buildBatchItem(r, idx) {
             '<div class="md-preview" id="batch-md-preview-' + idx + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(content) + '</div>' +
         '</div>' +
         '<div class="img-preview-wrap" id="batch-img-wrap-' + idx + '" style="display:none;"></div>' +
+        '<div class="batch-attach-wrap" id="batch-attach-wrap-' + idx + '" style="display:none;"></div>' +
         '<div class="batch-item-loading" id="batch-loading-' + idx + '" style="display:none;"><div class="spinner"></div><span>Regenerating...</span></div>' +
         '<div class="batch-item-actions" id="batch-actions-' + idx + '">' +
             '<button class="btn-approve" id="batch-approve-btn-' + idx + '" onclick="batchApproveItem(' + idx + ')">Approve \u2713</button>' +
-            '<button class="btn-add-image" id="batch-add-img-btn-' + idx + '" onclick="triggerImagePicker(null, true, ' + idx + ')">\uD83D\uDCF7 Add Image</button>' +
+            '<button class="btn-add-image" id="batch-attach-btn-' + idx + '" onclick="showBatchAttachMenu(this, ' + idx + ')" title="Attach image, GIF, video, or link">\uD83D\uDCCE Attach \u25be</button>' +
             '<input type="text" class="regen-feedback-input" id="batch-feedback-' + idx + '" placeholder="Optional: what to change...">' +
             '<button class="btn-regen" onclick="batchRegenItem(' + idx + ')">Regenerate</button>' +
         '</div>';
