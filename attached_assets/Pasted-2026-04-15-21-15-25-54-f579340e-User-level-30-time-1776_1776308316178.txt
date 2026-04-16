@@ -1,0 +1,76 @@
+2026-04-15 21:15:25.54
+f579340e
+User
+{"level":30,"time":1776302125542,"pid":22,"hostname":"localhost","req":{"id":48,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":0,"msg":"request completed"}
+2026-04-15 21:15:27.05
+f579340e
+User
+{"level":30,"time":1776302127051,"pid":22,"hostname":"localhost","req":{"id":49,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":0,"msg":"request completed"}
+2026-04-15 21:15:28.73
+f579340e
+User
+{"level":30,"time":1776302128736,"pid":22,"hostname":"localhost","req":{"id":50,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":0,"msg":"request completed"}
+2026-04-15 21:15:28.98
+f579340e
+User
+{"level":30,"time":1776302128985,"pid":22,"hostname":"localhost","req":{"id":51,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":0,"msg":"request completed"}
+2026-04-15 21:15:29.76
+f579340e
+User
+{"level":30,"time":1776302129767,"pid":22,"hostname":"localhost","req":{"id":52,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+2026-04-15 21:15:30.60
+f579340e
+User
+{"level":30,"time":1776302130603,"pid":22,"hostname":"localhost","req":{"id":53,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":0,"msg":"request completed"}
+2026-04-15 21:15:31.96
+f579340e
+User
+{"level":30,"time":1776302131964,"pid":22,"hostname":"localhost","req":{"id":54,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+2026-04-15 21:15:33.19
+f579340e
+User
+{"level":30,"time":1776302133190,"pid":22,"hostname":"localhost","req":{"id":55,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+2026-04-15 21:15:34.95
+f579340e
+User
+{"level":30,"time":1776302134958,"pid":22,"hostname":"localhost","req":{"id":56,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":1,"msg":"request completed"}
+2026-04-15 21:15:35.29
+f579340e
+User
+{"level":30,"time":1776302135296,"pid":22,"hostname":"localhost","req":{"id":57,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":0,"msg":"request completed"}
+2026-04-15 21:15:36.89
+f579340e
+User
+{"level":30,"time":1776302136896,"pid":22,"hostname":"localhost","req":{"id":58,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":0,"msg":"request completed"}
+2026-04-15 21:15:38.36
+f579340e
+User
+{"level":30,"time":1776302138368,"pid":22,"hostname":"localhost","req":{"id":59,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":0,"msg":"request completed"}
+2026-04-15 21:15:40.32
+f579340e
+User
+{"level":30,"time":1776302140327,"pid":22,"hostname":"localhost","req":{"id":60,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":404},"responseTime":0,"msg":"request completed"}
+2026-04-15 21:15:40.62
+f579340e
+System
+sending SIGTERM to artifact process artifact=artifacts/api-server
+2026-04-15 21:15:40.62
+f579340e
+System
+not all artifact ports opened within timeout expected=[5000 8080] detected=1
+2026-04-15 21:15:40.62
+f579340e
+System
+sending SIGTERM to artifact process artifact=artifacts/amplify
+2026-04-15 21:15:40.63
+f579340e
+System
+all artifact processes stopped
+2026-04-15 21:15:40.63
+f579340e
+System
+a port configuration was specified but the required port was never opened
+2026-04-15 21:15:40.63
+f579340e
+System
+artifact process exited with error error=signal: terminated artifact=artifacts/api-server

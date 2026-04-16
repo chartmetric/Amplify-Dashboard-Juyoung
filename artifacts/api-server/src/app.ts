@@ -29,6 +29,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.get("/healthz", (_req, res) => {
+  res.json({ status: "ok" });
+});
+app.get("/api-server/healthz", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
 app.use("/api", router);
 
 export default app;
