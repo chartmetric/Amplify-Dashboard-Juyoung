@@ -1791,6 +1791,8 @@
             <div class="publish-actions" id="publish-actions">
                 <button class="btn-publish-all-batch" onclick="batchPublishAllApproved()" style="background:#1DA1F2;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Publish All Approved</button>
                 <button class="btn-preview-all-batch" onclick="batchPreviewAllOnX()" style="background:transparent;color:#1DA1F2;border:1.5px solid #1DA1F2;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Preview on X &#x2197;</button>
+                <button class="btn-publish-combined-email" onclick="publishCombinedEmail()" style="display:none;background:#00C9A7;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Publish Email &#x1F4E7;</button>
+                <button class="btn-preview-combined-email" onclick="previewCombinedEmail()" style="display:none;background:transparent;color:#00C9A7;border:1.5px solid #00C9A7;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Preview HTML &#x2197;</button>
                 <button class="btn-copy-all" onclick="copyAllCombined()">Copy All Combined</button>
                 <button class="btn-done" onclick="exitPrepWorkflow()">Done - Back to Dashboard</button>
             </div>
@@ -7194,11 +7196,16 @@ function renderCombinedPreview() {
     var uc = USE_CASES.find(function(u) { return u.key === prepChannel; });
     document.getElementById('step4-title').textContent = (uc ? uc.name : prepChannel) + ' - Combined Preview';
 
+    var isEmailCh = (prepChannel === 'email_newsletter' || prepChannel === 'email_standalone');
     var publishBtn = document.querySelector('.btn-publish-all-batch');
     var previewBtn = document.querySelector('.btn-preview-all-batch');
+    var emailPubBtn = document.querySelector('.btn-publish-combined-email');
+    var emailPrevBtn = document.querySelector('.btn-preview-combined-email');
     var isPublishable = !!PUBLISHABLE_CHANNELS[prepChannel];
-    if (publishBtn) publishBtn.style.display = isPublishable ? '' : 'none';
-    if (previewBtn) previewBtn.style.display = isPublishable ? '' : 'none';
+    if (publishBtn) publishBtn.style.display = (isPublishable && !isEmailCh) ? '' : 'none';
+    if (previewBtn) previewBtn.style.display = (isPublishable && !isEmailCh) ? '' : 'none';
+    if (emailPubBtn) emailPubBtn.style.display = isEmailCh ? '' : 'none';
+    if (emailPrevBtn) emailPrevBtn.style.display = isEmailCh ? '' : 'none';
 
     var items = [];
     var list = document.getElementById('batch-results-list');
@@ -7208,6 +7215,8 @@ function renderCombinedPreview() {
         if (!prepBatchApproved[idx]) return;
         var ta = document.getElementById('batch-ta-' + idx);
         items.push({
+            idx: idx,
+            feature_id: (prepBatchResults[idx] || {}).feature_id || '',
             feature_title: prepBatchResults[idx].feature_title || '',
             content: ta ? ta.value : (prepBatchResults[idx].content || '')
         });
@@ -7215,6 +7224,11 @@ function renderCombinedPreview() {
 
     if (items.length === 0) {
         document.getElementById('combined-preview').innerHTML = '<p style="color:var(--text-muted);">No approved items to preview. Go back and approve some features.</p>';
+        return;
+    }
+
+    if (isEmailCh) {
+        renderCombinedEmailComposer(items);
         return;
     }
 
@@ -7240,6 +7254,365 @@ function renderCombinedPreview() {
     .catch(function(err) {
         document.getElementById('combined-preview').textContent = 'Error: ' + err.message;
     });
+}
+
+function _buildCombinedEmailPayload() {
+    var items = window._combinedEmailItems || [];
+    if (!items.length) return null;
+    var subjectEl = document.getElementById('combined-email-subject');
+    var bodyEl = document.getElementById('combined-email-body');
+    var subject = subjectEl ? subjectEl.value.trim() : '';
+    var body = bodyEl ? bodyEl.value : '';
+    var imageMap = {};
+    var featureIds = [];
+    for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        if (it.feature_id) featureIds.push(it.feature_id);
+        var img = (window.prepBatchImages || {})[it.idx];
+        if (img && img.dataUrl && it.imagePlaceholder) {
+            imageMap[it.imagePlaceholder] = img.dataUrl;
+        }
+    }
+    return {
+        subject: subject,
+        body: body,
+        imageMap: imageMap,
+        featureIds: featureIds
+    };
+}
+
+function renderCombinedEmailComposer(items) {
+    window._combinedEmailItems = items;
+    var ch = prepChannel;
+    var isStandalone = (ch === 'email_standalone');
+    var topTitle = items[0] ? items[0].feature_title : '';
+    var defaultSubject;
+    if (items.length === 1) {
+        defaultSubject = topTitle || 'Chartmetric Product Update';
+    } else if (ch === 'email_newsletter') {
+        defaultSubject = 'Chartmetric Newsletter - ' + items.length + ' updates';
+    } else {
+        defaultSubject = 'Chartmetric Product Update - ' + items.length + ' new features';
+    }
+
+    var bodyParts = [];
+    for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        var header = '## ' + (it.feature_title || ('Feature ' + (i + 1)));
+        bodyParts.push(header);
+        var img = (window.prepBatchImages || {})[it.idx];
+        if (img && img.dataUrl) {
+            var placeholder = 'combined_feat_' + it.idx;
+            it.imagePlaceholder = placeholder;
+            bodyParts.push('[image: ' + placeholder + ']');
+        }
+        bodyParts.push('');
+        bodyParts.push(it.content || '');
+        if (i < items.length - 1) {
+            bodyParts.push('');
+            bodyParts.push('---');
+            bodyParts.push('');
+        }
+    }
+    var combinedBody = bodyParts.join('\n');
+
+    var wrap = document.getElementById('combined-preview');
+    var templateRowHtml = isStandalone
+        ? '<div class="email-template-row" style="margin-bottom:10px;"><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Template</label><select id="combined-email-template" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);"><option value="">Built-in (Chartmetric)</option></select></div>'
+        : '';
+    wrap.innerHTML =
+        '<div class="combined-email-composer" style="display:flex;flex-direction:column;gap:10px;">' +
+            '<div><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Subject</label>' +
+                '<input type="text" id="combined-email-subject" value="' + escHtml(defaultSubject) + '" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;"></div>' +
+            '<div><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">From Name</label>' +
+                '<input type="text" id="combined-email-fromname" value="Chartmetric" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;"></div>' +
+            templateRowHtml +
+            '<div><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Send To</label>' +
+                '<div style="display:flex;gap:6px;align-items:center;">' +
+                    '<select id="combined-email-audience" style="flex:1;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);" onchange="onCombinedEmailAudienceChange()">' +
+                        '<option value="">Test recipients only</option><option value="__custom__">Custom emails...</option>' +
+                    '</select>' +
+                    '<span id="combined-email-audience-count" style="font-size:11px;color:var(--text-muted);white-space:nowrap;"></span>' +
+                '</div>' +
+                '<input type="text" id="combined-email-custom" placeholder="Comma-separated emails" style="display:none;width:100%;margin-top:6px;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box;background:var(--bg-card);color:var(--text-body);"></div>' +
+            '<div><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">BCC (optional)</label>' +
+                '<div style="display:flex;gap:6px;align-items:center;">' +
+                    '<select id="combined-email-bcc-audience" style="flex:1;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);" onchange="onCombinedEmailBccAudienceChange()">' +
+                        '<option value="">+ Add segment to BCC...</option>' +
+                    '</select>' +
+                    '<span id="combined-email-bcc-count" style="font-size:11px;color:var(--text-muted);white-space:nowrap;"></span>' +
+                '</div>' +
+                '<input type="text" id="combined-email-bcc" placeholder="Comma-separated BCC emails (or pick segment above)" style="width:100%;margin-top:6px;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box;background:var(--bg-card);color:var(--text-body);" oninput="onCombinedEmailBccInputChange()"></div>' +
+            '<div><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Body (stitched from approved drafts)</label>' +
+                '<textarea id="combined-email-body" style="width:100%;min-height:320px;padding:10px;font-size:14px;line-height:1.5;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;font-family:inherit;">' + escHtml(combinedBody) + '</textarea></div>' +
+            '<div id="combined-email-images-summary" style="font-size:12px;color:var(--text-muted);"></div>' +
+        '</div>';
+
+    var imgCount = 0;
+    for (var j = 0; j < items.length; j++) {
+        if ((window.prepBatchImages || {})[items[j].idx]) imgCount++;
+    }
+    var summaryEl = document.getElementById('combined-email-images-summary');
+    if (summaryEl) {
+        summaryEl.textContent = items.length + ' section' + (items.length !== 1 ? 's' : '') +
+            (imgCount > 0 ? ' - ' + imgCount + ' inline image' + (imgCount !== 1 ? 's' : '') : '') +
+            ' - reorder on the previous step to change order';
+    }
+
+    if (isStandalone) loadCombinedEmailTemplates();
+    loadCombinedEmailAudiences();
+}
+
+function loadCombinedEmailTemplates() {
+    var sel = document.getElementById('combined-email-template');
+    if (!sel) return;
+    if (resendTemplates !== null) {
+        sel.innerHTML = '<option value="">Built-in (Chartmetric)</option>';
+        for (var i = 0; i < resendTemplates.length; i++) {
+            var t = resendTemplates[i];
+            sel.innerHTML += '<option value="' + escHtml(t.id || '') + '">' + escHtml(t.name || t.id || '') + '</option>';
+        }
+        return;
+    }
+    fetch('/api/resend/templates')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        resendTemplates = data.templates || [];
+        loadCombinedEmailTemplates();
+    })
+    .catch(function() { resendTemplates = []; });
+}
+
+function loadCombinedEmailAudiences() {
+    function populate(audiences) {
+        var sel = document.getElementById('combined-email-audience');
+        var bccSel = document.getElementById('combined-email-bcc-audience');
+        if (sel) {
+            sel.innerHTML = '<option value="">Test recipients only</option><option value="__custom__">Custom emails...</option>';
+            for (var i = 0; i < audiences.length; i++) {
+                sel.innerHTML += '<option value="' + escHtml(audiences[i].id || '') + '">' + escHtml(audiences[i].name || audiences[i].id || '') + '</option>';
+            }
+        }
+        if (bccSel) {
+            bccSel.innerHTML = '<option value="">+ Add segment to BCC...</option>';
+            for (var j = 0; j < audiences.length; j++) {
+                bccSel.innerHTML += '<option value="' + escHtml(audiences[j].id || '') + '">' + escHtml(audiences[j].name || audiences[j].id || '') + '</option>';
+            }
+        }
+    }
+    if (resendAudiences !== null) { populate(resendAudiences); return; }
+    fetch('/api/resend/audiences')
+    .then(function(r) { return r.json(); })
+    .then(function(data) { resendAudiences = data.audiences || []; populate(resendAudiences); })
+    .catch(function() { resendAudiences = []; populate([]); });
+}
+
+function onCombinedEmailAudienceChange() {
+    var sel = document.getElementById('combined-email-audience');
+    var customInput = document.getElementById('combined-email-custom');
+    var countSpan = document.getElementById('combined-email-audience-count');
+    if (!sel) return;
+    var audId = sel.value;
+    if (audId === '__custom__') {
+        if (customInput) customInput.style.display = 'block';
+        if (countSpan) countSpan.textContent = '';
+        window._combinedEmailAudContacts = null;
+        return;
+    }
+    if (customInput) customInput.style.display = 'none';
+    if (!audId) {
+        window._combinedEmailAudContacts = null;
+        if (countSpan) countSpan.textContent = '';
+        return;
+    }
+    if (countSpan) countSpan.textContent = 'Loading...';
+    fetch('/api/resend/audiences/' + audId + '/contacts')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var contacts = data.contacts || [];
+        window._combinedEmailAudContacts = contacts;
+        if (countSpan) countSpan.textContent = contacts.length + ' contacts';
+    })
+    .catch(function() {
+        window._combinedEmailAudContacts = null;
+        if (countSpan) countSpan.textContent = 'Error loading segment';
+    });
+}
+
+function onCombinedEmailBccAudienceChange() {
+    var sel = document.getElementById('combined-email-bcc-audience');
+    var input = document.getElementById('combined-email-bcc');
+    var countSpan = document.getElementById('combined-email-bcc-count');
+    if (!sel || !input) return;
+    var audId = sel.value;
+    if (!audId) return;
+    if (countSpan) countSpan.textContent = 'Loading segment...';
+    fetch('/api/resend/audiences/' + audId + '/contacts')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var contacts = data.contacts || [];
+        var existing = input.value.trim();
+        var existingSet = {};
+        if (existing) existing.split(/[,;\s]+/).forEach(function(e) { e = e.trim(); if (e) existingSet[e.toLowerCase()] = true; });
+        var added = 0;
+        var newEmails = existing ? [existing] : [];
+        for (var i = 0; i < contacts.length; i++) {
+            var em = contacts[i].email;
+            if (em && !existingSet[em.toLowerCase()]) {
+                newEmails.push(em);
+                existingSet[em.toLowerCase()] = true;
+                added++;
+            }
+        }
+        input.value = newEmails.join(', ');
+        sel.value = '';
+        onCombinedEmailBccInputChange();
+        if (countSpan) countSpan.textContent = 'Added ' + added + ' from segment';
+    })
+    .catch(function() {
+        if (countSpan) countSpan.textContent = 'Error loading segment';
+    });
+}
+
+function onCombinedEmailBccInputChange() {
+    var input = document.getElementById('combined-email-bcc');
+    var countSpan = document.getElementById('combined-email-bcc-count');
+    if (!input || !countSpan) return;
+    var raw = input.value.trim();
+    if (!raw) { countSpan.textContent = ''; return; }
+    var list = raw.split(/[,;\s]+/).map(function(e) { return e.trim(); }).filter(function(e) { return e && e.indexOf('@') > 0; });
+    countSpan.textContent = list.length + ' BCC';
+}
+
+function previewCombinedEmail() {
+    var data = _buildCombinedEmailPayload();
+    if (!data) { showToast('No items to preview', 'error'); return; }
+    var fromNameEl = document.getElementById('combined-email-fromname');
+    var fromName = fromNameEl ? fromNameEl.value.trim() : 'Chartmetric';
+    var templateSel = document.getElementById('combined-email-template');
+    var templateId = templateSel ? templateSel.value : '';
+    var payload = {
+        content: data.body,
+        subject: data.subject,
+        from_name: fromName,
+        feature_ids: data.featureIds
+    };
+    if (templateId) payload.template_id = templateId;
+    if (Object.keys(data.imageMap).length > 0) payload.images = data.imageMap;
+    fetch('/api/publish/email/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+        var w = window.open('', '_blank');
+        if (w) { w.document.write(html); w.document.close(); }
+    })
+    .catch(function(err) { showToast('Preview failed: ' + err.message, 'error'); });
+}
+
+var combinedEmailPublishInFlight = false;
+
+function publishCombinedEmail() {
+    if (combinedEmailPublishInFlight) { showToast('Already sending... please wait', 'warning'); return; }
+    var data = _buildCombinedEmailPayload();
+    if (!data) { showToast('No items to publish', 'error'); return; }
+    if (!data.subject) { showToast('Subject is required', 'error'); return; }
+    if (!data.body.trim()) { showToast('Body is empty', 'error'); return; }
+
+    var audSel = document.getElementById('combined-email-audience');
+    var audId = audSel ? audSel.value : '';
+    var audContacts = window._combinedEmailAudContacts || null;
+    var audName = audSel && audSel.selectedIndex >= 0 ? audSel.options[audSel.selectedIndex].text : '';
+
+    var payload = {
+        content: data.body,
+        subject: data.subject,
+        channel: prepChannel,
+        feature_ids: data.featureIds
+    };
+    var fromNameEl = document.getElementById('combined-email-fromname');
+    var fromName = fromNameEl ? fromNameEl.value.trim() : '';
+    if (fromName) payload.from_name = fromName;
+    var templateSel = document.getElementById('combined-email-template');
+    var templateId = templateSel ? templateSel.value : '';
+    if (templateId) payload.template_id = templateId;
+    if (Object.keys(data.imageMap).length > 0) payload.images = data.imageMap;
+
+    var bccInput = document.getElementById('combined-email-bcc');
+    var bccRaw = bccInput ? bccInput.value.trim() : '';
+    if (bccRaw) {
+        var bccList = bccRaw.split(/[,;\s]+/).map(function(e) { return e.trim(); }).filter(function(e) { return e && e.indexOf('@') > 0; });
+        if (bccList.length > 0) payload.bcc_email = bccList.join(',');
+    }
+
+    var confirmMsg;
+    if (audId === '__custom__') {
+        var customInput = document.getElementById('combined-email-custom');
+        var raw = customInput ? customInput.value.trim() : '';
+        var customEmails = raw.split(/[,;\s]+/).map(function(e) { return e.trim(); }).filter(function(e) { return e && e.indexOf('@') > 0; });
+        if (customEmails.length === 0) { showToast('Enter at least one valid email address', 'error'); return; }
+        payload.to_email = customEmails.join(',');
+        payload.is_test = false;
+        confirmMsg = 'Send this combined email (' + data.featureIds.length + ' features) to ' + customEmails.length + ' custom address(es) via Resend?';
+    } else if (audId && audContacts && audContacts.length > 0) {
+        var emails = [];
+        for (var ci = 0; ci < audContacts.length; ci++) {
+            if (audContacts[ci].email) emails.push(audContacts[ci].email);
+        }
+        payload.to_email = emails.join(',');
+        payload.is_test = false;
+        confirmMsg = 'Send this combined email (' + data.featureIds.length + ' features) to "' + audName + '" (' + audContacts.length + ' contacts) via Resend?';
+    } else {
+        payload.is_test = true;
+        confirmMsg = 'Send this combined email (' + data.featureIds.length + ' features) as a TEST to the configured test recipient?';
+    }
+
+    showPublishConfirm(confirmMsg, function() {
+        combinedEmailPublishInFlight = true;
+        var btn = document.querySelector('.btn-publish-combined-email');
+        if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+        fetch('/api/publish/email', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(resp) {
+            combinedEmailPublishInFlight = false;
+            if (btn) { btn.disabled = false; btn.textContent = 'Publish Email \uD83D\uDCE7'; }
+            if (!resp.success) {
+                showToast('Send failed: ' + (resp.hint || resp.error || 'Unknown error'), 'error');
+                return;
+            }
+            if (resp.method === 'fallback') {
+                showToast('Email draft ready. No email provider configured - opening preview.', 'warning');
+                if (resp.preview_html) {
+                    var w = window.open('', '_blank');
+                    if (w) { w.document.write(resp.preview_html); w.document.close(); }
+                }
+                return;
+            }
+            var items = window._combinedEmailItems || [];
+            for (var i = 0; i < items.length; i++) {
+                var idx = items[i].idx;
+                prepBatchPublished[idx] = true;
+                updateBatchItemStatus(idx);
+            }
+            var sentCount = resp.count || 1;
+            var toastMsg = sentCount > 2
+                ? 'Email sent to ' + sentCount + ' recipients \u2705 (' + items.length + ' features marked published)'
+                : (resp.to ? 'Email sent to ' + resp.to + ' \u2705 (' + items.length + ' features marked published)' : 'Email sent! \u2705 (' + items.length + ' features marked published)');
+            showToast(toastMsg);
+            if (btn) { btn.textContent = 'Published \u2705'; btn.disabled = true; }
+        })
+        .catch(function(err) {
+            combinedEmailPublishInFlight = false;
+            if (btn) { btn.disabled = false; btn.textContent = 'Publish Email \uD83D\uDCE7'; }
+            showToast('Error sending email: ' + err.message, 'error');
+        });
+    }, { title: 'Send Combined Email', icon: '\uD83D\uDCE7', confirmText: 'Yes, send it' });
 }
 
 function copyAllCombined() {

@@ -1595,6 +1595,11 @@ def publish_email():
     to_email = data.get("to_email", "").strip() or None
     is_test = data.get("is_test", True)
     feature_id = data.get("feature_id", "")
+    feature_ids = data.get("feature_ids", None)
+    if isinstance(feature_ids, list):
+        feature_ids = [str(f).strip() for f in feature_ids if str(f).strip()]
+    else:
+        feature_ids = None
 
     lines = content.split("\n", 1)
     has_subject_line = lines[0].lower().startswith("subject:")
@@ -1622,10 +1627,19 @@ def publish_email():
     template_id = data.get("template_id", "").strip() or None
     bcc_email = data.get("bcc_email", "").strip() or None
 
-    videos = _build_video_map(feature_id)
+    if feature_ids:
+        videos = {}
+        for fid in feature_ids:
+            videos.update(_build_video_map(fid))
+    else:
+        videos = _build_video_map(feature_id)
     result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id, videos=videos, bcc_email=bcc_email)
-    if result.get("success") and result.get("method") in ("sendgrid", "resend") and feature_id:
-        mark_published(feature_id, channel)
+    if result.get("success") and result.get("method") in ("sendgrid", "resend"):
+        if feature_ids:
+            for fid in feature_ids:
+                mark_published(fid, channel)
+        elif feature_id:
+            mark_published(feature_id, channel)
     status_code = 200 if result.get("success") else 500
     return jsonify(result), status_code
 
@@ -1679,7 +1693,15 @@ def preview_email():
         return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
     feature_id = data.get("feature_id", "") if request.method == "POST" else request.args.get("feature_id", "")
-    videos = _build_video_map(feature_id)
+    feature_ids = data.get("feature_ids", None) if request.method == "POST" else None
+    if isinstance(feature_ids, list) and feature_ids:
+        videos = {}
+        for fid in feature_ids:
+            fid = str(fid).strip()
+            if fid:
+                videos.update(_build_video_map(fid))
+    else:
+        videos = _build_video_map(feature_id)
     html = render_email_html(subject, content, images=images, from_name=from_name, videos=videos)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
