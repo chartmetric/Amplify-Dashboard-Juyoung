@@ -4689,34 +4689,78 @@ function pasteFeatureGifFromClipboard() {
 function showAttachMenu(btn) {
     var existing = document.getElementById('attach-menu-popup');
     if (existing) { existing.remove(); return; }
+    _renderAttachMenu(btn, 'root');
+}
+
+function _renderAttachMenu(btn, view) {
+    var prev = document.getElementById('attach-menu-popup');
+    if (prev) prev.remove();
     var menu = document.createElement('div');
     menu.id = 'attach-menu-popup';
-    menu.style.cssText = 'position:absolute;z-index:9999;background:#1e2128;border:1px solid #333;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.5);padding:4px 0;min-width:200px;';
+    menu.style.cssText = 'position:absolute;z-index:9999;background:#1e2128;border:1px solid #333;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.5);padding:6px 0;min-width:240px;';
     var rect = btn.getBoundingClientRect();
     menu.style.top = (rect.bottom + 4) + 'px';
     menu.style.left = rect.left + 'px';
-    menu.innerHTML =
-        '<div class="attach-menu-section" style="padding:6px 16px 4px 16px;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;">Image</div>' +
-        '<div class="attach-menu-item" data-action="upload-image" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
-        '<span style="font-size:16px;">&#128247;</span> Upload image</div>' +
-        '<div class="attach-menu-item" data-action="paste-image" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
-        '<span style="font-size:16px;">&#128203;</span> Paste image from clipboard</div>' +
-        '<div class="attach-menu-section" style="padding:8px 16px 4px 16px;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;border-top:1px solid #2a2d35;margin-top:4px;">GIF</div>' +
-        '<div class="attach-menu-item" data-action="upload-gif" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
-        '<span style="font-size:16px;">&#127922;</span> Upload GIF</div>' +
-        '<div class="attach-menu-item" data-action="paste-gif" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
-        '<span style="font-size:16px;">&#128203;</span> Paste GIF from clipboard</div>' +
-        '<div class="attach-menu-section" style="padding:8px 16px 4px 16px;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;border-top:1px solid #2a2d35;margin-top:4px;">Video</div>' +
-        '<div class="attach-menu-item" data-action="upload-video" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
-        '<span style="font-size:16px;">&#127910;</span> Upload video</div>' +
-        '<div class="attach-menu-item" data-action="video-url" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
-        '<span style="font-size:16px;">&#128279;</span> Paste video URL</div>';
+
+    var itemStyle = 'padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:10px;';
+    var hintStyle = 'margin-left:auto;font-size:11px;color:#888;';
+    var headerStyle = 'padding:8px 16px 6px 16px;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;';
+    var backStyle = 'padding:6px 12px;cursor:pointer;font-size:11px;color:#888;display:flex;align-items:center;gap:6px;border-bottom:1px solid #2a2d35;margin-bottom:4px;';
+
+    var html = '';
+    if (view === 'root') {
+        html =
+            '<div style="' + headerStyle + '">Choose media type</div>' +
+            '<div class="attach-menu-item" data-action="type-image" style="' + itemStyle + '">' +
+                '<span style="font-size:18px;">&#128247;</span> Image <span style="' + hintStyle + '">PNG, JPG, WEBP &rsaquo;</span></div>' +
+            '<div class="attach-menu-item" data-action="type-gif" style="' + itemStyle + '">' +
+                '<span style="font-size:18px;">&#127922;</span> GIF <span style="' + hintStyle + '">Animated &rsaquo;</span></div>' +
+            '<div class="attach-menu-item" data-action="type-video" style="' + itemStyle + '">' +
+                '<span style="font-size:18px;">&#127910;</span> Video <span style="' + hintStyle + '">MP4, URL &rsaquo;</span></div>';
+    } else if (view === 'image') {
+        html =
+            '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
+            '<div style="' + headerStyle + '">Add image</div>' +
+            '<div class="attach-menu-item" data-action="upload-image" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128190;</span> Upload from device</div>' +
+            '<div class="attach-menu-item" data-action="paste-image" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128203;</span> Paste from clipboard</div>';
+    } else if (view === 'gif') {
+        html =
+            '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
+            '<div style="' + headerStyle + '">Add GIF</div>' +
+            '<div class="attach-menu-item" data-action="upload-gif" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128190;</span> Upload GIF file</div>' +
+            '<div class="attach-menu-item" data-action="paste-gif" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128203;</span> Paste GIF from clipboard</div>';
+    } else if (view === 'video') {
+        html =
+            '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
+            '<div style="' + headerStyle + '">Add video</div>' +
+            '<div class="attach-menu-item" data-action="upload-video" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128190;</span> Upload video file</div>' +
+            '<div class="attach-menu-item" data-action="video-url" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128279;</span> Paste video URL</div>';
+    }
+    menu.innerHTML = html;
+
+    var back = menu.querySelector('.attach-menu-back');
+    if (back) {
+        back.onmouseenter = function() { this.style.color = '#e0e0e0'; };
+        back.onmouseleave = function() { this.style.color = '#888'; };
+        back.onclick = function(e) { e.stopPropagation(); _renderAttachMenu(btn, 'root'); };
+    }
+
     var items = menu.querySelectorAll('.attach-menu-item');
     for (var i = 0; i < items.length; i++) {
         items[i].onmouseenter = function() { this.style.background = '#2a2d35'; };
         items[i].onmouseleave = function() { this.style.background = 'none'; };
-        items[i].onclick = function() {
+        items[i].onclick = function(e) {
+            e.stopPropagation();
             var action = this.getAttribute('data-action');
+            if (action === 'type-image') { _renderAttachMenu(btn, 'image'); return; }
+            if (action === 'type-gif') { _renderAttachMenu(btn, 'gif'); return; }
+            if (action === 'type-video') { _renderAttachMenu(btn, 'video'); return; }
             menu.remove();
             if (action === 'upload-image') triggerFeatureImagePicker();
             else if (action === 'paste-image') pasteFeatureImageFromClipboard();
