@@ -832,6 +832,7 @@
             text-transform: uppercase; letter-spacing: 0.4px;
         }
         .attachment-type-badge.type-image { background: rgba(0,201,167,0.15); color: #00C9A7; }
+        .attachment-type-badge.type-gif { background: rgba(255,159,28,0.15); color: #ff9f1c; }
         .attachment-type-badge.type-video { background: rgba(108,99,255,0.15); color: #6c63ff; }
         .attachment-type-badge.type-link { background: rgba(45,140,240,0.15); color: #2d8cf0; }
         .attachment-actions { display: flex; gap: 6px; flex-shrink: 0; }
@@ -1600,7 +1601,7 @@
                     </button>
                 </div>
                 <div class="attachments-actions" id="feature-image-upload">
-                    <button class="btn-attach-action" id="btn-attach-media" onclick="showAttachMenu(this)" title="Attach an image or video">+ Media</button>
+                    <button class="btn-attach-action" id="btn-attach-media" onclick="showAttachMenu(this)" title="Attach an image, GIF, or video">+ Media</button>
                     <button class="btn-attach-action btn-attach-link" id="btn-add-link" onclick="promptFeatureLink()" title="Store a hyperlink to insert into channels">+ Link</button>
                 </div>
             </div>
@@ -4554,11 +4555,24 @@ var contentViewFeatureImage = null;
 var contentViewImageInclude = {};
 window.contentViewVideos = {};
 
+var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+var GIF_ANIMATED_CHANNELS = { email_newsletter: true, email_standalone: true, twitter: true };
+
+function _fileIsGif(file) {
+    if (!file) return false;
+    return (file.type === 'image/gif') || /\.gif$/i.test(file.name || '');
+}
+
 function handleImageFile(file, chKey, isBatch, batchIdx) {
     if (!file || !file.type.startsWith('image/')) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+        var label = _fileIsGif(file) ? 'GIF' : 'Image';
+        showToast(label + ' too large (max ' + (MAX_IMAGE_BYTES / 1024 / 1024) + 'MB)', 'warning');
+        return;
+    }
     var reader = new FileReader();
     reader.onload = function(e) {
-        var imgData = { dataUrl: e.target.result, name: file.name, size: file.size };
+        var imgData = { dataUrl: e.target.result, name: file.name, size: file.size, isGif: _fileIsGif(file) };
         if (isBatch) {
             if (!window.prepBatchImages) window.prepBatchImages = {};
             window.prepBatchImages[batchIdx] = imgData;
@@ -4631,6 +4645,46 @@ function triggerFeatureImagePicker() {
     input.click();
 }
 
+function triggerFeatureGifPicker() {
+    var input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/gif,.gif';
+    input.onchange = function() {
+        if (!input.files || !input.files[0]) return;
+        var f = input.files[0];
+        if (!_fileIsGif(f)) {
+            showToast('Please select a .gif file', 'warning');
+            return;
+        }
+        handleImageFile(f, null, false, null);
+    };
+    input.click();
+}
+
+function pasteFeatureGifFromClipboard() {
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+        showToast('Clipboard access not available. Try Ctrl+V / Cmd+V instead.', 'warning');
+        return;
+    }
+    navigator.clipboard.read().then(function(items) {
+        for (var i = 0; i < items.length; i++) {
+            var types = items[i].types;
+            for (var t = 0; t < types.length; t++) {
+                if (types[t] === 'image/gif') {
+                    items[i].getType(types[t]).then(function(blob) {
+                        var file = new File([blob], 'pasted.gif', { type: 'image/gif' });
+                        handleImageFile(file, null, false, null);
+                        showToast('GIF pasted!', 'success');
+                    });
+                    return;
+                }
+            }
+        }
+        showToast('No GIF found in clipboard', 'warning');
+    }).catch(function() {
+        showToast('Could not read clipboard. Try Ctrl+V / Cmd+V instead.', 'warning');
+    });
+}
+
 function showAttachMenu(btn) {
     var existing = document.getElementById('attach-menu-popup');
     if (existing) { existing.remove(); return; }
@@ -4646,6 +4700,11 @@ function showAttachMenu(btn) {
         '<span style="font-size:16px;">&#128247;</span> Upload image</div>' +
         '<div class="attach-menu-item" data-action="paste-image" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
         '<span style="font-size:16px;">&#128203;</span> Paste image from clipboard</div>' +
+        '<div class="attach-menu-section" style="padding:8px 16px 4px 16px;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;border-top:1px solid #2a2d35;margin-top:4px;">GIF</div>' +
+        '<div class="attach-menu-item" data-action="upload-gif" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
+        '<span style="font-size:16px;">&#127922;</span> Upload GIF</div>' +
+        '<div class="attach-menu-item" data-action="paste-gif" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
+        '<span style="font-size:16px;">&#128203;</span> Paste GIF from clipboard</div>' +
         '<div class="attach-menu-section" style="padding:8px 16px 4px 16px;font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;border-top:1px solid #2a2d35;margin-top:4px;">Video</div>' +
         '<div class="attach-menu-item" data-action="upload-video" style="padding:10px 16px;cursor:pointer;font-size:13px;color:#e0e0e0;display:flex;align-items:center;gap:8px;">' +
         '<span style="font-size:16px;">&#127910;</span> Upload video</div>' +
@@ -4660,6 +4719,8 @@ function showAttachMenu(btn) {
             menu.remove();
             if (action === 'upload-image') triggerFeatureImagePicker();
             else if (action === 'paste-image') pasteFeatureImageFromClipboard();
+            else if (action === 'upload-gif') triggerFeatureGifPicker();
+            else if (action === 'paste-gif') pasteFeatureGifFromClipboard();
             else if (action === 'upload-video') triggerVideoFilePicker();
             else if (action === 'video-url') promptVideoUrl();
         };
@@ -4890,12 +4951,16 @@ function renderFeatureImagePreview() {
     var existingVideos = preview.querySelectorAll('.video-preview-item');
     var imgCard = '';
     if (contentViewFeatureImage) {
+        var _isGif = !!contentViewFeatureImage.isGif;
+        var _badge = _isGif
+            ? '<span class="attachment-type-badge type-gif">GIF</span>'
+            : '<span class="attachment-type-badge type-image">Image</span>';
         imgCard =
             '<div class="attachment-card image-attachment-card">' +
-                '<img class="attachment-thumb" src="' + contentViewFeatureImage.dataUrl + '" alt="Feature image">' +
+                '<img class="attachment-thumb" src="' + contentViewFeatureImage.dataUrl + '" alt="Feature ' + (_isGif ? 'GIF' : 'image') + '">' +
                 '<div class="attachment-info">' +
                     '<div class="attachment-name">' + escHtml(contentViewFeatureImage.name) + '</div>' +
-                    '<div class="attachment-meta"><span class="attachment-type-badge type-image">Image</span><span>' + formatFileSize(contentViewFeatureImage.size) + '</span></div>' +
+                    '<div class="attachment-meta">' + _badge + '<span>' + formatFileSize(contentViewFeatureImage.size) + '</span></div>' +
                 '</div>' +
                 '<div class="attachment-actions">' +
                     '<button class="attachment-btn" onclick="replaceFeatureImage()">Replace</button>' +
@@ -5003,6 +5068,9 @@ function toggleChannelImage(chKey) {
     if (cb.checked) {
         contentViewImageInclude[chKey] = true;
         addImageMarkerToChannel(chKey);
+        if (contentViewFeatureImage && contentViewFeatureImage.isGif && !GIF_ANIMATED_CHANNELS[chKey]) {
+            showToast('This channel may not animate GIFs — it could appear as a static frame.', 'warning');
+        }
     } else {
         contentViewImageInclude[chKey] = false;
         removeImageMarkerFromChannel(chKey);
