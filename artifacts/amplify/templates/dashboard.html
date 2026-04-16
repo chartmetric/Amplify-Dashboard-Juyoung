@@ -776,8 +776,12 @@
             transform: rotate(45deg); transition: transform 0.15s; margin-bottom: 2px;
         }
         .feature-attachments-section.dropdown-open .attachments-view-toggle .chev { transform: rotate(-135deg); margin-bottom: -2px; }
-        .attachments-list-dropdown { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+        .attachments-list-dropdown { display: none; width: 100%; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
         .feature-attachments-section.dropdown-open .attachments-list-dropdown { display: block; }
+        .attachments-list-dropdown .attachments-list,
+        .attachments-list-dropdown .feature-image-preview,
+        .attachments-list-dropdown .feature-link-preview { width: 100%; }
+        .attachments-list-dropdown .attachment-card { width: 100%; box-sizing: border-box; }
         .attachments-title { font-size: 13px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.3px; text-transform: uppercase; }
         .attachments-count {
             font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.05);
