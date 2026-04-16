@@ -163,9 +163,15 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
                 continue
             body_html += (
                 f'<div style="text-align:center;margin:16px 0 20px 0;">'
-                f'<a href="{_esc(vid_link)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">'
-                f'<img src="{_esc(thumb_url)}" alt="Play video" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto;border:0;outline:none;">'
+                f'<video src="{_esc(vid_link)}" poster="{_esc(thumb_url)}" '
+                f'controls preload="none" playsinline width="600" '
+                f'style="display:block;max-width:100%;width:100%;height:auto;'
+                f'border-radius:6px;margin:0 auto;background:#000;outline:none;border:0;">'
+                f'<a href="{_esc(vid_link)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:block;">'
+                f'<img src="{_esc(thumb_url)}" alt="Play video" '
+                f'style="display:block;max-width:100%;height:auto;border-radius:6px;margin:0 auto;border:0;outline:none;">'
                 f'</a>'
+                f'</video>'
                 f'</div>'
             )
         elif re.match(r'^\[image:\s*(.+)\]$', stripped):
