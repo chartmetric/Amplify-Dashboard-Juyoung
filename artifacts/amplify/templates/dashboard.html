@@ -1092,6 +1092,10 @@
             border-bottom: 1px solid var(--border); background: var(--bg-panel);
             transition: background-color 0.2s, border-color 0.2s;
         }
+        .prep-breadcrumb .bc-link { color: var(--text-dim); cursor: pointer; text-decoration: none; }
+        .prep-breadcrumb .bc-link:hover { color: var(--text-primary); text-decoration: underline; }
+        .prep-breadcrumb .bc-sep { margin: 0 6px; opacity: 0.6; }
+        .prep-breadcrumb .bc-current { color: var(--text-primary); }
         .prep-step { max-width: 1000px; margin: 0 auto; padding: 20px 24px 100px; }
         .prep-step-header { margin-bottom: 20px; }
         .prep-title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin: 12px 0 4px; }
@@ -7101,13 +7105,22 @@ function prepGoToStep(step) {
 
 function updatePrepBreadcrumb(step) {
     var bc = document.getElementById('prep-breadcrumb');
-    var parts = ['Dashboard'];
     var ucName = prepChannel ? USE_CASES.find(function(u) { return u.key === prepChannel; }) : null;
-    if (step >= 2 && ucName) parts.push(ucName.name);
     var selCount = Object.keys(prepSelectedIds).length;
-    if (step >= 3 && selCount) parts.push(selCount + ' features');
-    if (step === 4) parts.push('Preview');
-    bc.textContent = parts.join(' > ');
+    var items = [];
+    items.push({ label: 'Dashboard', target: step === 1 ? null : 0 });
+    if (step >= 2 && ucName) items.push({ label: ucName.name, target: step === 2 ? null : 1 });
+    if (step >= 3 && selCount) items.push({ label: selCount + ' features', target: step === 3 ? null : 2 });
+    if (step === 4) items.push({ label: 'Preview', target: null });
+    var html = items.map(function(it, i) {
+        var sep = i > 0 ? '<span class="bc-sep">&gt;</span>' : '';
+        if (it.target === null) {
+            return sep + '<span class="bc-current">' + escHtml(it.label) + '</span>';
+        }
+        var action = it.target === 0 ? 'exitPrepWorkflow()' : 'prepGoToStep(' + it.target + ')';
+        return sep + '<span class="bc-link" onclick="' + action + '">' + escHtml(it.label) + '</span>';
+    }).join('');
+    bc.innerHTML = html;
 }
 
 function renderUseCaseGrid() {
