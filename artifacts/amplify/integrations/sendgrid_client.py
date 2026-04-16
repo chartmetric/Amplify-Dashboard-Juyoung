@@ -161,17 +161,21 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
             if not thumb_url or not vid_link:
                 body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Video: {_esc(vid_ref)}]</p>'
                 continue
+            esc_link = _esc(vid_link)
+            esc_thumb = _esc(thumb_url)
             body_html += (
                 f'<div style="text-align:center;margin:16px 0 20px 0;">'
-                f'<video src="{_esc(vid_link)}" poster="{_esc(thumb_url)}" '
-                f'controls preload="none" playsinline width="600" '
-                f'style="display:block;max-width:100%;width:100%;height:auto;'
-                f'border-radius:6px;margin:0 auto;background:#000;outline:none;border:0;">'
-                f'<a href="{_esc(vid_link)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:block;">'
-                f'<img src="{_esc(thumb_url)}" alt="Play video" '
-                f'style="display:block;max-width:100%;height:auto;border-radius:6px;margin:0 auto;border:0;outline:none;">'
+                f'<div style="position:relative;display:inline-block;max-width:600px;width:100%;margin:0 auto;line-height:0;">'
+                f'<a href="{esc_link}" target="_blank" rel="noopener noreferrer" '
+                f'style="display:block;text-decoration:none;">'
+                f'<img src="{esc_thumb}" alt="Play video" width="600" '
+                f'style="display:block;width:100%;max-width:600px;height:auto;border-radius:6px;border:0;outline:none;">'
                 f'</a>'
+                f'<video src="{esc_link}" poster="{esc_thumb}" '
+                f'controls preload="none" playsinline '
+                f'style="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:6px;background:#000;outline:none;border:0;">'
                 f'</video>'
+                f'</div>'
                 f'</div>'
             )
         elif re.match(r'^\[image:\s*(.+)\]$', stripped):
