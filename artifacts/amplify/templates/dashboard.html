@@ -761,7 +761,16 @@
             display: flex; align-items: center; justify-content: space-between; gap: 12px;
             padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 12px;
         }
-        .attachments-title-wrap { display: flex; align-items: center; gap: 8px; }
+        .feature-attachments-section.collapsed .attachments-header { padding-bottom: 0; border-bottom: none; margin-bottom: 0; }
+        .feature-attachments-section.collapsed .attachments-list { display: none; }
+        .attachments-title-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; flex: 1; }
+        .attachments-chevron {
+            display: inline-block; width: 10px; height: 10px; border-right: 2px solid var(--text-muted);
+            border-bottom: 2px solid var(--text-muted); transform: rotate(45deg); transition: transform 0.15s;
+            margin-right: 2px;
+        }
+        .feature-attachments-section.collapsed .attachments-chevron { transform: rotate(-45deg); }
+        .attachments-title-wrap:hover .attachments-chevron { border-color: var(--text-dim); }
         .attachments-title { font-size: 13px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.3px; text-transform: uppercase; }
         .attachments-count {
             font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.05);
@@ -1571,7 +1580,8 @@
         <div class="content-feature-header" id="content-feature-header"></div>
         <div class="feature-attachments-section" id="feature-image-section" style="display:none;">
             <div class="attachments-header">
-                <div class="attachments-title-wrap">
+                <div class="attachments-title-wrap" onclick="toggleAttachmentsCollapse()" title="Click to expand/collapse">
+                    <span class="attachments-chevron"></span>
                     <span class="attachments-title">&#128206; Attachments</span>
                     <span class="attachments-count" id="attachments-count"></span>
                 </div>
@@ -4881,6 +4891,12 @@ function renderFeatureImagePreview() {
     for (var i = 0; i < existingVideos.length; i++) preview.appendChild(existingVideos[i]);
     preview.style.display = (contentViewFeatureImage || existingVideos.length > 0) ? 'flex' : 'none';
     updateAttachmentsEmptyState();
+}
+
+function toggleAttachmentsCollapse() {
+    var section = document.getElementById('feature-image-section');
+    if (!section) return;
+    section.classList.toggle('collapsed');
 }
 
 function updateAttachmentsEmptyState() {
