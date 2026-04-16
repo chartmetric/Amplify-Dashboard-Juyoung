@@ -310,6 +310,13 @@ def save_video(feature_id, data_url, filename):
     except Exception as e:
         logger.warning(f"[publish_store] ffmpeg thumbnail failed for {video_id}: {e}")
 
+    if thumb_ok:
+        try:
+            from integrations.video_thumb import composite_play_button_file
+            composite_play_button_file(thumb_path)
+        except Exception as e:
+            logger.warning(f"[publish_store] play-button composite failed for {video_id}: {e}")
+
     meta = {
         "video_id": video_id,
         "feature_id": feature_id,

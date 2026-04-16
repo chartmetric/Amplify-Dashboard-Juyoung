@@ -1982,6 +1982,16 @@ def serve_video_thumb(video_id):
     return send_file(thumb_path, mimetype="image/jpeg")
 
 
+@app.route("/api/videos/external-thumb/<key>")
+def serve_external_video_thumb(key):
+    from flask import send_file, redirect
+    from integrations.video_thumb import get_cached_external_thumb_path
+    path = get_cached_external_thumb_path(key)
+    if not path:
+        return redirect("https://via.placeholder.com/640x360/222222/999999?text=Video")
+    return send_file(path, mimetype="image/jpeg")
+
+
 @app.route("/api/features/<feature_id>/videos")
 def get_feature_videos(feature_id):
     vids = list_feature_videos(feature_id)

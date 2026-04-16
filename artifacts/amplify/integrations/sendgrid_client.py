@@ -114,6 +114,21 @@ def _get_video_thumbnail(url: str) -> str:
     return 'https://via.placeholder.com/480x270/e0e0e0/999999?text=Video'
 
 
+def _composited_external_thumb_url(remote_thumb_url: str) -> str:
+    """Fetch + composite external thumbnail, serve from our own URL.
+
+    Falls back to the raw remote URL if compositing fails.
+    """
+    try:
+        from integrations.video_thumb import get_cached_external_thumb
+        key = get_cached_external_thumb(remote_thumb_url)
+        if not key:
+            return remote_thumb_url
+        return f"{_get_base_url()}/api/videos/external-thumb/{key}"
+    except Exception:
+        return remote_thumb_url
+
+
 def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None, from_name: str = None, videos: dict = None) -> str:
     _ = from_name
     import re
@@ -133,7 +148,8 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
         elif re.match(r'^\[video:\s*(.+)\]$', stripped):
             vid_ref = re.match(r'^\[video:\s*(.+)\]$', stripped).group(1).strip()
             if re.match(r'^https?://', vid_ref, re.IGNORECASE):
-                thumb_url = _get_video_thumbnail(vid_ref)
+                remote_thumb = _get_video_thumbnail(vid_ref)
+                thumb_url = _composited_external_thumb_url(remote_thumb)
                 vid_link = vid_ref
             elif vid_ref in video_map:
                 vid_info = video_map[vid_ref]
@@ -146,12 +162,9 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
                 body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Video: {_esc(vid_ref)}]</p>'
                 continue
             body_html += (
-                f'<div style="text-align:center;margin:16px 0;">'
+                f'<div style="text-align:center;margin:16px 0 20px 0;">'
                 f'<a href="{_esc(vid_link)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">'
-                f'<img src="{_esc(thumb_url)}" alt="Video thumbnail" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto;">'
-                f'<div style="margin-top:-60px;margin-bottom:20px;position:relative;">'
-                f'<span style="display:inline-block;width:48px;height:48px;background:rgba(0,0,0,0.7);border-radius:50%;line-height:48px;text-align:center;font-size:20px;color:#fff;">&#9654;</span>'
-                f'</div>'
+                f'<img src="{_esc(thumb_url)}" alt="Play video" style="max-width:100%;height:auto;border-radius:6px;display:block;margin:0 auto;border:0;outline:none;">'
                 f'</a>'
                 f'</div>'
             )
