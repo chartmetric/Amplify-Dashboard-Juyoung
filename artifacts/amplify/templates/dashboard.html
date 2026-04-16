@@ -5067,7 +5067,7 @@ function loadResendAudiences(chKey) {
     })
     .catch(function() {
         resendAudiences = [];
-        sel.innerHTML = '<option value="">Test recipients only</option>';
+        sel.innerHTML = '<option value="">Test recipients only</option><option value="__custom__">Custom emails...</option>';
     });
 }
 
