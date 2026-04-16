@@ -757,9 +757,10 @@
             background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
             padding: 14px 18px; margin-bottom: 16px;
         }
-        .feature-attachments-section { position: relative; }
+        .feature-attachments-section { position: relative; display: block; width: 100%; box-sizing: border-box; }
         .attachments-header {
             display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            width: 100%; flex-wrap: wrap;
         }
         .attachments-title-wrap { display: flex; align-items: center; gap: 8px; }
         .attachments-view-toggle {
