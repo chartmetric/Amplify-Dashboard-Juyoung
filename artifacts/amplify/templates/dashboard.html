@@ -757,20 +757,34 @@
             background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
             padding: 14px 18px; margin-bottom: 16px;
         }
+        .feature-attachments-section { position: relative; }
         .attachments-header {
             display: flex; align-items: center; justify-content: space-between; gap: 12px;
-            padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 12px;
         }
-        .feature-attachments-section.collapsed .attachments-header { padding-bottom: 0; border-bottom: none; margin-bottom: 0; }
-        .feature-attachments-section.collapsed .attachments-list { display: none; }
-        .attachments-title-wrap { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; flex: 1; }
-        .attachments-chevron {
-            display: inline-block; width: 10px; height: 10px; border-right: 2px solid var(--text-muted);
-            border-bottom: 2px solid var(--text-muted); transform: rotate(45deg); transition: transform 0.15s;
-            margin-right: 2px;
+        .attachments-title-wrap { display: flex; align-items: center; gap: 8px; }
+        .attachments-view-toggle {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+            color: var(--text-muted); padding: 4px 10px; border-radius: 6px;
+            font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit;
+            transition: all 0.15s; margin-left: 4px;
         }
-        .feature-attachments-section.collapsed .attachments-chevron { transform: rotate(-45deg); }
-        .attachments-title-wrap:hover .attachments-chevron { border-color: var(--text-dim); }
+        .attachments-view-toggle:hover { background: rgba(255,255,255,0.08); border-color: var(--text-muted); color: var(--text-dim); }
+        .attachments-view-toggle .chev {
+            display: inline-block; width: 7px; height: 7px;
+            border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+            transform: rotate(45deg); transition: transform 0.15s; margin-bottom: 2px;
+        }
+        .feature-attachments-section.dropdown-open .attachments-view-toggle .chev { transform: rotate(-135deg); margin-bottom: -2px; }
+        .attachments-list-dropdown {
+            display: none; position: absolute; top: 100%; right: 18px; left: 18px;
+            margin-top: 6px; z-index: 50;
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 12px; box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+            max-height: 360px; overflow-y: auto;
+        }
+        .feature-attachments-section.dropdown-open .attachments-list-dropdown { display: block; }
+        .feature-attachments-section.dropdown-open .attachments-header { padding-bottom: 0; border-bottom: none; margin-bottom: 0; }
         .attachments-title { font-size: 13px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.3px; text-transform: uppercase; }
         .attachments-count {
             font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.05);
@@ -1580,20 +1594,25 @@
         <div class="content-feature-header" id="content-feature-header"></div>
         <div class="feature-attachments-section" id="feature-image-section" style="display:none;">
             <div class="attachments-header">
-                <div class="attachments-title-wrap" onclick="toggleAttachmentsCollapse()" title="Click to expand/collapse">
-                    <span class="attachments-chevron"></span>
+                <div class="attachments-title-wrap">
                     <span class="attachments-title">&#128206; Attachments</span>
                     <span class="attachments-count" id="attachments-count"></span>
+                    <button type="button" class="attachments-view-toggle" id="attachments-view-toggle" onclick="toggleAttachmentsDropdown(event)" style="display:none;">
+                        <span id="attachments-view-toggle-label">View</span>
+                        <span class="chev"></span>
+                    </button>
                 </div>
                 <div class="attachments-actions" id="feature-image-upload">
                     <button class="btn-attach-action" id="btn-attach-media" onclick="showAttachMenu(this)" title="Attach an image or video">+ Media</button>
                     <button class="btn-attach-action btn-attach-link" id="btn-add-link" onclick="promptFeatureLink()" title="Store a hyperlink to insert into channels">+ Link</button>
                 </div>
             </div>
-            <div class="attachments-list" id="attachments-list">
-                <div class="attachments-empty" id="attachments-empty">No attachments yet. Use <strong>+ Media</strong> to add an image or video, or <strong>+ Link</strong> to store a URL.</div>
-                <div class="feature-image-preview" id="feature-image-preview" style="display:none;"></div>
-                <div class="feature-link-preview" id="feature-link-preview" style="display:none;"></div>
+            <div class="attachments-list-dropdown" id="attachments-list-dropdown">
+                <div class="attachments-list" id="attachments-list">
+                    <div class="attachments-empty" id="attachments-empty">No attachments yet. Use <strong>+ Media</strong> to add an image or video, or <strong>+ Link</strong> to store a URL.</div>
+                    <div class="feature-image-preview" id="feature-image-preview" style="display:none;"></div>
+                    <div class="feature-link-preview" id="feature-link-preview" style="display:none;"></div>
+                </div>
             </div>
         </div>
         <div class="content-loading" id="content-loading" style="display:none;">
@@ -4893,10 +4912,28 @@ function renderFeatureImagePreview() {
     updateAttachmentsEmptyState();
 }
 
-function toggleAttachmentsCollapse() {
+function toggleAttachmentsDropdown(e) {
+    if (e) e.stopPropagation();
     var section = document.getElementById('feature-image-section');
     if (!section) return;
-    section.classList.toggle('collapsed');
+    var opening = !section.classList.contains('dropdown-open');
+    section.classList.toggle('dropdown-open');
+    if (opening) {
+        setTimeout(function() {
+            document.addEventListener('click', _attachmentsDropdownOutsideClick);
+        }, 0);
+    } else {
+        document.removeEventListener('click', _attachmentsDropdownOutsideClick);
+    }
+}
+
+function _attachmentsDropdownOutsideClick(e) {
+    var section = document.getElementById('feature-image-section');
+    if (!section) return;
+    if (!section.contains(e.target)) {
+        section.classList.remove('dropdown-open');
+        document.removeEventListener('click', _attachmentsDropdownOutsideClick);
+    }
 }
 
 function updateAttachmentsEmptyState() {
@@ -4904,12 +4941,23 @@ function updateAttachmentsEmptyState() {
     var countEl = document.getElementById('attachments-count');
     var imgPreview = document.getElementById('feature-image-preview');
     var linkPreview = document.getElementById('feature-link-preview');
+    var toggleBtn = document.getElementById('attachments-view-toggle');
+    var toggleLbl = document.getElementById('attachments-view-toggle-label');
+    var section = document.getElementById('feature-image-section');
     var count = 0;
     if (contentViewFeatureImage) count++;
     if (imgPreview) count += imgPreview.querySelectorAll('.video-preview-item').length;
     if (contentViewFeatureLink) count++;
     if (empty) empty.style.display = count === 0 ? 'block' : 'none';
     if (countEl) countEl.textContent = count > 0 ? count + ' item' + (count === 1 ? '' : 's') : '';
+    if (toggleBtn) {
+        toggleBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+        if (toggleLbl) toggleLbl.textContent = 'View';
+    }
+    if (count === 0 && section) {
+        section.classList.remove('dropdown-open');
+        document.removeEventListener('click', _attachmentsDropdownOutsideClick);
+    }
 }
 
 function replaceFeatureImage() {
