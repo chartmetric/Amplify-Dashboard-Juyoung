@@ -6211,21 +6211,7 @@ function showLinkEditTooltipForPreview(refEl, linkStart, fullLink, linkText, lin
 
 function renderBatchImagePreview(idx) {
     var wrap = document.getElementById('batch-img-wrap-' + idx);
-    if (!wrap) return;
-    var img = (window.prepBatchImages || {})[idx];
-    if (!img) { wrap.innerHTML = ''; wrap.style.display = 'none'; return; }
-    var chKey = window.prepBatchChannel || 'twitter';
-    var previewClass = getImagePreviewClass(chKey);
-    wrap.style.display = '';
-    wrap.innerHTML =
-        '<div class="' + previewClass + '"><img src="' + img.dataUrl + '" alt="Attached image"></div>' +
-        '<div class="img-meta">' +
-            '<span>' + escHtml(img.name) + ' - ' + formatFileSize(img.size) + '</span>' +
-            '<button onclick="triggerImageReplace(null, true, ' + idx + ')">Replace</button>' +
-            '<button class="img-remove" onclick="removeBatchImage(' + idx + ')">Remove \u2715</button>' +
-        '</div>';
-    var addBtn = document.getElementById('batch-add-img-btn-' + idx);
-    if (addBtn) addBtn.style.display = 'none';
+    if (wrap) { wrap.innerHTML = ''; wrap.style.display = 'none'; }
 }
 
 function removeBatchImage(idx) {
