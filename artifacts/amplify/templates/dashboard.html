@@ -4089,7 +4089,11 @@ function buildChannelCard(chKey, ch) {
             (isArticle ? '<button class="btn-preview-toggle" id="preview-toggle-' + chKey + '" onclick="togglePreview(\'' + chKey + '\')">Preview</button>' : '') +
             '<label class="ch-img-toggle" id="img-toggle-' + chKey + '" style="display:none;" title="Include the feature image in this channel">' +
                 '<input type="checkbox" id="img-cb-' + chKey + '" onchange="toggleChannelImage(\'' + chKey + '\')">' +
-                '<span>Image</span>' +
+                '<span id="img-toggle-label-' + chKey + '">Image</span>' +
+            '</label>' +
+            '<label class="ch-img-toggle" id="video-toggle-' + chKey + '" style="display:none;" title="Include the attached video in this channel">' +
+                '<input type="checkbox" id="video-cb-' + chKey + '" onchange="toggleChannelVideo(\'' + chKey + '\')">' +
+                '<span>Video</span>' +
             '</label>' +
             '<button class="btn-insert-link" id="insert-link-' + chKey + '" style="display:none;" onclick="insertLinkIntoChannel(\'' + chKey + '\')" title="Insert stored hyperlink into selected text">&#128279; Insert Link</button>' +
         '</div>' +
@@ -4516,6 +4520,7 @@ function restoreImageState(snap) {
     contentViewFeatureImage = snap.featureImage;
     renderFeatureImagePreview();
     if (contentViewFeatureImage) showImageToggles(); else hideImageToggles();
+    showVideoToggles();
     var allChKeys = Object.keys(contentViewChannels);
     for (var i = 0; i < allChKeys.length; i++) {
         var k = allChKeys[i];
@@ -4890,6 +4895,7 @@ function renderVideoPreview(data) {
     preview.style.display = 'flex';
     preview.insertAdjacentHTML('beforeend', videoHtml);
     updateAttachmentsEmptyState();
+    if (typeof showVideoToggles === 'function') showVideoToggles();
 }
 
 function removeFeatureVideo(btn) {
@@ -4918,6 +4924,7 @@ function removeFeatureVideo(btn) {
         imgPreview.style.display = 'none';
     }
     updateAttachmentsEmptyState();
+    if (typeof showVideoToggles === 'function') showVideoToggles();
     showToast('Video removed', 'success');
 }
 
@@ -5101,11 +5108,14 @@ function removeFeatureImage() {
 function showImageToggles() {
     if (!contentViewFeatureImage) return;
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    var labelText = contentViewFeatureImage.isGif ? 'GIF' : 'Image';
     var allChKeys = Object.keys(contentViewChannels);
     for (var i = 0; i < allChKeys.length; i++) {
         var ch = allChKeys[i];
         var toggle = document.getElementById('img-toggle-' + ch);
         if (toggle) toggle.style.display = '';
+        var lbl = document.getElementById('img-toggle-label-' + ch);
+        if (lbl) lbl.textContent = labelText;
         var ta = document.getElementById('ta-' + ch);
         if (ta && ta.value.indexOf('[image:') !== -1 && !contentViewImageInclude[ch]) {
             contentViewImageInclude[ch] = true;
@@ -5122,6 +5132,60 @@ function hideImageToggles() {
         var toggle = document.getElementById('img-toggle-' + allChKeys[i]);
         if (toggle) toggle.style.display = 'none';
     }
+}
+
+function showVideoToggles() {
+    var vids = window.contentViewVideos || {};
+    if (!Object.keys(vids).length) { hideVideoToggles(); return; }
+    var allChKeys = Object.keys(contentViewChannels);
+    for (var i = 0; i < allChKeys.length; i++) {
+        var ch = allChKeys[i];
+        var toggle = document.getElementById('video-toggle-' + ch);
+        if (toggle) toggle.style.display = '';
+        var cb = document.getElementById('video-cb-' + ch);
+        var ta = document.getElementById('ta-' + ch);
+        if (cb && ta) cb.checked = ta.value.indexOf('[video:') !== -1;
+    }
+}
+
+function hideVideoToggles() {
+    var allChKeys = Object.keys(contentViewChannels);
+    for (var i = 0; i < allChKeys.length; i++) {
+        var toggle = document.getElementById('video-toggle-' + allChKeys[i]);
+        if (toggle) toggle.style.display = 'none';
+    }
+}
+
+function toggleChannelVideo(chKey) {
+    var cb = document.getElementById('video-cb-' + chKey);
+    var ta = document.getElementById('ta-' + chKey);
+    if (!cb || !ta) return;
+    var vids = window.contentViewVideos || {};
+    var names = Object.keys(vids);
+    if (cb.checked) {
+        for (var i = 0; i < names.length; i++) {
+            var name = names[i];
+            var marker = '\n[video: ' + name + ']';
+            if (ta.value.indexOf('[video: ' + name + ']') === -1) {
+                ta.value = ta.value.replace(/\s+$/, '') + marker;
+            }
+        }
+        var isEmailCh = chKey.indexOf('email') === 0;
+        if (!isEmailCh) {
+            showToast('This channel may not support inline video — the marker is added but the video may not display.', 'warning');
+        }
+    } else {
+        for (var j = 0; j < names.length; j++) {
+            var n = names[j];
+            var escN = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            ta.value = ta.value.replace(new RegExp('\\n?\\[video:\\s*' + escN + '\\s*\\]', 'g'), '');
+        }
+        ta.value = ta.value.replace(/\s+$/, '');
+    }
+    ta.dispatchEvent(new Event('input'));
+    var preview = document.getElementById('md-preview-' + chKey);
+    if (preview) preview.innerHTML = simpleMarkdown(ta.value, {isEmail: chKey.indexOf('email') === 0});
+    autoSaveDraft(chKey);
 }
 
 function toggleChannelImage(chKey) {
