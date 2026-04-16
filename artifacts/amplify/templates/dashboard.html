@@ -849,6 +849,41 @@
         .ch-img-toggle { display: flex; align-items: center; gap: 4px; margin-left: auto; font-size: 11px; color: var(--text-muted); cursor: pointer; }
         .ch-img-toggle input { cursor: pointer; accent-color: var(--accent); }
         .ch-img-toggle:hover { color: var(--text-body); }
+        .ch-media-picker { margin-left: auto; }
+        .ch-media-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+            color: var(--text-muted); padding: 4px 10px; border-radius: 6px;
+            font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit;
+            transition: all 0.15s;
+        }
+        .ch-media-btn:hover { background: rgba(255,255,255,0.08); border-color: var(--text-muted); color: var(--text-dim); }
+        .ch-media-btn.has-selection { background: rgba(0,201,167,0.1); border-color: rgba(0,201,167,0.5); color: var(--accent); }
+        .ch-media-chev {
+            display: inline-block; width: 6px; height: 6px;
+            border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+            transform: rotate(45deg); transition: transform 0.15s; margin-bottom: 2px;
+        }
+        .ch-media-picker.open .ch-media-chev { transform: rotate(-135deg); margin-bottom: -2px; }
+        .ch-media-menu {
+            display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 100;
+            min-width: 240px; background: #1e2128; border: 1px solid #333; border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5); padding: 6px 0;
+        }
+        .ch-media-picker.open .ch-media-menu { display: block; }
+        .ch-media-menu-header { padding: 8px 14px 4px 14px; font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+        .ch-media-menu-item { padding: 8px 14px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: #e0e0e0; cursor: pointer; }
+        .ch-media-menu-item:hover { background: #2a2d35; }
+        .ch-media-menu-item input { cursor: pointer; accent-color: var(--accent); margin: 0; }
+        .ch-media-menu-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ch-media-menu-item .kind {
+            font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+            padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.08); color: #aaa;
+        }
+        .ch-media-menu-item .kind.image { background: rgba(0,201,167,0.15); color: var(--accent); }
+        .ch-media-menu-item .kind.gif { background: rgba(155,89,182,0.2); color: #c79aff; }
+        .ch-media-menu-item .kind.video { background: rgba(155,89,182,0.2); color: #c79aff; }
+        .ch-media-menu-empty { padding: 10px 14px; font-size: 11px; color: #888; font-style: italic; }
         .channel-card.drag-highlight { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,201,167,0.15); }
         .publish-dropdown .custom-dropdown-menu { top: auto; bottom: calc(100% + 4px); left: 0; }
         .publish-dropdown .custom-dropdown-toggle { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
@@ -4087,14 +4122,11 @@ function buildChannelCard(chKey, ch) {
             '<span class="status-badge draft" id="status-' + chKey + '">Draft</span>' +
             (ch.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
             (isArticle ? '<button class="btn-preview-toggle" id="preview-toggle-' + chKey + '" onclick="togglePreview(\'' + chKey + '\')">Preview</button>' : '') +
-            '<label class="ch-img-toggle" id="img-toggle-' + chKey + '" style="display:none;" title="Include the feature image in this channel">' +
-                '<input type="checkbox" id="img-cb-' + chKey + '" onchange="toggleChannelImage(\'' + chKey + '\')">' +
-                '<span id="img-toggle-label-' + chKey + '">Image</span>' +
-            '</label>' +
-            '<label class="ch-img-toggle" id="video-toggle-' + chKey + '" style="display:none;" title="Include the attached video in this channel">' +
-                '<input type="checkbox" id="video-cb-' + chKey + '" onchange="toggleChannelVideo(\'' + chKey + '\')">' +
-                '<span>Video</span>' +
-            '</label>' +
+            '<div class="ch-media-picker" id="media-picker-' + chKey + '" style="display:none;position:relative;">' +
+                '<button type="button" class="ch-media-btn" id="media-btn-' + chKey + '" onclick="toggleChannelMediaMenu(\'' + chKey + '\', event)" title="Choose which attachments to include in this channel">' +
+                    '&#128206; <span id="media-btn-label-' + chKey + '">Media</span> <span class="ch-media-chev"></span>' +
+                '</button>' +
+            '</div>' +
             '<button class="btn-insert-link" id="insert-link-' + chKey + '" style="display:none;" onclick="insertLinkIntoChannel(\'' + chKey + '\')" title="Insert stored hyperlink into selected text">&#128279; Insert Link</button>' +
         '</div>' +
         (isStandaloneEmail ? '<div class="email-subject-row" style="padding:8px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Subject</label><input type="text" id="subject-' + chKey + '" class="email-subject-input" value="' + escHtml(emailSubject) + '" placeholder="Email subject line" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
@@ -5105,88 +5137,172 @@ function removeFeatureImage() {
     }
 }
 
-function showImageToggles() {
-    if (!contentViewFeatureImage) return;
-    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
-    var labelText = contentViewFeatureImage.isGif ? 'GIF' : 'Image';
-    var allChKeys = Object.keys(contentViewChannels);
+function _getAvailableMediaItems() {
+    var items = [];
+    if (contentViewFeatureImage && contentViewFeatureImage.name) {
+        items.push({
+            kind: contentViewFeatureImage.isGif ? 'gif' : 'image',
+            name: contentViewFeatureImage.name,
+            marker: 'image'
+        });
+    }
+    var vids = window.contentViewVideos || {};
+    var vnames = Object.keys(vids);
+    for (var i = 0; i < vnames.length; i++) {
+        items.push({ kind: 'video', name: vnames[i], marker: 'video' });
+    }
+    return items;
+}
+
+function updateChannelMediaPickers() {
+    var items = _getAvailableMediaItems();
+    var hasAny = items.length > 0;
+    var allChKeys = Object.keys(contentViewChannels || {});
     for (var i = 0; i < allChKeys.length; i++) {
         var ch = allChKeys[i];
-        var toggle = document.getElementById('img-toggle-' + ch);
-        if (toggle) toggle.style.display = '';
-        var lbl = document.getElementById('img-toggle-label-' + ch);
-        if (lbl) lbl.textContent = labelText;
-        var ta = document.getElementById('ta-' + ch);
-        if (ta && ta.value.indexOf('[image:') !== -1 && !contentViewImageInclude[ch]) {
-            contentViewImageInclude[ch] = true;
-            var cb = document.getElementById('img-cb-' + ch);
-            if (cb) cb.checked = true;
-            if (fid) persistImageInclude(fid, ch, true);
+        var picker = document.getElementById('media-picker-' + ch);
+        if (!picker) continue;
+        picker.style.display = hasAny ? '' : 'none';
+        var btn = document.getElementById('media-btn-' + ch);
+        if (btn) {
+            var selectedCount = _countSelectedMediaForChannel(ch, items);
+            var lbl = document.getElementById('media-btn-label-' + ch);
+            if (lbl) lbl.textContent = selectedCount > 0 ? ('Media (' + selectedCount + ')') : 'Media';
+            if (selectedCount > 0) btn.classList.add('has-selection');
+            else btn.classList.remove('has-selection');
         }
     }
 }
 
-function hideImageToggles() {
-    var allChKeys = Object.keys(contentViewChannels);
-    for (var i = 0; i < allChKeys.length; i++) {
-        var toggle = document.getElementById('img-toggle-' + allChKeys[i]);
-        if (toggle) toggle.style.display = 'none';
-    }
-}
-
-function showVideoToggles() {
-    var vids = window.contentViewVideos || {};
-    if (!Object.keys(vids).length) { hideVideoToggles(); return; }
-    var allChKeys = Object.keys(contentViewChannels);
-    for (var i = 0; i < allChKeys.length; i++) {
-        var ch = allChKeys[i];
-        var toggle = document.getElementById('video-toggle-' + ch);
-        if (toggle) toggle.style.display = '';
-        var cb = document.getElementById('video-cb-' + ch);
-        var ta = document.getElementById('ta-' + ch);
-        if (cb && ta) cb.checked = ta.value.indexOf('[video:') !== -1;
-    }
-}
-
-function hideVideoToggles() {
-    var allChKeys = Object.keys(contentViewChannels);
-    for (var i = 0; i < allChKeys.length; i++) {
-        var toggle = document.getElementById('video-toggle-' + allChKeys[i]);
-        if (toggle) toggle.style.display = 'none';
-    }
-}
-
-function toggleChannelVideo(chKey) {
-    var cb = document.getElementById('video-cb-' + chKey);
+function _countSelectedMediaForChannel(chKey, items) {
     var ta = document.getElementById('ta-' + chKey);
-    if (!cb || !ta) return;
-    var vids = window.contentViewVideos || {};
-    var names = Object.keys(vids);
-    if (cb.checked) {
-        for (var i = 0; i < names.length; i++) {
-            var name = names[i];
-            var marker = '\n[video: ' + name + ']';
-            if (ta.value.indexOf('[video: ' + name + ']') === -1) {
-                ta.value = ta.value.replace(/\s+$/, '') + marker;
+    if (!ta) return 0;
+    var v = ta.value || '';
+    var count = 0;
+    for (var i = 0; i < items.length; i++) {
+        var esc = items[i].name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var re = new RegExp('\\[' + items[i].marker + ':\\s*' + esc + '\\s*\\]');
+        if (re.test(v)) count++;
+    }
+    return count;
+}
+
+function toggleChannelMediaMenu(chKey, e) {
+    if (e) e.stopPropagation();
+    var picker = document.getElementById('media-picker-' + chKey);
+    if (!picker) return;
+    var allPickers = document.querySelectorAll('.ch-media-picker.open');
+    for (var i = 0; i < allPickers.length; i++) {
+        if (allPickers[i] !== picker) allPickers[i].classList.remove('open');
+    }
+    if (picker.classList.contains('open')) {
+        picker.classList.remove('open');
+        return;
+    }
+    _renderChannelMediaMenu(chKey);
+    picker.classList.add('open');
+    setTimeout(function() {
+        document.addEventListener('click', _closeMediaMenuOnOutside);
+    }, 0);
+}
+
+function _closeMediaMenuOnOutside(e) {
+    var openPickers = document.querySelectorAll('.ch-media-picker.open');
+    var clickedInside = false;
+    for (var i = 0; i < openPickers.length; i++) {
+        if (openPickers[i].contains(e.target)) { clickedInside = true; break; }
+    }
+    if (!clickedInside) {
+        for (var j = 0; j < openPickers.length; j++) openPickers[j].classList.remove('open');
+        document.removeEventListener('click', _closeMediaMenuOnOutside);
+    }
+}
+
+function _renderChannelMediaMenu(chKey) {
+    var picker = document.getElementById('media-picker-' + chKey);
+    if (!picker) return;
+    var old = picker.querySelector('.ch-media-menu');
+    if (old) old.remove();
+    var items = _getAvailableMediaItems();
+    var menu = document.createElement('div');
+    menu.className = 'ch-media-menu';
+    var ta = document.getElementById('ta-' + chKey);
+    var taVal = ta ? (ta.value || '') : '';
+    var html = '<div class="ch-media-menu-header">Include in this channel</div>';
+    if (!items.length) {
+        html += '<div class="ch-media-menu-empty">No attachments yet. Add image, GIF, or video above.</div>';
+    } else {
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i];
+            var esc = it.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            var re = new RegExp('\\[' + it.marker + ':\\s*' + esc + '\\s*\\]');
+            var checked = re.test(taVal) ? 'checked' : '';
+            var kindLbl = it.kind === 'gif' ? 'GIF' : (it.kind.charAt(0).toUpperCase() + it.kind.slice(1));
+            html += '<label class="ch-media-menu-item">' +
+                '<input type="checkbox" ' + checked + ' data-kind="' + it.kind + '" data-marker="' + it.marker + '" data-name="' + escHtml(it.name) + '">' +
+                '<span class="name" title="' + escHtml(it.name) + '">' + escHtml(it.name) + '</span>' +
+                '<span class="kind ' + it.kind + '">' + kindLbl + '</span>' +
+                '</label>';
+        }
+    }
+    menu.innerHTML = html;
+    picker.appendChild(menu);
+    var cbs = menu.querySelectorAll('input[type=checkbox]');
+    for (var k = 0; k < cbs.length; k++) {
+        cbs[k].onchange = function() {
+            toggleChannelMediaItem(chKey, this.getAttribute('data-marker'), this.getAttribute('data-name'), this.getAttribute('data-kind'), this.checked);
+        };
+    }
+}
+
+function toggleChannelMediaItem(chKey, markerType, name, kind, checked) {
+    var ta = document.getElementById('ta-' + chKey);
+    if (!ta) return;
+    var esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (checked) {
+        var already = new RegExp('\\[' + markerType + ':\\s*' + esc + '\\s*\\]').test(ta.value);
+        if (!already) {
+            var marker = '\n[' + markerType + ': ' + name + ']';
+            ta.value = ta.value.replace(/\s+$/, '') + marker;
+        }
+        if (markerType === 'image') {
+            contentViewImageInclude[chKey] = true;
+            if (!window.contentViewImageMap) window.contentViewImageMap = {};
+            if (!contentViewImageMap[chKey]) contentViewImageMap[chKey] = {};
+            if (contentViewFeatureImage && contentViewFeatureImage.name === name) {
+                contentViewImageMap[chKey][name] = contentViewFeatureImage.dataUrl;
+            }
+            var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+            if (fid) persistImageInclude(fid, chKey, true);
+            if (kind === 'gif' && !GIF_ANIMATED_CHANNELS[chKey]) {
+                showToast('This channel may render GIFs as a static frame.', 'warning');
+            }
+        } else if (markerType === 'video') {
+            var isEmailCh = chKey.indexOf('email') === 0;
+            if (!isEmailCh) {
+                showToast('This channel may not play inline videos — the marker is added but playback may not be supported.', 'warning');
             }
         }
-        var isEmailCh = chKey.indexOf('email') === 0;
-        if (!isEmailCh) {
-            showToast('This channel may not support inline video — the marker is added but the video may not display.', 'warning');
-        }
     } else {
-        for (var j = 0; j < names.length; j++) {
-            var n = names[j];
-            var escN = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            ta.value = ta.value.replace(new RegExp('\\n?\\[video:\\s*' + escN + '\\s*\\]', 'g'), '');
+        var re = new RegExp('\\n?\\[' + markerType + ':\\s*' + esc + '\\s*\\]', 'g');
+        ta.value = ta.value.replace(re, '').replace(/\s+$/, '');
+        if (markerType === 'image') {
+            contentViewImageInclude[chKey] = false;
+            var fid2 = contentViewFeature ? (contentViewFeature.id || '') : '';
+            if (fid2) persistImageInclude(fid2, chKey, false);
         }
-        ta.value = ta.value.replace(/\s+$/, '');
     }
     ta.dispatchEvent(new Event('input'));
     var preview = document.getElementById('md-preview-' + chKey);
     if (preview) preview.innerHTML = simpleMarkdown(ta.value, {isEmail: chKey.indexOf('email') === 0});
     autoSaveDraft(chKey);
+    updateChannelMediaPickers();
 }
+
+function showImageToggles() { updateChannelMediaPickers(); }
+function hideImageToggles() { updateChannelMediaPickers(); }
+function showVideoToggles() { updateChannelMediaPickers(); }
+function hideVideoToggles() { updateChannelMediaPickers(); }
 
 function toggleChannelImage(chKey) {
     var cb = document.getElementById('img-cb-' + chKey);
