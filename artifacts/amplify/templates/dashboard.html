@@ -4015,7 +4015,7 @@ function buildChannelCard(chKey, ch) {
         (isStandaloneEmail ? '<div class="email-subject-row" style="padding:8px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Subject</label><input type="text" id="subject-' + chKey + '" class="email-subject-input" value="' + escHtml(emailSubject) + '" placeholder="Email subject line" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
         (isStandaloneEmail ? '<div class="email-fromname-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">From Name</label><input type="text" id="fromname-' + chKey + '" value="Chartmetric" placeholder="Sender display name" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;"></div>' : '') +
         (isStandaloneEmail ? '<div class="email-template-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Template</label><select id="template-' + chKey + '" style="width:100%;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;"><option value="">Built-in (Chartmetric)</option></select></div>' : '') +
-        (isStandaloneEmail ? '<div class="email-audience-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Send To</label><div style="display:flex;gap:6px;align-items:center;"><select id="audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onAudienceChange(\'' + chKey + '\')"><option value="">Test recipients only</option></select><span id="audience-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div></div>' : '') +
+        (isStandaloneEmail ? '<div class="email-audience-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Send To</label><div style="display:flex;gap:6px;align-items:center;"><select id="audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onAudienceChange(\'' + chKey + '\')"><option value="">Test recipients only</option><option value="__custom__">Custom emails...</option></select><span id="audience-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div><input type="text" id="custom-emails-' + chKey + '" placeholder="Comma-separated emails (e.g. a@example.com, b@example.com)" style="display:none;width:100%;margin-top:6px;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;background:#1a1d23;color:#e0e0e0;"></div>' : '') +
         '<div class="channel-card-body">' +
             '<textarea class="channel-textarea' + (isArticle ? ' tall' : '') + '" id="ta-' + chKey + '" data-channel="' + chKey + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(bodyContent) + '</textarea>' +
             '<div class="md-preview" id="md-preview-' + chKey + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(bodyContent, {isEmail: isEmail}) + '</div>' +
@@ -5089,9 +5089,18 @@ function populateAudienceDropdown(chKey, audiences) {
 function onAudienceChange(chKey) {
     var sel = document.getElementById('audience-' + chKey);
     var countSpan = document.getElementById('audience-count-' + chKey);
+    var customInput = document.getElementById('custom-emails-' + chKey);
     if (!sel) return;
     var audienceId = sel.value;
     selectedAudience[chKey] = audienceId;
+    if (audienceId === '__custom__') {
+        if (customInput) customInput.style.display = 'block';
+        if (countSpan) countSpan.textContent = 'Custom';
+        audienceContacts[chKey] = null;
+        return;
+    } else {
+        if (customInput) customInput.style.display = 'none';
+    }
     if (!audienceId) {
         if (countSpan) countSpan.textContent = '';
         audienceContacts[chKey] = null;
@@ -5715,7 +5724,18 @@ function doPublishToChannel(chKey) {
         var audContacts = audienceContacts[chKey];
         var audSel = document.getElementById('audience-' + chKey);
         var audId = audSel ? audSel.value : '';
-        if (audId && audContacts && audContacts.length > 0) {
+        if (audId === '__custom__') {
+            var customInput = document.getElementById('custom-emails-' + chKey);
+            var raw = customInput ? customInput.value.trim() : '';
+            var customEmails = raw.split(/[,;\s]+/).map(function(e) { return e.trim(); }).filter(function(e) { return e && e.indexOf('@') > 0; });
+            if (customEmails.length === 0) {
+                showToast('Enter at least one valid email address', 'error');
+                publishingInFlight[chKey] = false;
+                return;
+            }
+            payload.to_email = customEmails.join(',');
+            payload.is_test = false;
+        } else if (audId && audContacts && audContacts.length > 0) {
             var emails = [];
             for (var ci = 0; ci < audContacts.length; ci++) {
                 var email = audContacts[ci].email;
