@@ -4883,6 +4883,7 @@ function renderVideoPreview(data) {
                 '</div>' +
             '</div>' +
             '<div class="attachment-actions">' +
+                '<button class="attachment-btn" onclick="replaceFeatureVideo(this)">Replace</button>' +
                 '<button class="attachment-btn btn-remove" onclick="removeFeatureVideo(this)">Remove</button>' +
             '</div>' +
         '</div>';
@@ -4918,6 +4919,21 @@ function removeFeatureVideo(btn) {
     }
     updateAttachmentsEmptyState();
     showToast('Video removed', 'success');
+}
+
+function replaceFeatureVideo(btn) {
+    var card = btn.closest('.video-preview-item');
+    if (!card) return;
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'video/*';
+    input.onchange = function() {
+        if (!input.files || !input.files[0]) return;
+        var fakeRemoveBtn = card.querySelector('.btn-remove');
+        if (fakeRemoveBtn) removeFeatureVideo(fakeRemoveBtn);
+        handleVideoFile(input.files[0]);
+    };
+    input.click();
 }
 
 function promptVideoUrl() {
