@@ -776,15 +776,8 @@
             transform: rotate(45deg); transition: transform 0.15s; margin-bottom: 2px;
         }
         .feature-attachments-section.dropdown-open .attachments-view-toggle .chev { transform: rotate(-135deg); margin-bottom: -2px; }
-        .attachments-list-dropdown {
-            display: none; position: absolute; top: 100%; right: 18px; left: 18px;
-            margin-top: 6px; z-index: 50;
-            background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
-            padding: 12px; box-shadow: 0 12px 32px rgba(0,0,0,0.45);
-            max-height: 360px; overflow-y: auto;
-        }
+        .attachments-list-dropdown { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
         .feature-attachments-section.dropdown-open .attachments-list-dropdown { display: block; }
-        .feature-attachments-section.dropdown-open .attachments-header { padding-bottom: 0; border-bottom: none; margin-bottom: 0; }
         .attachments-title { font-size: 13px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.3px; text-transform: uppercase; }
         .attachments-count {
             font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.05);
@@ -4916,24 +4909,7 @@ function toggleAttachmentsDropdown(e) {
     if (e) e.stopPropagation();
     var section = document.getElementById('feature-image-section');
     if (!section) return;
-    var opening = !section.classList.contains('dropdown-open');
     section.classList.toggle('dropdown-open');
-    if (opening) {
-        setTimeout(function() {
-            document.addEventListener('click', _attachmentsDropdownOutsideClick);
-        }, 0);
-    } else {
-        document.removeEventListener('click', _attachmentsDropdownOutsideClick);
-    }
-}
-
-function _attachmentsDropdownOutsideClick(e) {
-    var section = document.getElementById('feature-image-section');
-    if (!section) return;
-    if (!section.contains(e.target)) {
-        section.classList.remove('dropdown-open');
-        document.removeEventListener('click', _attachmentsDropdownOutsideClick);
-    }
 }
 
 function updateAttachmentsEmptyState() {
