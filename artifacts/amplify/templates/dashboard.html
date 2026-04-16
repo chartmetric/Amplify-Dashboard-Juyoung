@@ -753,32 +753,75 @@
         .img-meta button:hover { color: var(--text-body); }
         .img-meta .img-remove { color: #ef4444; }
         .img-meta .img-remove:hover { color: #f87171; }
-        .feature-image-section {
+        .feature-attachments-section {
             background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
-            padding: 14px 18px; margin-bottom: 16px; display: flex; align-items: center; gap: 16px;
+            padding: 14px 18px; margin-bottom: 16px;
         }
-        .btn-feature-image {
-            background: none; border: 1px dashed var(--border); color: var(--text-muted); padding: 8px 16px;
-            border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; transition: all 0.15s;
+        .attachments-header {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 12px;
         }
-        .btn-feature-image:hover { border-color: var(--accent); color: var(--accent); }
-        .feature-image-preview {
-            display: flex; align-items: center; gap: 14px; flex: 1;
+        .attachments-title-wrap { display: flex; align-items: center; gap: 8px; }
+        .attachments-title { font-size: 13px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.3px; text-transform: uppercase; }
+        .attachments-count {
+            font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.05);
+            padding: 2px 8px; border-radius: 99px; font-weight: 600;
         }
-        .feature-image-preview img {
-            height: 64px; width: auto; max-width: 120px; border-radius: 8px; object-fit: cover;
+        .attachments-actions { display: flex; align-items: center; gap: 8px; }
+        .btn-attach-action {
+            background: rgba(0,201,167,0.08); border: 1px solid rgba(0,201,167,0.3); color: var(--accent);
+            padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+            cursor: pointer; font-family: inherit; transition: all 0.15s;
         }
-        .feature-image-preview .img-meta { flex: 1; }
-        .feature-link-preview {
-            display: flex; align-items: center; gap: 14px; flex: 1;
+        .btn-attach-action:hover { background: rgba(0,201,167,0.18); border-color: var(--accent); }
+        .btn-attach-action.btn-attach-link { background: rgba(45,140,240,0.08); border-color: rgba(45,140,240,0.3); color: #2d8cf0; }
+        .btn-attach-action.btn-attach-link:hover { background: rgba(45,140,240,0.18); border-color: #2d8cf0; }
+        .attachments-list { display: flex; flex-direction: column; gap: 8px; }
+        .attachments-empty {
+            font-size: 12px; color: var(--text-muted); text-align: center;
+            padding: 20px 12px; border: 1px dashed var(--border); border-radius: 8px;
+            background: rgba(255,255,255,0.02);
         }
-        .feature-link-preview .link-meta { flex: 1; display: flex; align-items: center; gap: 8px; }
-        .feature-link-preview .link-meta span { font-size: 12px; color: var(--text-muted); word-break: break-all; }
-        .feature-link-preview .link-meta a { font-size: 12px; color: var(--accent); text-decoration: underline; word-break: break-all; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
-        .feature-link-preview .link-meta button { background: none; border: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 2px 6px; }
-        .feature-link-preview .link-meta button:hover { text-decoration: underline; }
-        .feature-link-preview .link-meta .link-remove { color: var(--text-muted); }
-        .feature-link-preview .link-meta .link-remove:hover { color: #f87171; }
+        .attachments-empty strong { color: var(--text-dim); font-weight: 600; }
+        .feature-image-preview, .feature-link-preview { display: flex; flex-direction: column; gap: 8px; }
+        .attachment-card {
+            display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+            background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px;
+            transition: border-color 0.15s;
+        }
+        .attachment-card:hover { border-color: rgba(0,201,167,0.4); }
+        .attachment-thumb {
+            width: 56px; height: 56px; border-radius: 6px; object-fit: cover; flex-shrink: 0;
+            background: #1a1d23;
+        }
+        .attachment-thumb-placeholder {
+            width: 56px; height: 56px; border-radius: 6px; flex-shrink: 0;
+            background: #1a1d23; display: flex; align-items: center; justify-content: center;
+            font-size: 24px;
+        }
+        .attachment-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+        .attachment-name {
+            font-size: 13px; color: var(--text-dim); font-weight: 600;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .attachment-name a { color: #2d8cf0; text-decoration: none; }
+        .attachment-name a:hover { text-decoration: underline; }
+        .attachment-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
+        .attachment-type-badge {
+            font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 99px;
+            text-transform: uppercase; letter-spacing: 0.4px;
+        }
+        .attachment-type-badge.type-image { background: rgba(0,201,167,0.15); color: #00C9A7; }
+        .attachment-type-badge.type-video { background: rgba(108,99,255,0.15); color: #6c63ff; }
+        .attachment-type-badge.type-link { background: rgba(45,140,240,0.15); color: #2d8cf0; }
+        .attachment-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .attachment-btn {
+            background: none; border: 1px solid var(--border); color: var(--text-muted);
+            padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600;
+            cursor: pointer; font-family: inherit; transition: all 0.15s;
+        }
+        .attachment-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .attachment-btn.btn-remove:hover { border-color: #f87171; color: #f87171; }
         .btn-insert-link { background: none; border: 1px solid #2d8cf0; color: #2d8cf0; padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-left: 4px; font-family: inherit; transition: all 0.15s; }
         .btn-insert-link:hover { background: #2d8cf0; color: #fff; }
         .ch-img-toggle { display: flex; align-items: center; gap: 4px; margin-left: auto; font-size: 11px; color: var(--text-muted); cursor: pointer; }
@@ -1526,13 +1569,22 @@
             <button class="btn-back" onclick="exitContentView()">&larr; Back to Features</button>
         </div>
         <div class="content-feature-header" id="content-feature-header"></div>
-        <div class="feature-image-section" id="feature-image-section" style="display:none;">
-            <div class="feature-image-upload" id="feature-image-upload">
-                <button class="btn-feature-image" id="btn-attach-media" onclick="showAttachMenu(this)">&#128206; Attach</button>
-                <button class="btn-feature-image" id="btn-add-link" onclick="promptFeatureLink()" style="background:#2d8cf0;">&#128279; Link</button>
+        <div class="feature-attachments-section" id="feature-image-section" style="display:none;">
+            <div class="attachments-header">
+                <div class="attachments-title-wrap">
+                    <span class="attachments-title">&#128206; Attachments</span>
+                    <span class="attachments-count" id="attachments-count"></span>
+                </div>
+                <div class="attachments-actions" id="feature-image-upload">
+                    <button class="btn-attach-action" id="btn-attach-media" onclick="showAttachMenu(this)" title="Attach an image or video">+ Media</button>
+                    <button class="btn-attach-action btn-attach-link" id="btn-add-link" onclick="promptFeatureLink()" title="Store a hyperlink to insert into channels">+ Link</button>
+                </div>
             </div>
-            <div class="feature-image-preview" id="feature-image-preview" style="display:none;"></div>
-            <div class="feature-link-preview" id="feature-link-preview" style="display:none;"></div>
+            <div class="attachments-list" id="attachments-list">
+                <div class="attachments-empty" id="attachments-empty">No attachments yet. Use <strong>+ Media</strong> to add an image or video, or <strong>+ Link</strong> to store a URL.</div>
+                <div class="feature-image-preview" id="feature-image-preview" style="display:none;"></div>
+                <div class="feature-link-preview" id="feature-link-preview" style="display:none;"></div>
+            </div>
         </div>
         <div class="content-loading" id="content-loading" style="display:none;">
             <div class="spinner"></div>
@@ -3719,8 +3771,12 @@ function enterContentView(feature) {
             vids.forEach(function(v) {
               if (v.filename && v.thumb_url && v.video_url) {
                 window.contentViewVideos[v.filename] = { thumb_url: v.thumb_url, video_url: v.video_url };
+                if (typeof renderVideoPreview === 'function') {
+                  renderVideoPreview({ filename: v.filename, video_id: v.filename, thumb_url: v.thumb_url, video_url: v.video_url });
+                }
               }
             });
+            if (typeof updateAttachmentsEmptyState === 'function') updateAttachmentsEmptyState();
             if (vids.length > 0) {
               document.querySelectorAll('.channel-card').forEach(function(card) {
                 var ta = card.querySelector('textarea');
@@ -4674,19 +4730,60 @@ function addVideoMarkerToEmailChannels(filename) {
 function renderVideoPreview(data) {
     var preview = document.getElementById('feature-image-preview');
     if (!preview) return;
-    var existingVideos = preview.querySelectorAll('.video-preview-item');
+    var vidName = data.filename || data.video_id || 'video';
+    var vidUrl = data.video_url || '';
+    var thumbUrl = data.thumb_url || '';
+    var vidId = data.video_id || '';
     var videoHtml =
-        '<div class="video-preview-item" style="display:flex;align-items:center;gap:10px;padding:6px 0;">' +
-        '<div style="position:relative;width:120px;height:68px;flex-shrink:0;border-radius:6px;overflow:hidden;background:#222;">' +
-        '<img src="' + data.thumb_url + '" alt="Video thumbnail" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">' +
-        '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;background:rgba(0,0,0,0.7);border-radius:50%;display:flex;align-items:center;justify-content:center;">' +
-        '<span style="width:0;height:0;border-style:solid;border-width:6px 0 6px 10px;border-color:transparent transparent transparent #fff;margin-left:2px;"></span>' +
-        '</span>' +
-        '</div>' +
-        '<span style="font-size:12px;color:#aaa;">&#127910; ' + escHtml(data.video_id) + '</span>' +
+        '<div class="attachment-card video-preview-item" data-video-id="' + escHtml(vidId) + '" data-video-name="' + escHtml(vidName) + '">' +
+            '<div class="attachment-thumb" style="position:relative;overflow:hidden;">' +
+                (thumbUrl ? '<img src="' + escHtml(thumbUrl) + '" alt="Video" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">' : '') +
+                '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px;background:rgba(0,0,0,0.65);border-radius:50%;display:flex;align-items:center;justify-content:center;">' +
+                '<span style="width:0;height:0;border-style:solid;border-width:5px 0 5px 8px;border-color:transparent transparent transparent #fff;margin-left:2px;"></span>' +
+                '</span>' +
+            '</div>' +
+            '<div class="attachment-info">' +
+                '<div class="attachment-name">' + escHtml(vidName) + '</div>' +
+                '<div class="attachment-meta"><span class="attachment-type-badge type-video">Video</span>' +
+                (vidUrl ? '<a href="' + escHtml(vidUrl) + '" target="_blank" rel="noopener noreferrer" style="color:var(--text-muted);text-decoration:underline;">View</a>' : '') +
+                '</div>' +
+            '</div>' +
+            '<div class="attachment-actions">' +
+                '<button class="attachment-btn btn-remove" onclick="removeFeatureVideo(this)">Remove</button>' +
+            '</div>' +
         '</div>';
     preview.style.display = 'flex';
     preview.insertAdjacentHTML('beforeend', videoHtml);
+    updateAttachmentsEmptyState();
+}
+
+function removeFeatureVideo(btn) {
+    var card = btn.closest('.video-preview-item');
+    if (!card) return;
+    var vidName = card.getAttribute('data-video-name') || '';
+    card.remove();
+    if (window.contentViewVideos && vidName && window.contentViewVideos[vidName]) {
+        delete window.contentViewVideos[vidName];
+    }
+    if (vidName) {
+        var allChKeys = Object.keys(contentViewChannels || {});
+        for (var i = 0; i < allChKeys.length; i++) {
+            var ch = allChKeys[i];
+            var ta = document.getElementById('ta-' + ch);
+            if (ta && ta.value) {
+                var marker = '\n[video: ' + vidName + ']';
+                ta.value = ta.value.split(marker).join('').replace(new RegExp('\\[video:\\s*' + vidName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\s*\\]', 'g'), '').trim();
+                var preview = document.getElementById('md-preview-' + ch);
+                if (preview) preview.innerHTML = simpleMarkdown(ta.value, {isEmail: ch.indexOf('email') === 0});
+            }
+        }
+    }
+    var imgPreview = document.getElementById('feature-image-preview');
+    if (imgPreview && imgPreview.querySelectorAll('.video-preview-item').length === 0 && !contentViewFeatureImage) {
+        imgPreview.style.display = 'none';
+    }
+    updateAttachmentsEmptyState();
+    showToast('Video removed', 'success');
 }
 
 function promptVideoUrl() {
@@ -4763,19 +4860,40 @@ document.addEventListener('paste', function(e) {
 
 function renderFeatureImagePreview() {
     var preview = document.getElementById('feature-image-preview');
-    if (!contentViewFeatureImage) {
-        preview.style.display = 'none';
-        preview.innerHTML = '';
-        return;
+    if (!preview) return;
+    var existingVideos = preview.querySelectorAll('.video-preview-item');
+    var imgCard = '';
+    if (contentViewFeatureImage) {
+        imgCard =
+            '<div class="attachment-card image-attachment-card">' +
+                '<img class="attachment-thumb" src="' + contentViewFeatureImage.dataUrl + '" alt="Feature image">' +
+                '<div class="attachment-info">' +
+                    '<div class="attachment-name">' + escHtml(contentViewFeatureImage.name) + '</div>' +
+                    '<div class="attachment-meta"><span class="attachment-type-badge type-image">Image</span><span>' + formatFileSize(contentViewFeatureImage.size) + '</span></div>' +
+                '</div>' +
+                '<div class="attachment-actions">' +
+                    '<button class="attachment-btn" onclick="replaceFeatureImage()">Replace</button>' +
+                    '<button class="attachment-btn btn-remove" onclick="removeFeatureImage()">Remove</button>' +
+                '</div>' +
+            '</div>';
     }
-    preview.style.display = 'flex';
-    preview.innerHTML =
-        '<img src="' + contentViewFeatureImage.dataUrl + '" alt="Feature image">' +
-        '<div class="img-meta">' +
-            '<span>' + escHtml(contentViewFeatureImage.name) + ' - ' + formatFileSize(contentViewFeatureImage.size) + '</span>' +
-            '<button onclick="replaceFeatureImage()">Replace</button>' +
-            '<button class="img-remove" onclick="removeFeatureImage()">Remove \u2715</button>' +
-        '</div>';
+    preview.innerHTML = imgCard;
+    for (var i = 0; i < existingVideos.length; i++) preview.appendChild(existingVideos[i]);
+    preview.style.display = (contentViewFeatureImage || existingVideos.length > 0) ? 'flex' : 'none';
+    updateAttachmentsEmptyState();
+}
+
+function updateAttachmentsEmptyState() {
+    var empty = document.getElementById('attachments-empty');
+    var countEl = document.getElementById('attachments-count');
+    var imgPreview = document.getElementById('feature-image-preview');
+    var linkPreview = document.getElementById('feature-link-preview');
+    var count = 0;
+    if (contentViewFeatureImage) count++;
+    if (imgPreview) count += imgPreview.querySelectorAll('.video-preview-item').length;
+    if (contentViewFeatureLink) count++;
+    if (empty) empty.style.display = count === 0 ? 'block' : 'none';
+    if (countEl) countEl.textContent = count > 0 ? count + ' item' + (count === 1 ? '' : 's') : '';
 }
 
 function replaceFeatureImage() {
@@ -4913,23 +5031,27 @@ function promptFeatureLink() {
 
 function renderFeatureLinkPreview() {
     var preview = document.getElementById('feature-link-preview');
-    var linkBtn = document.getElementById('btn-add-link');
     if (!preview) return;
     if (!contentViewFeatureLink) {
         preview.style.display = 'none';
         preview.innerHTML = '';
-        if (linkBtn) linkBtn.style.display = '';
+        updateAttachmentsEmptyState();
         return;
     }
-    if (linkBtn) linkBtn.style.display = 'none';
     preview.style.display = 'flex';
     preview.innerHTML =
-        '<div class="link-meta">' +
-            '<span>&#128279;</span>' +
-            '<a href="' + escHtml(contentViewFeatureLink) + '" target="_blank" rel="noopener noreferrer" title="' + escHtml(contentViewFeatureLink) + '">' + escHtml(contentViewFeatureLink) + '</a>' +
-            '<button onclick="promptFeatureLink()">Replace</button>' +
-            '<button class="link-remove" onclick="removeFeatureLink()">Remove \u2715</button>' +
+        '<div class="attachment-card">' +
+            '<div class="attachment-thumb-placeholder">&#128279;</div>' +
+            '<div class="attachment-info">' +
+                '<div class="attachment-name"><a href="' + escHtml(contentViewFeatureLink) + '" target="_blank" rel="noopener noreferrer" title="' + escHtml(contentViewFeatureLink) + '">' + escHtml(contentViewFeatureLink) + '</a></div>' +
+                '<div class="attachment-meta"><span class="attachment-type-badge type-link">Link</span><span>Stored hyperlink</span></div>' +
+            '</div>' +
+            '<div class="attachment-actions">' +
+                '<button class="attachment-btn" onclick="promptFeatureLink()">Replace</button>' +
+                '<button class="attachment-btn btn-remove" onclick="removeFeatureLink()">Remove</button>' +
+            '</div>' +
         '</div>';
+    updateAttachmentsEmptyState();
 }
 
 function removeFeatureLink() {
