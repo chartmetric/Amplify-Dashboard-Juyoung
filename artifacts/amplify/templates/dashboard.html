@@ -5101,9 +5101,7 @@ function removeBatchImageInline(idx) {
     var img = (window.prepBatchImages || {})[idx];
     var name = img ? img.name : null;
     if (window.prepBatchImages) delete window.prepBatchImages[idx];
-    if (typeof renderBatchImagePreview === 'function') {
-        try { renderBatchImagePreview(idx); } catch (e) {}
-    }
+    renderBatchImagePreview(idx);
     var ta = document.getElementById('batch-ta-' + idx);
     if (ta) {
         if (name) {
@@ -7483,10 +7481,35 @@ function switchToBatchEdit(idx) {
     ta.focus();
 }
 
+function reconcileBatchAttachmentState(idx) {
+    var ta = document.getElementById('batch-ta-' + idx);
+    if (!ta) return;
+    var text = ta.value || '';
+    var videoNames = {};
+    var re = /\[video:\s*([^\]]+)\]/g;
+    var m;
+    while ((m = re.exec(text)) !== null) { videoNames[m[1].trim()] = true; }
+    var vids = (window.prepBatchVideos || {})[idx];
+    if (vids && vids.length) {
+        for (var k = vids.length - 1; k >= 0; k--) {
+            if (!videoNames[vids[k].name]) vids.splice(k, 1);
+        }
+    }
+    var imgNames = {};
+    var reI = /\[image:\s*([^\]]+)\]/g;
+    while ((m = reI.exec(text)) !== null) { imgNames[m[1].trim()] = true; }
+    var img = (window.prepBatchImages || {})[idx];
+    if (img && img.name && !imgNames[img.name]) {
+        delete window.prepBatchImages[idx];
+        if (typeof renderBatchImagePreview === 'function') renderBatchImagePreview(idx);
+    }
+}
+
 function switchToBatchPreview(idx) {
     var ta = document.getElementById('batch-ta-' + idx);
     var preview = document.getElementById('batch-md-preview-' + idx);
     if (!ta || !preview) return;
+    reconcileBatchAttachmentState(idx);
     preview.innerHTML = simpleMarkdown(ta.value, {batchIdx: idx});
     preview.style.display = 'block';
     ta.style.display = 'none';
