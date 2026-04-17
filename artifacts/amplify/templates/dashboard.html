@@ -7113,6 +7113,17 @@ function isEmailChannel(ch) {
     return ch === 'email_newsletter' || ch === 'email_standalone';
 }
 
+function computeDefaultEmailSubject(results, fallbackSingleSubject) {
+    var titles = (results || []).map(function(r) { return (r && r.feature_title) ? r.feature_title.trim() : ''; }).filter(Boolean);
+    if (titles.length <= 1) {
+        return fallbackSingleSubject || titles[0] || 'Chartmetric Product Update';
+    }
+    if (titles.length === 2) {
+        return 'Exciting Updates on Chartmetric: ' + titles[0] + ' and ' + titles[1];
+    }
+    return 'Exciting Updates on Chartmetric: ' + titles[0] + ', ' + titles[1] + ', and more';
+}
+
 function stripEmailSubjectLine(content) {
     if (!content) return { subject: '', body: '' };
     var m = content.match(/^\s*Subject:\s*(.+?)\s*(\r?\n\s*\r?\n|\r?\n|$)/i);
@@ -7426,10 +7437,10 @@ function startBatchGeneration() {
             var item = buildBatchItem(r, idx);
             list.appendChild(item);
         });
-        if (isEmailChannel(prepChannel) && firstSubject) {
+        if (isEmailChannel(prepChannel)) {
             window.prepBatchEmailSubject = window.prepBatchEmailSubject || {};
             if (!window.prepBatchEmailSubject[prepChannel]) {
-                window.prepBatchEmailSubject[prepChannel] = firstSubject;
+                window.prepBatchEmailSubject[prepChannel] = computeDefaultEmailSubject(prepBatchResults, firstSubject);
             }
         }
         renderBatchEmailSubjectRow();
