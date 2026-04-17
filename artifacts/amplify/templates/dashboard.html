@@ -8141,13 +8141,21 @@ function renderCombinedEmailComposer(items) {
         var header = '## ' + (it.feature_title || ('Feature ' + (i + 1)));
         bodyParts.push(header);
         var img = (window.prepBatchImages || {})[it.idx];
+        var sectionContent = it.content || '';
+        var existingImgMatch = sectionContent.match(/\[image:\s*([^\]]+)\]/);
         if (img && img.dataUrl) {
-            var placeholder = 'combined_feat_' + it.idx;
-            it.imagePlaceholder = placeholder;
-            bodyParts.push('[image: ' + placeholder + ']');
+            if (existingImgMatch) {
+                it.imagePlaceholder = existingImgMatch[1].trim();
+            } else {
+                var placeholder = 'combined_feat_' + it.idx;
+                it.imagePlaceholder = placeholder;
+                bodyParts.push('[image: ' + placeholder + ']');
+            }
+        } else if (existingImgMatch) {
+            sectionContent = sectionContent.replace(/\n?\[image:\s*[^\]]+\]/g, '').replace(/^\s+|\s+$/g, '');
         }
         bodyParts.push('');
-        bodyParts.push(it.content || '');
+        bodyParts.push(sectionContent);
         if (i < items.length - 1) {
             bodyParts.push('');
             bodyParts.push('---');
