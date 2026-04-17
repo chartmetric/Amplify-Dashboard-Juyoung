@@ -8052,10 +8052,15 @@ function renderCombinedEmailComposer(items) {
         var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         return months[d.getMonth()] + ' ' + d.getFullYear();
     })();
+    var defaultBannerTitle = 'Product Updates';
+    var defaultBannerMonth = monthYear;
+    var defaultIntroText = "Here's what's new in Chartmetric this month. A few highlights to help you get more from the platform.";
+    window._combinedBannerDefaults = { title: defaultBannerTitle, month: defaultBannerMonth, intro: defaultIntroText };
+    window._combinedIntroCurrent = defaultIntroText;
     if (isStandalone) {
-        bodyParts.push('[banner: title=Product Updates | month=' + monthYear + ']');
+        bodyParts.push('[banner: title=' + defaultBannerTitle + ' | month=' + defaultBannerMonth + ']');
         bodyParts.push('');
-        bodyParts.push("Here's what's new in Chartmetric this month. A few highlights to help you get more from the platform.");
+        bodyParts.push(defaultIntroText);
         bodyParts.push('');
     }
     function badgeForFeature(feat) {
@@ -8099,6 +8104,19 @@ function renderCombinedEmailComposer(items) {
     var templateRowHtml = isStandalone
         ? '<div class="email-template-row" style="margin-bottom:10px;"><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Template</label><select id="combined-email-template" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);"><option value="">Built-in (Chartmetric)</option></select></div>'
         : '';
+    var bannerFieldsHtml = isStandalone
+        ? '<div style="display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--border);border-radius:4px;">' +
+              '<div style="font-size:12px;color:var(--text-muted);font-weight:600;">Email banner</div>' +
+              '<div style="display:flex;gap:8px;">' +
+                  '<div style="flex:2;"><label style="font-size:11px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Banner title</label>' +
+                      '<input type="text" id="combined-banner-title" value="' + escHtml(defaultBannerTitle) + '" placeholder="' + escHtml(defaultBannerTitle) + '" oninput="onCombinedBannerInputChange()" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;"></div>' +
+                  '<div style="flex:1;"><label style="font-size:11px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Banner month</label>' +
+                      '<input type="text" id="combined-banner-month" value="' + escHtml(defaultBannerMonth) + '" placeholder="' + escHtml(defaultBannerMonth) + '" oninput="onCombinedBannerInputChange()" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;"></div>' +
+              '</div>' +
+              '<div><label style="font-size:11px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Intro paragraph</label>' +
+                  '<textarea id="combined-banner-intro" placeholder="' + escHtml(defaultIntroText) + '" oninput="onCombinedIntroInputChange()" style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;line-height:1.4;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;font-family:inherit;resize:vertical;">' + escHtml(defaultIntroText) + '</textarea></div>' +
+          '</div>'
+        : '';
     var editorPaneHtml =
         '<div class="combined-email-composer" style="display:flex;flex-direction:column;gap:10px;min-width:0;">' +
             '<div><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Subject</label>' +
@@ -8122,6 +8140,7 @@ function renderCombinedEmailComposer(items) {
                     '<span id="combined-email-bcc-count" style="font-size:11px;color:var(--text-muted);white-space:nowrap;"></span>' +
                 '</div>' +
                 '<input type="text" id="combined-email-bcc" placeholder="Comma-separated BCC emails (or pick segment above)" style="width:100%;margin-top:6px;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box;background:var(--bg-card);color:var(--text-body);" oninput="onCombinedEmailBccInputChange()"></div>' +
+            bannerFieldsHtml +
             '<div><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Body (stitched from approved drafts)</label>' +
                 '<textarea id="combined-email-body" style="width:100%;min-height:320px;padding:10px;font-size:14px;line-height:1.5;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;font-family:inherit;">' + escHtml(combinedBody) + '</textarea></div>' +
             '<div id="combined-email-images-summary" style="font-size:12px;color:var(--text-muted);"></div>' +
@@ -8270,6 +8289,58 @@ function refreshCombinedEmailLivePreview() {
         var s = document.getElementById('combined-email-preview-status');
         if (s) s.textContent = 'Preview error: ' + (err && err.message ? err.message : 'failed');
     });
+}
+
+function _sanitizeBannerField(s) {
+    return (s || '').replace(/[\]\|]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function onCombinedBannerInputChange() {
+    var bodyEl = document.getElementById('combined-email-body');
+    var titleEl = document.getElementById('combined-banner-title');
+    var monthEl = document.getElementById('combined-banner-month');
+    if (!bodyEl || !titleEl || !monthEl) return;
+    var defaults = window._combinedBannerDefaults || { title: 'Product Updates', month: '' };
+    var title = _sanitizeBannerField(titleEl.value) || defaults.title;
+    var month = _sanitizeBannerField(monthEl.value) || defaults.month;
+    var newTag = '[banner: title=' + title + ' | month=' + month + ']';
+    var bannerRe = /^\[banner:[^\]]*\]\s*$/m;
+    if (bannerRe.test(bodyEl.value)) {
+        bodyEl.value = bodyEl.value.replace(bannerRe, newTag);
+    } else {
+        bodyEl.value = newTag + '\n\n' + bodyEl.value;
+    }
+}
+
+function onCombinedIntroInputChange() {
+    var bodyEl = document.getElementById('combined-email-body');
+    var introEl = document.getElementById('combined-banner-intro');
+    if (!bodyEl || !introEl) return;
+    var defaults = window._combinedBannerDefaults || { intro: '' };
+    var newIntro = (introEl.value || '').trim() || defaults.intro;
+    // Anchor: replace the paragraph that sits between the banner tag and the
+    // next blank line. This avoids accidentally matching repeated text elsewhere.
+    var anchored = /^(\[banner:[^\]]*\]\s*\n[ \t]*\n)([\s\S]*?)(\n[ \t]*\n)/m;
+    if (anchored.test(bodyEl.value)) {
+        bodyEl.value = bodyEl.value.replace(anchored, function(_m, pre, _mid, post) {
+            return pre + newIntro + post;
+        });
+    } else {
+        // Fallback for edge cases (no banner, or banner without trailing blank line):
+        // try to swap the previously-known intro string, otherwise prepend it.
+        var prev = window._combinedIntroCurrent || '';
+        if (prev && bodyEl.value.indexOf(prev) !== -1) {
+            bodyEl.value = bodyEl.value.replace(prev, newIntro);
+        } else {
+            var bannerRe = /^(\[banner:[^\]]*\]\s*)$/m;
+            if (bannerRe.test(bodyEl.value)) {
+                bodyEl.value = bodyEl.value.replace(bannerRe, '$1\n\n' + newIntro);
+            } else {
+                bodyEl.value = newIntro + '\n\n' + bodyEl.value;
+            }
+        }
+    }
+    window._combinedIntroCurrent = newIntro;
 }
 
 function loadCombinedEmailTemplates() {
