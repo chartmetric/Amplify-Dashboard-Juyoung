@@ -72,6 +72,26 @@ def _render_chip_html(label: str) -> str:
         bg = '#fff7ed'
         color = '#c2410c'
         border = '#fed7aa'
+    elif 'improvement' in lower:
+        bg = '#eff6ff'
+        color = '#1d4ed8'
+        border = '#bfdbfe'
+    elif 'bug' in lower or 'fix' in lower:
+        bg = '#fef2f2'
+        color = '#b91c1c'
+        border = '#fecaca'
+    elif 'mobile' in lower:
+        bg = '#faf5ff'
+        color = '#7e22ce'
+        border = '#e9d5ff'
+    elif 'infrastructure' in lower or 'platform' in lower:
+        bg = '#f3f4f6'
+        color = '#374151'
+        border = '#d1d5db'
+    elif 'deprecation' in lower or 'sunset' in lower:
+        bg = '#fff7ed'
+        color = '#9a3412'
+        border = '#fdba74'
     return (
         '<div style="margin:18px 0 8px 0;">'
         f'<span style="display:inline-block;background:{bg};color:{color};'

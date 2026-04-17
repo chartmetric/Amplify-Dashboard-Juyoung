@@ -8126,11 +8126,24 @@ function renderCombinedEmailComposer(items) {
         bodyParts.push('');
     }
     function badgeForFeature(feat) {
+        var cls = (feat && feat.classification) || {};
+        var cats = Array.isArray(cls.categories) ? cls.categories : (cls.category ? [cls.category] : []);
+        var primary = (cats[0] || cls.category || '').toString().toLowerCase();
+        var labelMap = {
+            new_feature: 'New Feature',
+            improvement: 'Improvement',
+            bug_fix: 'Bug Fix',
+            infrastructure: 'Infrastructure',
+            mobile: 'Mobile',
+            deprecation: 'Deprecation'
+        };
+        if (labelMap[primary]) return labelMap[primary];
         var dateStr = (feat && (feat.release_date || feat.releaseDate)) || '';
-        if (!dateStr) return 'Latest & Greatest';
-        var d = new Date(dateStr);
-        if (isNaN(d.getTime())) return 'Latest & Greatest';
-        return (d.getTime() > Date.now()) ? 'Coming Soon' : 'Latest & Greatest';
+        if (dateStr) {
+            var d = new Date(dateStr);
+            if (!isNaN(d.getTime()) && d.getTime() > Date.now()) return 'Coming Soon';
+        }
+        return 'Latest & Greatest';
     }
     for (var i = 0; i < items.length; i++) {
         var it = items[i];
