@@ -8023,6 +8023,7 @@ function initBatchDragDrop() {
     list.addEventListener('dragover', function(e) {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
+        if (!prepDragItem) return;
         var target = e.target.closest('.batch-item');
         if (target && target !== prepDragItem) {
             var rect = target.getBoundingClientRect();
