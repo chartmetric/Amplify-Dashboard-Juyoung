@@ -8037,11 +8037,18 @@ function renderCombinedEmailComposer(items) {
         '</div>';
     var previewPaneHtml =
         '<div class="combined-email-preview-pane" style="display:flex;flex-direction:column;min-width:0;">' +
-            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:8px;">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:8px;flex-wrap:wrap;">' +
                 '<label style="font-size:12px;color:var(--text-muted);font-weight:600;">Live preview</label>' +
+                '<div id="combined-email-preview-toggles" role="group" aria-label="Preview view" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;">' +
+                    '<button type="button" data-preview-view="desktop" aria-pressed="true" onclick="setCombinedEmailPreviewView(\'desktop\')" title="Desktop (~640px)" style="background:var(--accent-bg);color:var(--accent);border:none;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;">Desktop</button>' +
+                    '<button type="button" data-preview-view="mobile" aria-pressed="false" onclick="setCombinedEmailPreviewView(\'mobile\')" title="Mobile (~375px)" style="background:transparent;color:var(--text-muted);border:none;border-left:1px solid var(--border);padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;">Mobile</button>' +
+                    '<button type="button" data-preview-view="dark" aria-pressed="false" onclick="setCombinedEmailPreviewView(\'dark\')" title="Dark background" style="background:transparent;color:var(--text-muted);border:none;border-left:1px solid var(--border);padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;">Dark</button>' +
+                '</div>' +
                 '<span id="combined-email-preview-status" style="font-size:11px;color:var(--text-muted);"></span>' +
             '</div>' +
-            '<iframe id="combined-email-live-preview" title="Email preview" style="width:100%;height:720px;border:1px solid var(--border);border-radius:6px;background:#ffffff;"></iframe>' +
+            '<div id="combined-email-preview-frame" style="width:100%;border:1px solid var(--border);border-radius:6px;background:#f1f3f5;padding:12px;display:flex;justify-content:center;transition:background-color 0.15s;">' +
+                '<iframe id="combined-email-live-preview" title="Email preview" style="width:100%;max-width:640px;height:720px;border:0;border-radius:4px;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.08);transition:max-width 0.15s;"></iframe>' +
+            '</div>' +
             '<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Renders the same HTML Resend will send. Use &ldquo;Preview HTML&rdquo; for a full-window view, or &ldquo;Send test&rdquo; for true end-to-end verification.</div>' +
         '</div>';
     wrap.innerHTML =
@@ -8052,7 +8059,7 @@ function renderCombinedEmailComposer(items) {
     if (!document.getElementById('combined-email-split-style')) {
         var styleEl = document.createElement('style');
         styleEl.id = 'combined-email-split-style';
-        styleEl.textContent = '@media (max-width: 980px) { .combined-email-split { grid-template-columns: 1fr !important; } #combined-email-live-preview { height: 520px !important; } }';
+        styleEl.textContent = '@media (max-width: 980px) { .combined-email-split { grid-template-columns: 1fr !important; } #combined-email-live-preview { height: 520px !important; } } #combined-email-preview-toggles button:hover { color: var(--text-primary); }';
         document.head.appendChild(styleEl);
     }
 
@@ -8079,11 +8086,36 @@ function renderCombinedEmailComposer(items) {
     if (bodyEl) bodyEl.addEventListener('input', scheduleCombinedEmailPreview);
     if (tplEl) tplEl.addEventListener('change', function() { scheduleCombinedEmailPreview(true); });
 
+    setCombinedEmailPreviewView(_combinedEmailPreviewView);
     refreshCombinedEmailLivePreview();
 }
 
 var _combinedEmailPreviewTimer = null;
 var _combinedEmailPreviewSeq = 0;
+var _combinedEmailPreviewView = 'desktop';
+
+function setCombinedEmailPreviewView(mode) {
+    if (mode !== 'desktop' && mode !== 'mobile' && mode !== 'dark') mode = 'desktop';
+    _combinedEmailPreviewView = mode;
+    var iframe = document.getElementById('combined-email-live-preview');
+    var frame = document.getElementById('combined-email-preview-frame');
+    var toggles = document.getElementById('combined-email-preview-toggles');
+    if (iframe) {
+        iframe.style.maxWidth = (mode === 'mobile') ? '375px' : '640px';
+    }
+    if (frame) {
+        frame.style.background = (mode === 'dark') ? '#1a1a1a' : '#f1f3f5';
+    }
+    if (toggles) {
+        var btns = toggles.querySelectorAll('button[data-preview-view]');
+        for (var i = 0; i < btns.length; i++) {
+            var active = btns[i].getAttribute('data-preview-view') === mode;
+            btns[i].style.background = active ? 'var(--accent-bg)' : 'transparent';
+            btns[i].style.color = active ? 'var(--accent)' : 'var(--text-muted)';
+            btns[i].setAttribute('aria-pressed', active ? 'true' : 'false');
+        }
+    }
+}
 
 function scheduleCombinedEmailPreview(immediate) {
     if (_combinedEmailPreviewTimer) {
