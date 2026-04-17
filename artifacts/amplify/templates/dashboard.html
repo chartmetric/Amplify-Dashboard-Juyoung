@@ -7999,11 +7999,17 @@ function renderCombinedEmailComposer(items) {
     var combinedBody = bodyParts.join('\n');
 
     var wrap = document.getElementById('combined-preview');
+    var wrapParent = wrap ? wrap.parentElement : null;
+    if (wrapParent && wrapParent.classList && wrapParent.classList.contains('combined-preview-wrap')) {
+        wrapParent.style.maxHeight = 'none';
+        wrapParent.style.overflow = 'visible';
+        wrapParent.style.padding = '16px';
+    }
     var templateRowHtml = isStandalone
         ? '<div class="email-template-row" style="margin-bottom:10px;"><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Template</label><select id="combined-email-template" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);"><option value="">Built-in (Chartmetric)</option></select></div>'
         : '';
-    wrap.innerHTML =
-        '<div class="combined-email-composer" style="display:flex;flex-direction:column;gap:10px;">' +
+    var editorPaneHtml =
+        '<div class="combined-email-composer" style="display:flex;flex-direction:column;gap:10px;min-width:0;">' +
             '<div><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Subject</label>' +
                 '<input type="text" id="combined-email-subject" value="' + escHtml(defaultSubject) + '" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;"></div>' +
             '<div><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">From Name</label>' +
@@ -8029,6 +8035,26 @@ function renderCombinedEmailComposer(items) {
                 '<textarea id="combined-email-body" style="width:100%;min-height:320px;padding:10px;font-size:14px;line-height:1.5;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;font-family:inherit;">' + escHtml(combinedBody) + '</textarea></div>' +
             '<div id="combined-email-images-summary" style="font-size:12px;color:var(--text-muted);"></div>' +
         '</div>';
+    var previewPaneHtml =
+        '<div class="combined-email-preview-pane" style="display:flex;flex-direction:column;min-width:0;">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:8px;">' +
+                '<label style="font-size:12px;color:var(--text-muted);font-weight:600;">Live preview</label>' +
+                '<span id="combined-email-preview-status" style="font-size:11px;color:var(--text-muted);"></span>' +
+            '</div>' +
+            '<iframe id="combined-email-live-preview" title="Email preview" style="width:100%;height:720px;border:1px solid var(--border);border-radius:6px;background:#ffffff;"></iframe>' +
+            '<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Renders the same HTML Resend will send. Use &ldquo;Preview HTML&rdquo; for a full-window view, or &ldquo;Send test&rdquo; for true end-to-end verification.</div>' +
+        '</div>';
+    wrap.innerHTML =
+        '<div class="combined-email-split" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:flex-start;">' +
+            editorPaneHtml +
+            previewPaneHtml +
+        '</div>';
+    if (!document.getElementById('combined-email-split-style')) {
+        var styleEl = document.createElement('style');
+        styleEl.id = 'combined-email-split-style';
+        styleEl.textContent = '@media (max-width: 980px) { .combined-email-split { grid-template-columns: 1fr !important; } #combined-email-live-preview { height: 520px !important; } }';
+        document.head.appendChild(styleEl);
+    }
 
     var imgCount = 0;
     for (var j = 0; j < items.length; j++) {
@@ -8043,6 +8069,79 @@ function renderCombinedEmailComposer(items) {
 
     if (isStandalone) loadCombinedEmailTemplates();
     loadCombinedEmailAudiences();
+
+    var subjEl = document.getElementById('combined-email-subject');
+    var fromEl = document.getElementById('combined-email-fromname');
+    var bodyEl = document.getElementById('combined-email-body');
+    var tplEl = document.getElementById('combined-email-template');
+    if (subjEl) subjEl.addEventListener('input', scheduleCombinedEmailPreview);
+    if (fromEl) fromEl.addEventListener('input', scheduleCombinedEmailPreview);
+    if (bodyEl) bodyEl.addEventListener('input', scheduleCombinedEmailPreview);
+    if (tplEl) tplEl.addEventListener('change', function() { scheduleCombinedEmailPreview(true); });
+
+    refreshCombinedEmailLivePreview();
+}
+
+var _combinedEmailPreviewTimer = null;
+var _combinedEmailPreviewSeq = 0;
+
+function scheduleCombinedEmailPreview(immediate) {
+    if (_combinedEmailPreviewTimer) {
+        clearTimeout(_combinedEmailPreviewTimer);
+        _combinedEmailPreviewTimer = null;
+    }
+    var statusEl = document.getElementById('combined-email-preview-status');
+    if (statusEl) statusEl.textContent = 'Editing...';
+    var delay = immediate === true ? 0 : 350;
+    _combinedEmailPreviewTimer = setTimeout(refreshCombinedEmailLivePreview, delay);
+}
+
+function refreshCombinedEmailLivePreview() {
+    var iframe = document.getElementById('combined-email-live-preview');
+    if (!iframe) return;
+    var data = _buildCombinedEmailPayload();
+    if (!data) return;
+    var fromNameEl = document.getElementById('combined-email-fromname');
+    var fromName = fromNameEl ? fromNameEl.value.trim() : 'Chartmetric';
+    var templateSel = document.getElementById('combined-email-template');
+    var templateId = templateSel ? templateSel.value : '';
+    var payload = {
+        content: data.body,
+        subject: data.subject,
+        from_name: fromName,
+        feature_ids: data.featureIds
+    };
+    if (templateId) payload.template_id = templateId;
+    if (Object.keys(data.imageMap).length > 0) payload.images = data.imageMap;
+
+    var statusEl = document.getElementById('combined-email-preview-status');
+    if (statusEl) statusEl.textContent = 'Updating...';
+    var seq = ++_combinedEmailPreviewSeq;
+    fetch('/api/publish/email/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+        if (seq !== _combinedEmailPreviewSeq) return;
+        var ifr = document.getElementById('combined-email-live-preview');
+        if (!ifr) return;
+        ifr.srcdoc = html;
+        var s = document.getElementById('combined-email-preview-status');
+        if (s) {
+            var t = new Date();
+            var hh = ('0' + t.getHours()).slice(-2);
+            var mm = ('0' + t.getMinutes()).slice(-2);
+            var ss = ('0' + t.getSeconds()).slice(-2);
+            s.textContent = 'Updated ' + hh + ':' + mm + ':' + ss;
+        }
+    })
+    .catch(function(err) {
+        if (seq !== _combinedEmailPreviewSeq) return;
+        var s = document.getElementById('combined-email-preview-status');
+        if (s) s.textContent = 'Preview error: ' + (err && err.message ? err.message : 'failed');
+    });
 }
 
 function loadCombinedEmailTemplates() {
