@@ -2247,6 +2247,68 @@ def generate_batch_endpoint():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/generate/email-subject", methods=["POST"])
+def generate_email_subject_endpoint():
+    """Generate a generic combined-email subject line from multiple features.
+
+    Request: {"features": [{"title": "...", "description": "..."}, ...], "channel": "email_newsletter"}
+    Response: {"subject": "Exciting Updates on Chartmetric: Ultra plan, Richer Social Data, and more"}
+    """
+    from ai.claude_client import generate_content
+
+    data = request.get_json() or {}
+    features = data.get("features") or []
+    if not isinstance(features, list) or not features:
+        return jsonify({"error": "features is required"}), 400
+
+    if len(features) == 1:
+        title = (features[0].get("title") or "").strip()
+        return jsonify({"subject": title or "Chartmetric Product Update"})
+
+    lines = []
+    for i, f in enumerate(features[:8], 1):
+        title = (f.get("title") or "").strip()
+        desc = (f.get("description") or "").strip()
+        if len(desc) > 240:
+            desc = desc[:240] + "..."
+        lines.append(f"{i}. {title}\n   {desc}" if desc else f"{i}. {title}")
+    features_block = "\n".join(lines)
+
+    system_prompt = (
+        "You write concise email subject lines for product update announcements that bundle "
+        "multiple features into one email. Output ONLY the subject line — no quotes, no preamble, "
+        "no explanation."
+    )
+    user_prompt = (
+        "Write a single email subject line that announces these "
+        f"{len(features)} features bundled together. Use this exact format:\n\n"
+        "Exciting Updates on Chartmetric: <Keyword1>, <Keyword2>, and more\n\n"
+        "Rules:\n"
+        "- Each <Keyword> is a SHORT 1–2 word abstraction of a feature (e.g., 'Richer Social Data' "
+        "instead of 'YouTube Monthly Views Evolution chart').\n"
+        "- Use 2 keywords if there are exactly 2 features (drop the 'and more').\n"
+        "- Use exactly 2 keywords + 'and more' if there are 3 or more features. Pick the two most "
+        "marketable / highest-impact features for the keywords.\n"
+        "- Capitalize each keyword in title case.\n"
+        "- Keep the whole subject under ~70 characters when possible.\n\n"
+        f"Features:\n{features_block}\n\nReturn ONLY the subject line."
+    )
+
+    result = generate_content(system_prompt, user_prompt, max_tokens=120)
+    if not result.get("success"):
+        titles = [(f.get("title") or "").strip() for f in features if (f.get("title") or "").strip()]
+        if len(titles) >= 3:
+            fallback = f"Exciting Updates on Chartmetric: {titles[0]}, {titles[1]}, and more"
+        elif len(titles) == 2:
+            fallback = f"Exciting Updates on Chartmetric: {titles[0]} and {titles[1]}"
+        else:
+            fallback = "Chartmetric Product Update"
+        return jsonify({"subject": fallback, "fallback": True, "error": result.get("error")})
+
+    subject = (result.get("content") or "").strip().strip('"').strip("'").splitlines()[0].strip()
+    return jsonify({"subject": subject})
+
+
 @app.route("/api/generate/batch-single-channel", methods=["POST"])
 def generate_batch_single_channel_endpoint():
     """Generate content for multiple features on a single channel.

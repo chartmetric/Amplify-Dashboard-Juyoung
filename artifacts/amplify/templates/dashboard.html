@@ -7113,6 +7113,40 @@ function isEmailChannel(ch) {
     return ch === 'email_newsletter' || ch === 'email_standalone';
 }
 
+function fetchAiEmailSubject(channel) {
+    var results = (prepBatchResults || []).slice();
+    if (!results.length) return;
+    if (results.length === 1) return;
+    var selectedById = {};
+    allFeatures.forEach(function(f) { selectedById[f.id] = f; });
+    var payload = results.map(function(r) {
+        var f = selectedById[r.feature_id] || {};
+        return {
+            title: r.feature_title || f.title || '',
+            description: f.description || ''
+        };
+    });
+    fetch('/api/generate/email-subject', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ features: payload, channel: channel })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (!data || !data.subject) return;
+        if (prepChannel !== channel) return;
+        var input = document.getElementById('batch-email-subject');
+        var current = (window.prepBatchEmailSubject || {})[channel] || '';
+        var userEdited = input && input.value && input.value !== current;
+        if (userEdited) return;
+        window.prepBatchEmailSubject[channel] = data.subject;
+        if (input) input.value = data.subject;
+        var combined = document.getElementById('combined-email-subject');
+        if (combined) combined.value = data.subject;
+    })
+    .catch(function() {});
+}
+
 function computeDefaultEmailSubject(results, fallbackSingleSubject) {
     var titles = (results || []).map(function(r) { return (r && r.feature_title) ? r.feature_title.trim() : ''; }).filter(Boolean);
     if (titles.length <= 1) {
@@ -7441,6 +7475,7 @@ function startBatchGeneration() {
             window.prepBatchEmailSubject = window.prepBatchEmailSubject || {};
             if (!window.prepBatchEmailSubject[prepChannel]) {
                 window.prepBatchEmailSubject[prepChannel] = computeDefaultEmailSubject(prepBatchResults, firstSubject);
+                fetchAiEmailSubject(prepChannel);
             }
         }
         renderBatchEmailSubjectRow();
