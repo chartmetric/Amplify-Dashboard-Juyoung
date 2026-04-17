@@ -1842,6 +1842,7 @@
             <div class="batch-actions-top" id="batch-actions-top" style="display:none;">
                 <button class="btn-quick" onclick="batchApproveAll()">Approve All</button>
                 <span class="batch-approved-count" id="batch-approved-count">0/0 approved</span>
+                <button class="btn-quick" onclick="startBatchFresh()" title="Discard saved attachments and regenerate" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--text-muted);">Start fresh</button>
             </div>
             <div id="batch-email-subject-row" style="display:none;margin-bottom:14px;">
                 <label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:4px;">Email Subject</label>
@@ -7121,33 +7122,53 @@ var BATCH_ATTACH_STORAGE_KEY = 'amplify:batchAttachments:v1';
 
 function _persistBatchAttachments() {
     try {
-        var byFeature = {};
+        var existing = {};
+        try {
+            var raw = sessionStorage.getItem(BATCH_ATTACH_STORAGE_KEY);
+            if (raw) existing = JSON.parse(raw) || {};
+        } catch(e) { existing = {}; }
+        var byFeature = (existing.channel === prepChannel && existing.byFeature) ? existing.byFeature : {};
         var results = prepBatchResults || [];
+        var seenFids = {};
         for (var i = 0; i < results.length; i++) {
             var fid = results[i] && results[i].feature_id;
             if (!fid) continue;
+            seenFids[fid] = true;
             var img = (window.prepBatchImages || {})[i] || null;
             var vids = (window.prepBatchVideos || {})[i] || null;
             var lnks = (window.prepBatchLinks || {})[i] || null;
-            if (!img && !vids && !lnks) continue;
-            byFeature[fid] = { image: img, videos: vids, links: lnks };
+            if (img || vids || lnks) {
+                byFeature[fid] = { image: img, videos: vids, links: lnks };
+            } else if (window._batchAttachmentsLoaded) {
+                delete byFeature[fid];
+            }
         }
+        var subjects = Object.assign({}, existing.subjects || {}, window.prepBatchEmailSubject || {});
         var payload = {
-            channel: prepChannel || null,
+            channel: prepChannel || existing.channel || null,
             byFeature: byFeature,
-            subjects: window.prepBatchEmailSubject || {},
+            subjects: subjects,
             ts: Date.now()
         };
         sessionStorage.setItem(BATCH_ATTACH_STORAGE_KEY, JSON.stringify(payload));
     } catch(e) { /* quota exceeded or unavailable */ }
 }
 
+function _clearBatchAttachmentsStorage() {
+    try { sessionStorage.removeItem(BATCH_ATTACH_STORAGE_KEY); } catch(e) {}
+    window.prepBatchImages = {};
+    window.prepBatchVideos = {};
+    window.prepBatchLinks = {};
+    window.prepBatchEmailSubject = {};
+}
+
 function _restoreBatchAttachmentsFromStorage() {
+    var restoredCount = 0;
     try {
         var raw = sessionStorage.getItem(BATCH_ATTACH_STORAGE_KEY);
-        if (!raw) return;
+        if (!raw) { window._batchAttachmentsLoaded = true; return 0; }
         var payload = JSON.parse(raw);
-        if (!payload || payload.channel !== prepChannel) return;
+        if (!payload || payload.channel !== prepChannel) { window._batchAttachmentsLoaded = true; return 0; }
         var byFeature = payload.byFeature || {};
         window.prepBatchImages = window.prepBatchImages || {};
         window.prepBatchVideos = window.prepBatchVideos || {};
@@ -7156,9 +7177,9 @@ function _restoreBatchAttachmentsFromStorage() {
             var fid = prepBatchResults[i] && prepBatchResults[i].feature_id;
             if (!fid || !byFeature[fid]) continue;
             var entry = byFeature[fid];
-            if (entry.image) window.prepBatchImages[i] = entry.image;
-            if (entry.videos) window.prepBatchVideos[i] = entry.videos;
-            if (entry.links) window.prepBatchLinks[i] = entry.links;
+            if (entry.image) { window.prepBatchImages[i] = entry.image; restoredCount++; }
+            if (entry.videos) { window.prepBatchVideos[i] = entry.videos; restoredCount++; }
+            if (entry.links) { window.prepBatchLinks[i] = entry.links; restoredCount++; }
         }
         if (payload.subjects) {
             window.prepBatchEmailSubject = window.prepBatchEmailSubject || {};
@@ -7167,6 +7188,15 @@ function _restoreBatchAttachmentsFromStorage() {
             });
         }
     } catch(e) { /* ignore */ }
+    window._batchAttachmentsLoaded = true;
+    return restoredCount;
+}
+
+function startBatchFresh() {
+    if (!confirm('Clear all attached images, videos, links, and saved subjects for this channel and regenerate from scratch?')) return;
+    _clearBatchAttachmentsStorage();
+    window.prepBatchModeOverride = null;
+    startBatchGeneration();
 }
 
 function prepGoToStep(step) {
@@ -7524,6 +7554,7 @@ function startBatchGeneration() {
     prepBatchPublished = {};
     prepBatchInitialDrafts = {};
     prepBatchRegenFeedback = {};
+    window._batchAttachmentsLoaded = false;
     window.prepBatchImages = {};
     window.prepBatchVideos = {};
     window.prepBatchLinks = {};
@@ -7548,7 +7579,10 @@ function startBatchGeneration() {
         if (data.error) { showToast('Batch generation failed: ' + data.error, 'error'); return; }
 
         prepBatchResults = data.results || [];
-        _restoreBatchAttachmentsFromStorage();
+        var restoredCount = _restoreBatchAttachmentsFromStorage();
+        if (restoredCount > 0) {
+            showToast('Restored ' + restoredCount + ' saved attachment' + (restoredCount === 1 ? '' : 's') + ' from your previous session', 'success');
+        }
         var list = document.getElementById('batch-results-list');
         list.innerHTML = '';
 
