@@ -4665,6 +4665,7 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
             var prevImg = window.prepBatchImages[batchIdx];
             window.prepBatchImages[batchIdx] = imgData;
             renderBatchImagePreview(batchIdx);
+            if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
             var bta = document.getElementById('batch-ta-' + batchIdx);
             if (bta) {
                 var stripped = bta.value;
@@ -5111,6 +5112,7 @@ function removeBatchImageInline(idx) {
     var name = img ? img.name : null;
     if (window.prepBatchImages) delete window.prepBatchImages[idx];
     renderBatchImagePreview(idx);
+    if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
     var ta = document.getElementById('batch-ta-' + idx);
     if (ta) {
         if (name) {
@@ -6229,6 +6231,7 @@ function removeBatchImage(idx) {
     if (wrap) { wrap.innerHTML = ''; wrap.style.display = 'none'; }
     var addBtn = document.getElementById('batch-add-img-btn-' + idx);
     if (addBtn) addBtn.style.display = '';
+    if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
 }
 
 var PUBLISHABLE_CHANNELS = {
@@ -7605,6 +7608,7 @@ function reconcileBatchAttachmentState(idx) {
     if (img && img.name && !imgNames[img.name]) {
         delete window.prepBatchImages[idx];
         if (typeof renderBatchImagePreview === 'function') renderBatchImagePreview(idx);
+        if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
     }
 }
 
@@ -8115,6 +8119,11 @@ function setCombinedEmailPreviewView(mode) {
             btns[i].setAttribute('aria-pressed', active ? 'true' : 'false');
         }
     }
+}
+
+function notifyCombinedEmailImagesChanged() {
+    if (!document.getElementById('combined-email-live-preview')) return;
+    scheduleCombinedEmailPreview();
 }
 
 function scheduleCombinedEmailPreview(immediate) {
