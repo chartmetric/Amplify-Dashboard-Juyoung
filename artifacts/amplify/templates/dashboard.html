@@ -7427,7 +7427,13 @@ function startBatchGeneration() {
     });
 
     var uc = USE_CASES.find(function(u) { return u.key === prepChannel; });
-    document.getElementById('step3-title').textContent = (uc ? uc.name : prepChannel) + ' - ' + selectedFeatures.length + ' features';
+    var wantsDigest = (prepChannel === 'email_standalone' && selectedFeatures.length >= 2 && window.prepBatchModeOverride !== 'longform');
+    var apiChannel = wantsDigest ? 'email_standalone' : getApiChannelKey(prepChannel);
+    var batchMode = wantsDigest ? 'digest' : 'default';
+    window.prepBatchMode = batchMode;
+    window.prepBatchApiChannel = apiChannel;
+    var titleSuffix = (batchMode === 'digest') ? ' (digest)' : '';
+    document.getElementById('step3-title').textContent = (uc ? uc.name : prepChannel) + ' - ' + selectedFeatures.length + ' features' + titleSuffix;
 
     prepBatchResults = [];
     prepBatchApproved = {};
@@ -7445,12 +7451,13 @@ function startBatchGeneration() {
     var progressWrap = document.getElementById('batch-progress');
     progressWrap.style.display = 'block';
     document.getElementById('batch-progress-fill').style.width = '0%';
-    document.getElementById('batch-progress-text').textContent = 'Generating... 0/' + selectedFeatures.length + ' features done';
+    var progressLabel = (batchMode === 'digest' ? 'Generating digest sections' : 'Generating');
+    document.getElementById('batch-progress-text').textContent = progressLabel + '... 0/' + selectedFeatures.length + ' features done';
 
     fetch('/api/generate/batch-single-channel', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ features: selectedFeatures, channel: getApiChannelKey(prepChannel) })
+        body: JSON.stringify({ features: selectedFeatures, channel: apiChannel, mode: batchMode })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -7485,6 +7492,7 @@ function startBatchGeneration() {
         document.getElementById('batch-progress-text').textContent = 'Done! ' + data.succeeded + '/' + data.total + ' succeeded';
         document.getElementById('batch-actions-top').style.display = 'flex';
         document.getElementById('batch-bottom-bar').style.display = 'flex';
+        renderDigestModeBanner();
         updateBatchApprovalCount();
         initBatchDragDrop();
     })
@@ -7516,6 +7524,8 @@ function buildBatchItem(r, idx) {
         '<div class="batch-item-body" id="batch-body-' + idx + '">' +
             '<textarea class="channel-textarea" id="batch-ta-' + idx + '" data-idx="' + idx + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(content) + '</textarea>' +
             '<div class="md-preview" id="batch-md-preview-' + idx + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(content, {batchIdx: idx}) + '</div>' +
+            ((window.prepBatchMode === 'digest' && prepChannel === 'email_standalone') ?
+                '<div class="batch-microsyntax-hint" style="margin-top:6px;font-size:11px;color:var(--text-muted);">Microsyntax: <code>&gt; callout</code> for highlight box, <code>[badge: Coming Soon]</code> for chip, <code>`code`</code> for inline code, <code>---</code> for divider.</div>' : '') +
         '</div>' +
         '<div class="img-preview-wrap" id="batch-img-wrap-' + idx + '" style="display:none;"></div>' +
         '<div class="batch-item-loading" id="batch-loading-' + idx + '" style="display:none;"><div class="spinner"></div><span>Regenerating...</span></div>' +
@@ -7608,6 +7618,39 @@ function switchToBatchPreview(idx) {
     ta.style.display = 'none';
 }
 
+function renderDigestModeBanner() {
+    var existing = document.getElementById('digest-mode-banner');
+    if (existing) existing.remove();
+    if (prepChannel !== 'email_standalone') return;
+    if ((prepBatchResults || []).length < 2) return;
+    var mode = window.prepBatchMode || 'default';
+    var subjectRow = document.getElementById('batch-email-subject-row');
+    var anchor = subjectRow || document.getElementById('batch-results-list');
+    if (!anchor || !anchor.parentNode) return;
+    var banner = document.createElement('div');
+    banner.id = 'digest-mode-banner';
+    banner.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;margin-bottom:12px;background:var(--bg-card);border:1px solid var(--border);border-left:3px solid #00C9A7;border-radius:6px;font-size:13px;color:var(--text-body);';
+    var leftLabel = (mode === 'digest')
+        ? '<strong>Digest mode</strong> &mdash; each feature is generated as a tight ~50-word section. The combined email stitches them together with a banner, section chips, and dividers.'
+        : '<strong>Long-form mode</strong> &mdash; each feature gets a full standalone email. Stitched together for the combined preview.';
+    var btnLabel = (mode === 'digest') ? 'Switch to long-form' : 'Switch to digest';
+    banner.innerHTML = '<span style="flex:1;min-width:0;">' + leftLabel + '</span>' +
+        '<button onclick="toggleDigestMode()" style="background:transparent;border:1px solid var(--border);color:var(--text-body);padding:6px 12px;border-radius:5px;font-size:12px;cursor:pointer;white-space:nowrap;">' + btnLabel + '</button>';
+    anchor.parentNode.insertBefore(banner, anchor);
+}
+
+function toggleDigestMode() {
+    if (prepChannel !== 'email_standalone') return;
+    var current = window.prepBatchMode || 'default';
+    if (current === 'digest') {
+        window.prepBatchModeOverride = 'longform';
+    } else {
+        window.prepBatchModeOverride = null;
+    }
+    showToast('Regenerating in ' + (current === 'digest' ? 'long-form' : 'digest') + ' mode...');
+    startBatchGeneration();
+}
+
 function batchRegenItem(idx) {
     var feedbackInput = document.getElementById('batch-feedback-' + idx);
     var feedback = feedbackInput ? feedbackInput.value.trim() : '';
@@ -7621,10 +7664,12 @@ function batchRegenItem(idx) {
 
     var feature = allFeatures.find(function(f) { return f.id === prepBatchResults[idx].feature_id; }) || { title: prepBatchResults[idx].feature_title };
 
+    var regenMode = window.prepBatchMode || 'default';
+    var regenChannel = window.prepBatchApiChannel || getApiChannelKey(prepChannel);
     fetch('/api/generate/single', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ feature: feature, channel: getApiChannelKey(prepChannel), feedback: feedback })
+        body: JSON.stringify({ feature: feature, channel: regenChannel, feedback: feedback, mode: regenMode })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -7911,8 +7956,30 @@ function renderCombinedEmailComposer(items) {
     }
 
     var bodyParts = [];
+    var monthYear = (function() {
+        var d = new Date();
+        var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        return months[d.getMonth()] + ' ' + d.getFullYear();
+    })();
+    if (isStandalone) {
+        bodyParts.push('[banner: title=Product Updates | month=' + monthYear + ']');
+        bodyParts.push('');
+        bodyParts.push("Here's what's new in Chartmetric this month. A few highlights to help you get more from the platform.");
+        bodyParts.push('');
+    }
+    function badgeForFeature(feat) {
+        var dateStr = (feat && (feat.release_date || feat.releaseDate)) || '';
+        if (!dateStr) return 'Latest & Greatest';
+        var d = new Date(dateStr);
+        if (isNaN(d.getTime())) return 'Latest & Greatest';
+        return (d.getTime() > Date.now()) ? 'Coming Soon' : 'Latest & Greatest';
+    }
     for (var i = 0; i < items.length; i++) {
         var it = items[i];
+        if (isStandalone) {
+            var feat = (typeof allFeatures !== 'undefined') ? allFeatures.find(function(f) { return f.id === it.feature_id; }) : null;
+            bodyParts.push('[badge: ' + badgeForFeature(feat) + ']');
+        }
         var header = '## ' + (it.feature_title || ('Feature ' + (i + 1)));
         bodyParts.push(header);
         var img = (window.prepBatchImages || {})[it.idx];

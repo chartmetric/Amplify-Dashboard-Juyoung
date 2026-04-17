@@ -151,8 +151,12 @@ EXPECTED OUTPUT FORMAT: {example_output_format}
 Generate the content now. Output ONLY the final content, nothing else."""
 
 
-def generate_for_channel(feature_data: dict, channel_key: str, custom_instructions: str = None, feedback: str = None, current_content: str = None, skip_cache: bool = False) -> dict:
+def generate_for_channel(feature_data: dict, channel_key: str, custom_instructions: str = None, feedback: str = None, current_content: str = None, skip_cache: bool = False, mode: str = None) -> dict:
     feature_id = feature_data.get("id", "")
+
+    requested_channel = channel_key
+    if mode == "digest" and channel_key == "email_standalone":
+        channel_key = "email_standalone_digest"
 
     if not skip_cache and not feedback and not custom_instructions and feature_id:
         cached = get_cached_content(feature_id, channel_key)
@@ -302,7 +306,7 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
             was_trimmed = True
 
     gen_result = {
-        "channel": channel_key,
+        "channel": requested_channel,
         "channel_display_name": config["display_name"],
         "max_chars": char_limit,
         "content": content,
@@ -310,6 +314,7 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
         "was_trimmed": was_trimmed,
         "success": result["success"],
         "error": result.get("error"),
+        "mode": mode or "default",
     }
 
     if result["success"] and feature_id:

@@ -2143,15 +2143,17 @@ def generate_single_endpoint():
     custom_instructions = data.get("custom_instructions", "")
     feedback = data.get("feedback", "")
     current_content = data.get("current_content", "")
+    mode = data.get("mode") or None
 
     try:
-        print(f"[generate/single] Regenerating '{feature.get('title', 'unknown')}' for channel '{channel}' (feedback: {bool(feedback)})", flush=True)
+        print(f"[generate/single] Regenerating '{feature.get('title', 'unknown')}' for channel '{channel}' (feedback: {bool(feedback)}, mode: {mode or 'default'})", flush=True)
         result = generate_for_channel(
             feature, channel,
             custom_instructions=custom_instructions or None,
             feedback=feedback or None,
             current_content=current_content or None,
             skip_cache=True,
+            mode=mode,
         )
         _inc_generate(1)
         return jsonify(result)
@@ -2336,6 +2338,7 @@ def generate_batch_single_channel_endpoint():
     features = data.get("features")
     channel = data.get("channel")
     custom_instructions = data.get("custom_instructions", "")
+    mode = data.get("mode") or None
 
     if not features or not isinstance(features, list):
         return jsonify({"error": "features is required and must be a list"}), 400
@@ -2346,14 +2349,17 @@ def generate_batch_single_channel_endpoint():
     if channel not in CHANNEL_CONFIGS:
         return jsonify({"error": f"Unknown channel: {channel}"}), 400
 
+    if mode is None and channel == "email_standalone" and len(features) >= 2:
+        mode = "digest"
+
     try:
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         config = CHANNEL_CONFIGS[channel]
-        print(f"[generate/batch-single] Generating {channel} for {len(features)} features", flush=True)
+        print(f"[generate/batch-single] Generating {channel} for {len(features)} features (mode: {mode or 'default'})", flush=True)
 
         def gen_one(feature):
-            result = generate_for_channel(feature, channel, custom_instructions=custom_instructions or None)
+            result = generate_for_channel(feature, channel, custom_instructions=custom_instructions or None, mode=mode)
             result["feature_id"] = feature.get("id", "")
             result["feature_title"] = feature.get("title", "")
             return result
@@ -2398,6 +2404,7 @@ def generate_batch_single_channel_endpoint():
             "total": len(features),
             "succeeded": succeeded,
             "failed": failed,
+            "mode": mode or "default",
         })
     except Exception as e:
         logger.error(f"Generate batch-single-channel error: {e}")

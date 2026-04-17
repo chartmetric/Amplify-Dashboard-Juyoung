@@ -13,22 +13,73 @@ def _inline_markdown(text: str) -> str:
     import re
     placeholders = {}
     counter = [0]
+    def _stash(html_value):
+        key = f'\x00P{counter[0]}\x00'
+        counter[0] += 1
+        placeholders[key] = html_value
+        return key
     def _stash_link(m):
         link_text = _esc(m.group(1))
         url = m.group(2)
         if re.match(r'^https?://', url, re.IGNORECASE) or url.startswith('mailto:'):
-            key = f'\x00LINK{counter[0]}\x00'
-            counter[0] += 1
-            placeholders[key] = f'<a href="{_esc(url)}" target="_blank" rel="noopener noreferrer" style="color:#00C9A7;text-decoration:underline;">{link_text}</a>'
-            return key
+            return _stash(f'<a href="{_esc(url)}" target="_blank" rel="noopener noreferrer" style="color:#00C9A7;text-decoration:underline;">{link_text}</a>')
         return m.group(1)
     text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', _stash_link, text)
+    text = re.sub(
+        r'`([^`\n]+)`',
+        lambda m: _stash(f'<code style="font-family:Menlo,Consolas,monospace;font-size:13px;background:#f3f4f6;color:#1a1d23;padding:2px 6px;border-radius:4px;border:1px solid #e5e7eb;">{_esc(m.group(1))}</code>'),
+        text,
+    )
     safe = _esc(text)
     safe = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', safe)
     safe = re.sub(r'\*(.+?)\*', r'<em>\1</em>', safe)
     for key, val in placeholders.items():
         safe = safe.replace(key, val)
     return safe
+
+
+_MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+
+
+def _current_month_year() -> str:
+    from datetime import datetime
+    now = datetime.now()
+    return f"{_MONTH_NAMES[now.month - 1]} {now.year}"
+
+
+def _render_callout_html(text: str) -> str:
+    return (
+        '<div style="margin:16px 0;padding:14px 18px;background:#f0fbf8;'
+        'border-left:4px solid #00C9A7;border-radius:6px;color:#1a1d23;'
+        'font-size:14px;line-height:1.55;">'
+        f'{_inline_markdown(text)}'
+        '</div>'
+    )
+
+
+def _render_chip_html(label: str) -> str:
+    label_clean = (label or "").strip()
+    if not label_clean:
+        return ''
+    bg = '#f0fbf8'
+    color = '#008f76'
+    border = '#b8ebde'
+    lower = label_clean.lower()
+    if 'coming' in lower or 'soon' in lower:
+        bg = '#fff7ed'
+        color = '#c2410c'
+        border = '#fed7aa'
+    return (
+        '<div style="margin:18px 0 8px 0;">'
+        f'<span style="display:inline-block;background:{bg};color:{color};'
+        f'border:1px solid {border};border-radius:999px;padding:3px 10px;'
+        f'font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;">'
+        f'{_esc(label_clean)}'
+        '</span></div>'
+    )
 
 
 def _get_base_url() -> str:
@@ -210,16 +261,68 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
     safe_subject = _esc(subject)
     image_map = images or {}
     video_map = videos or {}
-    lines = body.strip().split("\n")
+
+    banner_month = _current_month_year()
+    banner_title = "Product Updates"
+    body_text = body or ""
+    banner_match = re.search(r'^\[banner:\s*(?:title=([^|;\]]+))?(?:[|;]\s*month=([^\]]+))?\]\s*$', body_text, flags=re.MULTILINE | re.IGNORECASE)
+    if banner_match:
+        if banner_match.group(1):
+            banner_title = banner_match.group(1).strip()
+        if banner_match.group(2):
+            banner_month = banner_match.group(2).strip()
+        body_text = body_text.replace(banner_match.group(0), "", 1)
+
+    in_list = False
+    pending_chip_html = ""
+    lines = body_text.strip().split("\n")
     body_html = ""
-    first_text_done = False
+    has_banner = bool(banner_match)
+    first_text_done = has_banner
+
+    def close_list():
+        nonlocal in_list, body_html
+        if in_list:
+            body_html += '</ul>'
+            in_list = False
+
     for line in lines:
         stripped = line.strip()
+
+        chip_match = re.match(r'^\[badge:\s*(.+?)\]$', stripped, re.IGNORECASE)
+        if chip_match:
+            close_list()
+            pending_chip_html = _render_chip_html(chip_match.group(1))
+            continue
+
+        callout_match = re.match(r'^>\s*(.+)$', stripped)
+        if callout_match:
+            close_list()
+            if pending_chip_html:
+                body_html += pending_chip_html
+                pending_chip_html = ""
+            body_html += _render_callout_html(callout_match.group(1))
+            first_text_done = True
+            continue
+
+        if re.match(r'^(---+|___+|\*\*\*+)$', stripped):
+            close_list()
+            if pending_chip_html:
+                body_html += pending_chip_html
+                pending_chip_html = ""
+            body_html += '<hr style="border:none;border-top:1px solid #e8e8eb;margin:24px 0;">'
+            continue
+
         if not stripped:
+            close_list()
             body_html += "<br>"
         elif not first_text_done and not re.match(r'^\[image:\s*(.+)\]$', stripped) and not re.match(r'^\[video:\s*(.+)\]$', stripped) and not stripped.startswith('#'):
+            close_list()
             first_text_done = True
-            body_html += f'<h2 style="margin:0 0 20px 0;color:#1a1d23;font-size:22px;font-weight:700;">{_inline_markdown(stripped)}</h2>'
+            if pending_chip_html:
+                body_html += pending_chip_html
+                pending_chip_html = ""
+            body_html += f'<h2 style="margin:0 0 16px 0;color:#1a1d23;font-size:22px;font-weight:700;line-height:1.3;">{_inline_markdown(stripped)}</h2>'
         elif re.match(r'^\[video:\s*(.+)\]$', stripped):
             vid_ref = re.match(r'^\[video:\s*(.+)\]$', stripped).group(1).strip()
             if re.match(r'^https?://', vid_ref, re.IGNORECASE):
@@ -266,19 +369,33 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
             else:
                 body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Image: {_esc(img_name)}]</p>'
         elif re.match(r'^#{1,3}\s+', stripped):
+            close_list()
             first_text_done = True
             hm = re.match(r'^(#{1,3})\s+(.+)$', stripped)
             if hm:
                 level = len(hm.group(1))
                 sizes = {1: '24px', 2: '20px', 3: '17px'}
-                body_html += f'<h{level} style="margin:0 0 12px 0;color:#1a1d23;font-size:{sizes[level]};font-weight:700;">{_inline_markdown(hm.group(2))}</h{level}>'
+                top_margin = '24px' if body_html else '0'
+                if pending_chip_html:
+                    body_html += pending_chip_html
+                    pending_chip_html = ""
+                    top_margin = '0'
+                body_html += f'<h{level} style="margin:{top_margin} 0 12px 0;color:#1a1d23;font-size:{sizes[level]};font-weight:700;line-height:1.3;">{_inline_markdown(hm.group(2))}</h{level}>'
             else:
                 body_html += f'<p style="margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(stripped)}</p>'
         elif stripped.startswith("- "):
+            if not in_list:
+                body_html += '<ul style="margin:8px 0 14px 0;padding-left:22px;">'
+                in_list = True
             body_html += f'<li style="margin-bottom:6px;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(stripped[2:])}</li>'
         else:
-            cta_phrases = ["try it here", "check it out", "learn more", "get started", "see it in action", "explore now"]
-            is_cta = any(p in stripped.lower() for p in cta_phrases)
+            close_list()
+            if pending_chip_html:
+                body_html += pending_chip_html
+                pending_chip_html = ""
+            cta_phrases = ["try it here", "try it now", "check it out", "learn more", "get started", "see it in action", "see the chart", "see it now", "explore now", "explore", "see how"]
+            standalone_link = re.match(r'^\[([^\]]+)\]\((https?://[^)]+)\)\s*\.?$', stripped)
+            is_cta = standalone_link is not None or any(p in stripped.lower() for p in cta_phrases)
             if is_cta and ("http" in stripped):
                 md_link = re.search(r'\[([^\]]+)\]\((https?://[^)]+)\)', stripped)
                 bare_url = re.search(r'(https?://\S+)', stripped)
@@ -299,6 +416,13 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
             else:
                 body_html += f'<p style="margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(stripped)}</p>'
 
+    close_list()
+    if pending_chip_html:
+        body_html += pending_chip_html
+
+    safe_banner_title = _esc(banner_title)
+    safe_banner_month = _esc(banner_month)
+
     return f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -306,8 +430,12 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:24px 0;">
 <tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-<tr><td style="background:#1a1d23;padding:20px 32px;border-radius:8px 8px 0 0;">
+<tr><td style="background:#1a1d23;padding:18px 32px;border-radius:8px 8px 0 0;">
 <span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">Chartmetric</span>
+</td></tr>
+<tr><td style="background:linear-gradient(135deg,#0f172a 0%,#1a1d23 60%,#0b3b33 100%);padding:32px;border-bottom:3px solid #00C9A7;">
+<div style="color:#9ae6d4;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px;">{safe_banner_month}</div>
+<div style="color:#ffffff;font-size:26px;font-weight:800;letter-spacing:-0.5px;line-height:1.2;">{safe_banner_title}</div>
 </td></tr>
 <tr><td style="background:#ffffff;padding:32px;border-radius:0 0 8px 8px;">
 {body_html}

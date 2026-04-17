@@ -19,6 +19,16 @@ FEW_SHOT_EXAMPLES = {
             "content": "**New Insights, powered by Chartmetric Intelligence, Available on Artist Pages**\nStop piecing together your own story from raw numbers. New insights powered by Chartmetric intelligence on artist performance and audience now appear inline across Artist Page tabs, giving you instant context on what\u2019s happening with an artist and why it matters, without leaving the page.\nTry it here"
         }
     ],
+    "email_standalone_digest": [
+        {
+            "feature_context": "New AI-powered insights feature showing contextual analysis on Artist Pages",
+            "content": "**See What's Really Happening at a Glance**\n\nChartmetric Intelligence now surfaces plain-language insights right on Artist Page tabs. You'll see what's driving performance shifts and where audiences are moving, without piecing it together yourself.\n\n- Trend summaries on every tab\n- Audience shift highlights\n\n[Try it now](https://app.chartmetric.com)"
+        },
+        {
+            "feature_context": "New YouTube Monthly Views Evolution chart in artist analytics",
+            "content": "**Richer YouTube Performance Signals**\n\nA new Monthly Views Evolution chart on Artist Pages shows how an artist's YouTube reach trends over time, so you can spot momentum and slowdowns at a glance instead of stitching together monthly snapshots.\n\n[See the chart](https://app.chartmetric.com)"
+        }
+    ],
     "email_short": [
         {
             "feature_context": "New AI-powered insights feature showing contextual analysis on Artist Pages",

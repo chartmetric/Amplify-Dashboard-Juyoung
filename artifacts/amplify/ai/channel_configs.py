@@ -29,6 +29,28 @@ CHANNEL_CONFIGS = {
         "example_output_format": "[Short intro header]\n\n[Pain point hook paragraph]\n\n[Feature highlights]\n\n[CTA paragraph]",
         "enabled": True,
     },
+    "email_standalone_digest": {
+        "display_name": "Email Standalone (Digest Section)",
+        "description": "Tight ~50-word section for a multi-feature standalone email digest",
+        "max_chars": 350,
+        "tone": "Professional but warm. Benefit-led, second person. Tight and scannable — every word earns its place.",
+        "format_rules": (
+            "This is ONE SECTION inside a digest email that bundles several features together. "
+            "Aim for ~50 words / ~300 characters total. Hard cap 350 characters.\n\n"
+            "Structure (in this exact order):\n"
+            "1. A SHORT bolded headline as the first line (no '#' prefix, just the headline text). 4-8 words.\n"
+            "2. A blank line.\n"
+            "3. 2-3 short sentences (~40 words) explaining what's new and the user benefit. Lead with value.\n"
+            "4. (Optional) 1-2 single-line bullets starting with '- ' for concrete capabilities.\n"
+            "5. (Optional) A single inline CTA as a markdown link like '[Try it now](https://...)' on its own line — only if the feature has a URL.\n\n"
+            "Do NOT include a section-label chip, banner, or '## ' header — those are added by the renderer. "
+            "Do NOT repeat the feature title verbatim as the headline; rephrase it as a benefit-led one-liner. "
+            "Do NOT include a 'Subject:' line. No HTML. No greetings. No sign-offs."
+        ),
+        "audience": "Chartmetric users reading a monthly product digest email — busy, scanning on mobile",
+        "example_output_format": "[Bolded benefit-led headline]\n\n[2-3 sentence value summary]. [Optional bullet list].\n\n[Optional CTA link]",
+        "enabled": True,
+    },
     "email_short": {
         "display_name": "Email Short",
         "description": "Quick, concise product update email — to the point",
