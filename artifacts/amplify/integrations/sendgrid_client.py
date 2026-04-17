@@ -423,6 +423,13 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
     safe_banner_title = _esc(banner_title)
     safe_banner_month = _esc(banner_month)
 
+    banner_row = f"""<tr><td style="background:linear-gradient(135deg,#0f172a 0%,#1a1d23 60%,#0b3b33 100%);padding:32px;border-bottom:3px solid #00C9A7;">
+<div style="color:#9ae6d4;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px;">{safe_banner_month}</div>
+<div style="color:#ffffff;font-size:26px;font-weight:800;letter-spacing:-0.5px;line-height:1.2;">{safe_banner_title}</div>
+</td></tr>""" if has_banner else ""
+    header_radius = "8px 8px 0 0" if has_banner else "8px 8px 0 0"
+    body_radius = "0 0 8px 8px"
+
     return f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -430,14 +437,11 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:24px 0;">
 <tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-<tr><td style="background:#1a1d23;padding:18px 32px;border-radius:8px 8px 0 0;">
+<tr><td style="background:#1a1d23;padding:18px 32px;border-radius:{header_radius};">
 <span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">Chartmetric</span>
 </td></tr>
-<tr><td style="background:linear-gradient(135deg,#0f172a 0%,#1a1d23 60%,#0b3b33 100%);padding:32px;border-bottom:3px solid #00C9A7;">
-<div style="color:#9ae6d4;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px;">{safe_banner_month}</div>
-<div style="color:#ffffff;font-size:26px;font-weight:800;letter-spacing:-0.5px;line-height:1.2;">{safe_banner_title}</div>
-</td></tr>
-<tr><td style="background:#ffffff;padding:32px;border-radius:0 0 8px 8px;">
+{banner_row}
+<tr><td style="background:#ffffff;padding:32px;border-radius:{body_radius};">
 {body_html}
 <hr style="border:none;border-top:1px solid #e8e8eb;margin:28px 0 16px 0;">
 <p style="margin:0;color:#999999;font-size:12px;">Chartmetric &middot; Product Update</p>
