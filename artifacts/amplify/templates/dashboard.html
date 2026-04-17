@@ -4685,6 +4685,7 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
             if (!window.prepBatchImages) window.prepBatchImages = {};
             var prevImg = window.prepBatchImages[batchIdx];
             window.prepBatchImages[batchIdx] = imgData;
+            if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
             renderBatchImagePreview(batchIdx);
             if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
             var bta = document.getElementById('batch-ta-' + batchIdx);
@@ -5032,6 +5033,7 @@ function handleBatchVideoFile(file, idx) {
         window.prepBatchVideos[idx].push({
             dataUrl: e.target.result, name: file.name, size: file.size
         });
+        if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
         var ta = document.getElementById('batch-ta-' + idx);
         if (ta) {
             ta.value = ta.value.replace(/\s+$/, '') + '\n[video: ' + file.name + ']';
@@ -5108,6 +5110,7 @@ function confirmBatchLink(idx) {
     if (!window.prepBatchLinks) window.prepBatchLinks = {};
     if (!window.prepBatchLinks[idx]) window.prepBatchLinks[idx] = [];
     window.prepBatchLinks[idx].push({ text: text, url: url });
+    if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     switchToBatchPreview(idx);
     var p = document.getElementById('batch-link-popover');
     if (p) p.remove();
@@ -5119,6 +5122,7 @@ function removeBatchVideoByName(idx, name) {
     for (var k = arr.length - 1; k >= 0; k--) {
         if (arr[k] && arr[k].name === name) arr.splice(k, 1);
     }
+    if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     var ta = document.getElementById('batch-ta-' + idx);
     if (ta) {
         var esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -5132,6 +5136,7 @@ function removeBatchImageInline(idx) {
     var img = (window.prepBatchImages || {})[idx];
     var name = img ? img.name : null;
     if (window.prepBatchImages) delete window.prepBatchImages[idx];
+    if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     renderBatchImagePreview(idx);
     if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
     var ta = document.getElementById('batch-ta-' + idx);
@@ -6248,6 +6253,7 @@ function renderBatchImagePreview(idx) {
 
 function removeBatchImage(idx) {
     if (window.prepBatchImages) delete window.prepBatchImages[idx];
+    if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     var wrap = document.getElementById('batch-img-wrap-' + idx);
     if (wrap) { wrap.innerHTML = ''; wrap.style.display = 'none'; }
     var addBtn = document.getElementById('batch-add-img-btn-' + idx);
@@ -7111,6 +7117,58 @@ function exitPrepWorkflow() {
     window.prepBatchLinks = {};
 }
 
+var BATCH_ATTACH_STORAGE_KEY = 'amplify:batchAttachments:v1';
+
+function _persistBatchAttachments() {
+    try {
+        var byFeature = {};
+        var results = prepBatchResults || [];
+        for (var i = 0; i < results.length; i++) {
+            var fid = results[i] && results[i].feature_id;
+            if (!fid) continue;
+            var img = (window.prepBatchImages || {})[i] || null;
+            var vids = (window.prepBatchVideos || {})[i] || null;
+            var lnks = (window.prepBatchLinks || {})[i] || null;
+            if (!img && !vids && !lnks) continue;
+            byFeature[fid] = { image: img, videos: vids, links: lnks };
+        }
+        var payload = {
+            channel: prepChannel || null,
+            byFeature: byFeature,
+            subjects: window.prepBatchEmailSubject || {},
+            ts: Date.now()
+        };
+        sessionStorage.setItem(BATCH_ATTACH_STORAGE_KEY, JSON.stringify(payload));
+    } catch(e) { /* quota exceeded or unavailable */ }
+}
+
+function _restoreBatchAttachmentsFromStorage() {
+    try {
+        var raw = sessionStorage.getItem(BATCH_ATTACH_STORAGE_KEY);
+        if (!raw) return;
+        var payload = JSON.parse(raw);
+        if (!payload || payload.channel !== prepChannel) return;
+        var byFeature = payload.byFeature || {};
+        window.prepBatchImages = window.prepBatchImages || {};
+        window.prepBatchVideos = window.prepBatchVideos || {};
+        window.prepBatchLinks = window.prepBatchLinks || {};
+        for (var i = 0; i < (prepBatchResults || []).length; i++) {
+            var fid = prepBatchResults[i] && prepBatchResults[i].feature_id;
+            if (!fid || !byFeature[fid]) continue;
+            var entry = byFeature[fid];
+            if (entry.image) window.prepBatchImages[i] = entry.image;
+            if (entry.videos) window.prepBatchVideos[i] = entry.videos;
+            if (entry.links) window.prepBatchLinks[i] = entry.links;
+        }
+        if (payload.subjects) {
+            window.prepBatchEmailSubject = window.prepBatchEmailSubject || {};
+            Object.keys(payload.subjects).forEach(function(k) {
+                if (!window.prepBatchEmailSubject[k]) window.prepBatchEmailSubject[k] = payload.subjects[k];
+            });
+        }
+    } catch(e) { /* ignore */ }
+}
+
 function prepGoToStep(step) {
     ['prep-step1','prep-step2','prep-step3','prep-step4'].forEach(function(id) {
         document.getElementById(id).style.display = 'none';
@@ -7164,6 +7222,7 @@ function fetchAiEmailSubject(channel) {
         var userEdited = input && input.value && input.value !== current;
         if (userEdited) return;
         window.prepBatchEmailSubject[channel] = data.subject;
+        if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
         if (input) input.value = data.subject;
         var combined = document.getElementById('combined-email-subject');
         if (combined) combined.value = data.subject;
@@ -7205,6 +7264,7 @@ function onBatchEmailSubjectChange() {
     if (!input) return;
     window.prepBatchEmailSubject = window.prepBatchEmailSubject || {};
     window.prepBatchEmailSubject[prepChannel] = input.value;
+    if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     var combined = document.getElementById('combined-email-subject');
     if (combined) combined.value = input.value;
 }
@@ -7488,6 +7548,7 @@ function startBatchGeneration() {
         if (data.error) { showToast('Batch generation failed: ' + data.error, 'error'); return; }
 
         prepBatchResults = data.results || [];
+        _restoreBatchAttachmentsFromStorage();
         var list = document.getElementById('batch-results-list');
         list.innerHTML = '';
 
@@ -7697,6 +7758,7 @@ function reconcileBatchAttachmentState(idx) {
         if (typeof renderBatchImagePreview === 'function') renderBatchImagePreview(idx);
         if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
     }
+    if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
 }
 
 function switchToBatchPreview(idx) {
