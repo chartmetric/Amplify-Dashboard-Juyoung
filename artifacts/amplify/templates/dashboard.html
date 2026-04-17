@@ -1822,6 +1822,11 @@
                 <button class="btn-quick" onclick="batchApproveAll()">Approve All</button>
                 <span class="batch-approved-count" id="batch-approved-count">0/0 approved</span>
             </div>
+            <div id="batch-email-subject-row" style="display:none;margin-bottom:14px;">
+                <label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:4px;">Email Subject</label>
+                <input type="text" id="batch-email-subject" placeholder="Subject for the combined email" oninput="onBatchEmailSubjectChange()" style="width:100%;padding:9px 11px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;">
+                <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">All approved features will be sent together in one email with this subject.</div>
+            </div>
             <div class="batch-results-list" id="batch-results-list"></div>
             <div class="batch-bottom-bar" id="batch-bottom-bar" style="display:none;">
                 <span class="batch-approved-count" id="batch-approved-count-bottom">0/0 approved</span>
@@ -7096,11 +7101,43 @@ function prepGoToStep(step) {
             document.getElementById('batch-actions-top').style.display = 'flex';
             document.getElementById('batch-bottom-bar').style.display = 'flex';
         }
+        renderBatchEmailSubjectRow();
     }
     if (step === 4) renderCombinedPreview();
 
     updatePrepBreadcrumb(step);
     window.scrollTo(0, 0);
+}
+
+function isEmailChannel(ch) {
+    return ch === 'email_newsletter' || ch === 'email_standalone';
+}
+
+function stripEmailSubjectLine(content) {
+    if (!content) return { subject: '', body: '' };
+    var m = content.match(/^\s*Subject:\s*(.+?)\s*(\r?\n\s*\r?\n|\r?\n|$)/i);
+    if (!m) return { subject: '', body: content };
+    return { subject: m[1].trim(), body: content.slice(m[0].length).replace(/^\s+/, '') };
+}
+
+function renderBatchEmailSubjectRow() {
+    var row = document.getElementById('batch-email-subject-row');
+    var input = document.getElementById('batch-email-subject');
+    if (!row || !input) return;
+    if (!isEmailChannel(prepChannel)) { row.style.display = 'none'; return; }
+    row.style.display = '';
+    window.prepBatchEmailSubject = window.prepBatchEmailSubject || {};
+    var saved = window.prepBatchEmailSubject[prepChannel] || '';
+    input.value = saved;
+}
+
+function onBatchEmailSubjectChange() {
+    var input = document.getElementById('batch-email-subject');
+    if (!input) return;
+    window.prepBatchEmailSubject = window.prepBatchEmailSubject || {};
+    window.prepBatchEmailSubject[prepChannel] = input.value;
+    var combined = document.getElementById('combined-email-subject');
+    if (combined) combined.value = input.value;
 }
 
 function updatePrepBreadcrumb(step) {
@@ -7378,13 +7415,24 @@ function startBatchGeneration() {
         var list = document.getElementById('batch-results-list');
         list.innerHTML = '';
 
+        var firstSubject = '';
         prepBatchResults.forEach(function(r, idx) {
+            var stripped = stripEmailSubjectLine(r.content || '');
+            if (stripped.subject && !firstSubject) firstSubject = stripped.subject;
+            r.content = stripped.body;
             prepBatchApproved[idx] = false;
-            prepBatchInitialDrafts[idx] = r.content || '';
+            prepBatchInitialDrafts[idx] = r.content;
             prepBatchRegenFeedback[idx] = '';
             var item = buildBatchItem(r, idx);
             list.appendChild(item);
         });
+        if (isEmailChannel(prepChannel) && firstSubject) {
+            window.prepBatchEmailSubject = window.prepBatchEmailSubject || {};
+            if (!window.prepBatchEmailSubject[prepChannel]) {
+                window.prepBatchEmailSubject[prepChannel] = firstSubject;
+            }
+        }
+        renderBatchEmailSubjectRow();
 
         progressWrap.style.display = 'none';
         document.getElementById('batch-progress-fill').style.width = '100%';
@@ -7805,7 +7853,10 @@ function renderCombinedEmailComposer(items) {
     var isStandalone = (ch === 'email_standalone');
     var topTitle = items[0] ? items[0].feature_title : '';
     var defaultSubject;
-    if (items.length === 1) {
+    var sharedSubject = (window.prepBatchEmailSubject || {})[ch] || '';
+    if (sharedSubject) {
+        defaultSubject = sharedSubject;
+    } else if (items.length === 1) {
         defaultSubject = topTitle || 'Chartmetric Product Update';
     } else if (ch === 'email_newsletter') {
         defaultSubject = 'Chartmetric Newsletter - ' + items.length + ' updates';
