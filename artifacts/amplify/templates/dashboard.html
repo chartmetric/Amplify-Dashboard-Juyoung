@@ -1205,6 +1205,16 @@
         .batch-item-cats.disabled { cursor: not-allowed; opacity: 0.65; }
         .batch-item-cats.disabled:hover { background: transparent; }
         .batch-item-cats .cat-popover { top: 100%; left: 0; margin-top: 6px; }
+        .batch-item-score {
+            position: relative; display: inline-flex; align-items: center;
+            cursor: pointer; padding: 0; border-radius: 8px;
+            transition: background-color 0.15s;
+        }
+        .batch-item-score.disabled { cursor: not-allowed; opacity: 0.65; }
+        .batch-item-score .score-badge { cursor: pointer; }
+        .batch-item-score.disabled .score-badge { cursor: not-allowed; }
+        .batch-item-score.disabled .score-badge:hover { transform: none; }
+        .batch-item-score .score-popover { top: 100%; left: 0; margin-top: 6px; }
         .batch-item-body { padding: 12px 16px; }
         .batch-microsyntax-toolbar {
             display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
@@ -1977,6 +1987,55 @@ function refreshBatchCatsForFeature(fid) {
     }
 }
 
+function renderBatchScoreBadge(fid, batchRow) {
+    var score = 0;
+    var f = fid ? findFeatureById(fid) : null;
+    if (f && f.classification && f.classification.importance_score) {
+        score = f.classification.importance_score;
+    } else if (batchRow && batchRow.classification && batchRow.classification.importance_score) {
+        score = batchRow.classification.importance_score;
+    } else if (batchRow && batchRow.importance_score) {
+        score = batchRow.importance_score;
+    }
+    var safeScore = Math.max(0, Math.min(score, 5));
+    return '<span class="score-badge score-' + safeScore + '" style="min-width:26px;width:26px;height:26px;border-radius:6px;font-size:13px;">' + (score || '\u2014') + '</span>';
+}
+
+function refreshBatchScoreForFeature(fid) {
+    if (!fid) return;
+    var els = document.querySelectorAll('.batch-item-score[data-fid="' + fid + '"]');
+    for (var i = 0; i < els.length; i++) {
+        els[i].innerHTML = renderBatchScoreBadge(fid);
+    }
+}
+
+function showBatchScorePopover(fid, anchorEl) {
+    closeActivePopover();
+    var f = findFeatureById(fid);
+    if (!f) return;
+    var c = f.classification || {};
+    var currentScore = c.importance_score || 0;
+
+    var pop = document.createElement('div');
+    pop.className = 'score-popover';
+    [5,4,3,2,1].forEach(function(s) {
+        var opt = document.createElement('div');
+        opt.className = 'score-option score-' + s + (s === currentScore ? ' active' : '');
+        opt.textContent = s;
+        opt.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (s === currentScore) { closeActivePopover(); return; }
+            applyOverride(fid, s, null);
+            refreshBatchScoreForFeature(fid);
+            closeActivePopover();
+        });
+        pop.appendChild(opt);
+    });
+
+    anchorEl.appendChild(pop);
+    activePopover = pop;
+}
+
 function showBatchCatPopover(fid, anchorEl, idx) {
     closeActivePopover();
     var f = findFeatureById(fid);
@@ -2038,7 +2097,8 @@ function closeActivePopover() {
 document.addEventListener('click', function(e) {
     if (!e.target.closest('.score-popover') && !e.target.closest('.score-badge') &&
         !e.target.closest('.cat-popover') && !e.target.closest('.category-pill') &&
-        !e.target.closest('.card-meta') && !e.target.closest('.batch-item-cats')) {
+        !e.target.closest('.card-meta') && !e.target.closest('.batch-item-cats') &&
+        !e.target.closest('.batch-item-score')) {
         closeActivePopover();
     }
 });
@@ -7923,11 +7983,15 @@ function buildBatchItem(r, idx) {
     var batchCatsHtml = renderBatchCatBadges(batchFid, r);
     var batchCatsDisabled = !batchFid || !findFeatureById(batchFid);
     var batchCatsTitle = batchCatsDisabled ? 'title="Category cannot be edited \u2014 feature id not available"' : 'title="Click to change category"';
+    var batchScoreDisabled = !batchFid || !findFeatureById(batchFid);
+    var batchScoreTitle = batchScoreDisabled ? 'title="Score cannot be edited \u2014 feature id not available"' : 'title="Click to change importance score"';
+    var batchScoreHtml = renderBatchScoreBadge(batchFid, r);
 
     item.innerHTML =
         '<div class="batch-item-header">' +
             '<span class="batch-item-drag">\u2261</span>' +
             '<span class="batch-item-title">' + escHtml(r.feature_title || '') + '</span>' +
+            '<span class="batch-item-score' + (batchScoreDisabled ? ' disabled' : '') + '" id="batch-score-' + idx + '" data-fid="' + escAttr(batchFid) + '" ' + batchScoreTitle + '>' + batchScoreHtml + '</span>' +
             '<span class="batch-item-cats' + (batchCatsDisabled ? ' disabled' : '') + '" id="batch-cats-' + idx + '" data-fid="' + escAttr(batchFid) + '" ' + batchCatsTitle + '>' + batchCatsHtml + '</span>' +
             '<span class="char-count-badge ' + charClass + '" id="batch-char-' + idx + '">' + content.length + '/' + maxChars + '</span>' +
             '<span class="status-badge draft" id="batch-status-' + idx + '">Draft</span>' +
@@ -7967,6 +8031,20 @@ function buildBatchItem(r, idx) {
     setTimeout(function() { autoResizeTextarea(ta); }, 0);
     setupCardDragDrop(item, null, true, idx);
     ta.addEventListener('input', function() { autoResizeTextarea(this); });
+
+    var scoreEl = item.querySelector('.batch-item-score');
+    if (scoreEl && !batchScoreDisabled) {
+        scoreEl.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+        scoreEl.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            showBatchScorePopover(batchFid, scoreEl);
+        });
+        scoreEl.setAttribute('draggable', 'false');
+    } else if (scoreEl) {
+        scoreEl.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+        scoreEl.addEventListener('click', function(e) { e.stopPropagation(); });
+    }
 
     var catsEl = item.querySelector('.batch-item-cats');
     if (catsEl && !batchCatsDisabled) {
