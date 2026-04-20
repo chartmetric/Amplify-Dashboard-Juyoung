@@ -388,7 +388,7 @@ def _low_signal_result(feature_id: str, title: str) -> dict:
     }
 
 
-def _enforce_classification_rules(classification: dict, source_title: str = "", source_description: str = ""):
+def _enforce_classification_rules(classification: dict, source_title: str = "", source_description: str = "", bypass_guardrail: bool = False):
     category = classification.get("category", "")
     score = classification.get("importance_score", 0)
 
@@ -403,7 +403,7 @@ def _enforce_classification_rules(classification: dict, source_title: str = "", 
     score = classification.get("importance_score", 0)
 
     # Defense-in-depth: if Claude returned a confident score on garbage input, downgrade it.
-    if score >= 3 and (source_title or source_description):
+    if not bypass_guardrail and score >= 3 and (source_title or source_description):
         if not has_sufficient_signal(source_title, source_description):
             logger.warning(
                 f"[guardrail] Downgrading hallucinated classification for "
@@ -463,7 +463,7 @@ def clear_cache():
     _save_cache_to_disk()
 
 
-def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
+def classify_feature(feature_data: dict, force_claude: bool = False, bypass_guardrail: bool = False) -> dict:
     feature_id = feature_data.get("id", "")
     title = feature_data.get("title", "")
     description = feature_data.get("description", "")
@@ -476,7 +476,9 @@ def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
     # Pre-flight guardrail runs BEFORE quick_classify so a low-signal title
     # can't sneak through as a quick_keyword score-1 hit. Low-signal input
     # is always deterministically marked importance 0 / insufficient_input.
-    if not has_sufficient_signal(title, description):
+    # `bypass_guardrail=True` is used by the dashboard's "Re-classify anyway"
+    # action so a marketer can force a Claude pass on a flagged feature.
+    if not bypass_guardrail and not has_sufficient_signal(title, description):
         logger.info(
             f"[guardrail] Short-circuiting classification for {feature_id!r} "
             f"title={title[:60]!r} desc_len={len(description or '')} — insufficient signal"
@@ -545,7 +547,7 @@ def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
             classification["categories"] = [classification.get("category", "unknown")]
         if "category" not in classification and classification.get("categories"):
             classification["category"] = classification["categories"][0]
-        _enforce_classification_rules(classification, source_title=title, source_description=description)
+        _enforce_classification_rules(classification, source_title=title, source_description=description, bypass_guardrail=bypass_guardrail)
         _migrate_channels(classification)
         if feature_id:
             CLASSIFICATION_CACHE[feature_id] = classification

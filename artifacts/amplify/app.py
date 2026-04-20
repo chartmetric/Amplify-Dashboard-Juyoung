@@ -1478,16 +1478,23 @@ def reclassify_feature_with_claude():
                 "description": data.get("description", ""),
             }
 
+    _bg_raw = data.get("bypass_guardrail", False)
+    if isinstance(_bg_raw, bool):
+        bypass_guardrail = _bg_raw
+    else:
+        bypass_guardrail = str(_bg_raw).strip().lower() in ("1", "true", "yes", "on")
+
     if feature_id in CLASSIFICATION_CACHE:
         del CLASSIFICATION_CACHE[feature_id]
 
     remove_manual_override(feature_id)
 
-    classification = classify_feature(feature_data, force_claude=True)
+    classification = classify_feature(feature_data, force_claude=True, bypass_guardrail=bypass_guardrail)
     return jsonify({
         "success": True,
         "classification": classification,
         "method": "claude",
+        "bypass_guardrail": bypass_guardrail,
     })
 
 

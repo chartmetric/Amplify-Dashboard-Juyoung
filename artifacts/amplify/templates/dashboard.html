@@ -201,6 +201,81 @@
             box-shadow: 0 4px 12px var(--shadow);
         }
         .funnel-step:hover .funnel-tooltip { opacity: 1; }
+        .funnel-btn.skipped-tile { border-color: rgba(234,179,8,0.45); background: rgba(234,179,8,0.06); }
+        .funnel-btn.skipped-tile:hover { border-color: rgba(234,179,8,0.85); background: rgba(234,179,8,0.14); }
+        .funnel-btn.skipped-tile .funnel-count { color: #d97706; }
+        .low-signal-modal-overlay {
+            position: fixed; inset: 0; z-index: 9999; display: none;
+            align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.55); padding: 20px;
+        }
+        .low-signal-modal-overlay.open { display: flex; }
+        .low-signal-modal {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 12px; max-width: 720px; width: 100%; max-height: 80vh;
+            display: flex; flex-direction: column;
+            box-shadow: 0 16px 48px var(--shadow-strong);
+        }
+        .low-signal-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; border-bottom: 1px solid var(--border);
+        }
+        .low-signal-modal-header h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); }
+        .low-signal-modal-close {
+            background: none; border: none; color: var(--text-muted);
+            font-size: 22px; cursor: pointer; line-height: 1;
+        }
+        .low-signal-modal-close:hover { color: var(--text-primary); }
+        .low-signal-modal-body {
+            padding: 12px 20px 18px; overflow-y: auto;
+        }
+        .low-signal-modal-intro {
+            font-size: 12px; color: var(--text-muted); margin: 4px 0 14px;
+            line-height: 1.5;
+        }
+        .low-signal-empty {
+            font-size: 13px; color: var(--text-muted); text-align: center;
+            padding: 24px 0;
+        }
+        .low-signal-row {
+            border: 1px solid var(--border); border-radius: 8px;
+            padding: 10px 12px; margin-bottom: 8px; background: var(--bg-input);
+        }
+        .low-signal-row.removed { opacity: 0.5; }
+        .low-signal-row-title {
+            font-size: 13px; font-weight: 600; color: var(--text-primary);
+            word-break: break-word;
+        }
+        .low-signal-row-meta {
+            display: flex; flex-wrap: wrap; gap: 10px;
+            margin-top: 6px; font-size: 11px; color: var(--text-muted);
+        }
+        .low-signal-row-meta a {
+            color: var(--accent); text-decoration: none;
+        }
+        .low-signal-row-meta a:hover { text-decoration: underline; }
+        .low-signal-row-actions {
+            display: flex; align-items: center; gap: 8px; margin-top: 10px;
+        }
+        .btn-reclassify-anyway {
+            background: rgba(168,85,247,0.15); color: #a855f7;
+            border: 1px solid rgba(168,85,247,0.4);
+            border-radius: 6px; padding: 5px 10px;
+            font-size: 12px; font-weight: 600; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .btn-reclassify-anyway:hover { background: rgba(168,85,247,0.25); }
+        .btn-reclassify-anyway:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-reclassify-anyway .btn-spinner {
+            display: none; width: 11px; height: 11px;
+            border: 2px solid rgba(168,85,247,0.3); border-top-color: #a855f7;
+            border-radius: 50%; animation: spin 0.6s linear infinite;
+        }
+        .low-signal-row-status {
+            font-size: 11px; color: var(--text-muted);
+        }
+        .low-signal-row-status.success { color: #10b981; }
+        .low-signal-row-status.error { color: #ef4444; }
         .load-all-banner {
             background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3);
             border-radius: 10px; padding: 12px 18px; margin-bottom: 16px;
@@ -1783,6 +1858,21 @@
             </div>
         </div>
 
+        <div id="low-signal-modal" class="low-signal-modal-overlay" onclick="onLowSignalOverlayClick(event)">
+            <div class="low-signal-modal" role="dialog" aria-labelledby="low-signal-modal-title" aria-modal="true">
+                <div class="low-signal-modal-header">
+                    <h2 id="low-signal-modal-title">Skipped as low-quality</h2>
+                    <button type="button" class="low-signal-modal-close" onclick="closeLowSignalModal()" aria-label="Close">&times;</button>
+                </div>
+                <div class="low-signal-modal-body">
+                    <p class="low-signal-modal-intro">
+                        These features were silently downgraded by the input-quality guardrail (e.g. titles like ',etc.', '[Duplicate] ...', 'tbd', 'v16 -&gt; v17') so they don't pollute marketing output. If a real feature was caught here, click "Re-classify anyway" to bypass the guardrail and force a fresh AI classification for that one feature.
+                    </p>
+                    <div id="low-signal-list"></div>
+                </div>
+            </div>
+        </div>
+
         <div id="feature-list" class="feature-list"></div>
         <div id="loading" class="loading-container" style="display:none;">
             <div class="spinner"></div>
@@ -2253,7 +2343,7 @@ function renderFunnelBar(data, activeStep) {
     var showAnnounced = srcFilters.indexOf('announced') !== -1;
     var showNotAnnounced = srcFilters.indexOf('not_announced') !== -1;
 
-    var totalFiltered = 0, classifiedCount = 0, sentToClaudeCount = 0;
+    var totalFiltered = 0, classifiedCount = 0, sentToClaudeCount = 0, lowSignalCount = 0;
     for (var i = 0; i < feats.length; i++) {
         var f = feats[i];
         var isAsanaOnly = f.source === 'asana_only';
@@ -2263,7 +2353,11 @@ function renderFunnelBar(data, activeStep) {
         var cl = f.classification;
         if (cl && !cl.unclassified) {
             classifiedCount++;
-            if (cl.classification_method !== 'quick_keyword') sentToClaudeCount++;
+            if (cl.classification_method === 'guardrail_low_signal') {
+                lowSignalCount++;
+            } else if (cl.classification_method !== 'quick_keyword') {
+                sentToClaudeCount++;
+            }
         }
     }
     var result = getFilteredFeatures();
@@ -2285,6 +2379,14 @@ function renderFunnelBar(data, activeStep) {
             clickable: true,
         },
         {
+            id: 'low_signal',
+            count: lowSignalCount,
+            label: 'Skipped as low-quality',
+            tooltip: 'Features whose title/description was too short or junky (e.g. ",etc.", "[Duplicate] ...", "tbd") to classify safely. Click to review them or re-classify anyway.',
+            clickable: true,
+            extraClass: 'skipped-tile',
+        },
+        {
             id: 'showing',
             count: showingCount,
             label: 'Showing',
@@ -2299,7 +2401,7 @@ function renderFunnelBar(data, activeStep) {
         stepEl.className = 'funnel-step';
 
         var btn = document.createElement('button');
-        btn.className = 'funnel-btn' + (step.id === activeStep ? ' active' : '');
+        btn.className = 'funnel-btn' + (step.id === activeStep ? ' active' : '') + (step.extraClass ? ' ' + step.extraClass : '');
         btn.disabled = !step.clickable;
         btn.style.cursor = step.clickable ? 'pointer' : 'default';
         btn.innerHTML =
@@ -2335,7 +2437,150 @@ function onFunnelClick(stepId) {
         manualRefresh();
     } else if (stepId === 'claude') {
         loadFeaturesSentToClaude();
+    } else if (stepId === 'low_signal') {
+        openLowSignalModal();
     }
+}
+
+function getLowSignalFeatures() {
+    var out = [];
+    var feats = allFeatures || [];
+    for (var i = 0; i < feats.length; i++) {
+        var f = feats[i];
+        var cl = f.classification || {};
+        if (cl.classification_method === 'guardrail_low_signal') {
+            out.push(f);
+        }
+    }
+    return out;
+}
+
+function openLowSignalModal() {
+    renderLowSignalList();
+    document.getElementById('low-signal-modal').classList.add('open');
+}
+
+function closeLowSignalModal() {
+    document.getElementById('low-signal-modal').classList.remove('open');
+}
+
+function onLowSignalOverlayClick(event) {
+    if (event.target && event.target.id === 'low-signal-modal') {
+        closeLowSignalModal();
+    }
+}
+
+function renderLowSignalList() {
+    var container = document.getElementById('low-signal-list');
+    var feats = getLowSignalFeatures();
+    if (!feats.length) {
+        container.innerHTML = '<div class="low-signal-empty">No features were skipped by the low-quality guardrail. \u2728</div>';
+        return;
+    }
+    var html = '';
+    for (var i = 0; i < feats.length; i++) {
+        var f = feats[i];
+        var fid = f.id || '';
+        var links = [];
+        if (f.slack_url) links.push('<a href="' + escAttr(f.slack_url) + '" target="_blank" rel="noopener">Slack</a>');
+        if (f.asana_url) links.push('<a href="' + escAttr(f.asana_url) + '" target="_blank" rel="noopener">Asana</a>');
+        if (f.github_url) links.push('<a href="' + escAttr(f.github_url) + '" target="_blank" rel="noopener">GitHub</a>');
+        var prUrls = f.github_pr_urls || [];
+        for (var pi = 0; pi < prUrls.length; pi++) {
+            if (prUrls[pi] === f.github_url) continue;
+            var prMatch = prUrls[pi].match(/\/pull\/(\d+)/);
+            var prLabel = prMatch ? 'PR #' + prMatch[1] : 'GitHub PR';
+            links.push('<a href="' + escAttr(prUrls[pi]) + '" target="_blank" rel="noopener">' + prLabel + '</a>');
+        }
+        if (!links.length) links.push('<span>No source link</span>');
+        html += (
+            '<div class="low-signal-row" data-fid="' + escAttr(fid) + '">' +
+                '<div class="low-signal-row-title">' + escHtml(f.title || '(untitled)') + '</div>' +
+                '<div class="low-signal-row-meta">' + links.join('<span>&middot;</span>') + '</div>' +
+                '<div class="low-signal-row-actions">' +
+                    '<button type="button" class="btn-reclassify-anyway" data-fid="' + escAttr(fid) + '" data-title="' + escAttr(f.title || '') + '" data-desc="' + escAttr((f.description || '').substring(0, 4000)) + '">' +
+                        '<span class="btn-spinner"></span>' +
+                        '<span class="btn-label">Re-classify anyway</span>' +
+                    '</button>' +
+                    '<span class="low-signal-row-status"></span>' +
+                '</div>' +
+            '</div>'
+        );
+    }
+    container.innerHTML = html;
+    var btns = container.querySelectorAll('.btn-reclassify-anyway');
+    for (var b = 0; b < btns.length; b++) {
+        btns[b].addEventListener('click', function(e) {
+            reclassifyAnyway(e.currentTarget);
+        });
+    }
+}
+
+function reclassifyAnyway(btn) {
+    var fid = btn.dataset.fid;
+    var title = btn.dataset.title || '';
+    var desc = btn.dataset.desc || '';
+    var row = btn.closest('.low-signal-row');
+    var status = row ? row.querySelector('.low-signal-row-status') : null;
+    var label = btn.querySelector('.btn-label');
+    var spinner = btn.querySelector('.btn-spinner');
+    label.textContent = 'Classifying\u2026';
+    spinner.style.display = 'inline-block';
+    btn.disabled = true;
+    if (status) { status.textContent = ''; status.className = 'low-signal-row-status'; }
+
+    fetch('/api/features/reclassify', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            feature_id: fid,
+            title: title,
+            description: desc,
+            bypass_guardrail: true,
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success && data.classification) {
+            for (var i = 0; i < allFeatures.length; i++) {
+                if (allFeatures[i].id === fid) {
+                    allFeatures[i].classification = data.classification;
+                    break;
+                }
+            }
+            var newMethod = (data.classification.classification_method || '');
+            var newScore = data.classification.importance_score || 0;
+            if (row) row.classList.add('removed');
+            if (status) {
+                status.className = 'low-signal-row-status success';
+                status.textContent = 'Re-classified (' + escHtml(newMethod) + ', score ' + newScore + ')';
+            }
+            label.textContent = 'Done';
+            spinner.style.display = 'none';
+            if (typeof renderFunnelBar === 'function' && currentFunnelData) {
+                renderFunnelBar(currentFunnelData, null);
+            }
+            if (typeof renderAll === 'function') renderAll();
+            if (typeof updateTierStats === 'function') updateTierStats();
+        } else {
+            label.textContent = 'Re-classify anyway';
+            spinner.style.display = 'none';
+            btn.disabled = false;
+            if (status) {
+                status.className = 'low-signal-row-status error';
+                status.textContent = (data && data.error) ? data.error : 'Re-classify failed';
+            }
+        }
+    })
+    .catch(function(err) {
+        label.textContent = 'Re-classify anyway';
+        spinner.style.display = 'none';
+        btn.disabled = false;
+        if (status) {
+            status.className = 'low-signal-row-status error';
+            status.textContent = err && err.message ? err.message : 'Re-classify failed';
+        }
+    });
 }
 
 function refreshSourceFilterUI() {
