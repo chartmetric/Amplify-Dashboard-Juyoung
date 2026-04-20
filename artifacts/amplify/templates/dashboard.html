@@ -6658,12 +6658,135 @@ function closeDropdown(ddId) {
     }
 }
 
+// ----- Resend template preview helpers -----
+// All three email preview entry points (single channel, batch combined,
+// digest combined) route through these helpers when a Resend template is
+// selected, so we get consistent loading/error UX everywhere.
+
+function _escResendHtmlAttr(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Skeleton/loading HTML shown inside an iframe while we fetch the template.
+function buildResendTemplateLoadingHtml(templateId, subject) {
+    var tid = _escResendHtmlAttr(templateId);
+    var subj = _escResendHtmlAttr(subject || '');
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+        + '@keyframes amplifyShimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}'
+        + '.sk{background:linear-gradient(90deg,#eef0f3 0%,#f7f8fa 50%,#eef0f3 100%);background-size:800px 100%;animation:amplifyShimmer 1.2s infinite linear;border-radius:6px;}'
+        + 'html,body{margin:0;padding:0;background:#f4f4f7;}'
+        + '</style></head><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;padding:0;">'
+        + '<div style="background:#1a1d23;color:#fff;padding:8px 14px;font-size:12px;font-weight:600;border-bottom:2px solid #00C9A7;display:flex;align-items:center;gap:8px;">'
+        + '<span style="background:#00C9A7;color:#0a1f1a;padding:2px 7px;border-radius:3px;font-size:10px;letter-spacing:0.4px;text-transform:uppercase;">Resend template</span>'
+        + '<span style="opacity:0.85;">Loading template ' + tid + '...</span>'
+        + '<span style="margin-left:auto;opacity:0.55;font-weight:400;">Subject: ' + subj + '</span>'
+        + '</div>'
+        + '<div style="max-width:600px;margin:24px auto;padding:0 16px;">'
+        + '<div class="sk" style="height:24px;width:60%;margin-bottom:18px;"></div>'
+        + '<div class="sk" style="height:14px;margin-bottom:10px;"></div>'
+        + '<div class="sk" style="height:14px;margin-bottom:10px;width:92%;"></div>'
+        + '<div class="sk" style="height:14px;margin-bottom:24px;width:78%;"></div>'
+        + '<div class="sk" style="height:180px;margin-bottom:18px;"></div>'
+        + '<div class="sk" style="height:14px;margin-bottom:10px;width:88%;"></div>'
+        + '<div class="sk" style="height:14px;width:64%;"></div>'
+        + '</div></body></html>';
+}
+
+// Wrapper page that hosts the rendered template inside a sandboxed iframe.
+// Sandbox blocks <script> in the template so a malicious/compromised
+// template cannot run JS in the dashboard origin.
+function buildResendTemplateSuccessHtml(templateId, templateName, subject, templateHtml) {
+    var tid = _escResendHtmlAttr(templateId);
+    var name = _escResendHtmlAttr(templateName || templateId);
+    var subj = _escResendHtmlAttr(subject || '');
+    var inner = _escResendHtmlAttr(templateHtml || '<!DOCTYPE html><html><body style="margin:0;padding:48px 24px;font-family:-apple-system,sans-serif;color:#888;text-align:center;background:#fff;"><p style="margin:0;font-size:14px;">This template has no HTML body to preview.</p></body></html>');
+    return '<!DOCTYPE html><html><head><meta charset="utf-8">'
+        + '<style>html,body{margin:0;padding:0;height:100%;background:#f4f4f7;}</style></head>'
+        + '<body style="display:flex;flex-direction:column;height:100vh;">'
+        + '<div style="background:#1a1d23;color:#fff;padding:8px 14px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;font-size:12px;font-weight:600;flex:0 0 auto;border-bottom:2px solid #00C9A7;display:flex;align-items:center;gap:8px;">'
+        + '<span style="background:#00C9A7;color:#0a1f1a;padding:2px 7px;border-radius:3px;font-size:10px;letter-spacing:0.4px;text-transform:uppercase;">Resend template</span>'
+        + '<span>' + name + '</span>'
+        + '<span style="opacity:0.55;font-weight:400;">(' + tid + ')</span>'
+        + '<span style="margin-left:auto;opacity:0.6;font-weight:400;">Subject: ' + subj + '</span>'
+        + '</div>'
+        + '<iframe srcdoc="' + inner + '" sandbox="allow-same-origin" style="flex:1 1 auto;width:100%;border:0;background:#fff;" title="Resend template preview"></iframe>'
+        + '</body></html>';
+}
+
+// Error card HTML with a Retry button. The button calls a function
+// registered on window via a unique id so the iframe (sandboxed or not)
+// or popup can trigger a re-fetch in the parent.
+function buildResendTemplateErrorHtml(templateId, errorMessage, retryHandlerName) {
+    var tid = _escResendHtmlAttr(templateId);
+    var msg = _escResendHtmlAttr(errorMessage || 'Unknown error');
+    var retryAttr = retryHandlerName
+        ? 'onclick="if(window.parent && window.parent.' + retryHandlerName + '){window.parent.' + retryHandlerName + '();}else if(window.opener && window.opener.' + retryHandlerName + '){window.opener.' + retryHandlerName + '();window.close();}"'
+        : 'onclick="location.reload()"';
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"></head>'
+        + '<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f4f4f7;padding:32px 16px;">'
+        + '<div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:8px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">'
+        + '<span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:#dc2626;color:#fff;font-size:12px;font-weight:700;text-align:center;line-height:18px;">!</span>'
+        + '<h2 style="margin:0;font-size:15px;color:#dc2626;font-weight:700;">Could not load Resend template</h2>'
+        + '</div>'
+        + '<p style="margin:0 0 10px 0;font-size:13px;color:#444;">Template ID: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:12px;">' + tid + '</code></p>'
+        + '<p style="margin:0 0 16px 0;font-size:13px;color:#666;line-height:1.5;">' + msg + '</p>'
+        + '<button type="button" ' + retryAttr + ' style="background:#00C9A7;color:#0a1f1a;border:0;padding:8px 16px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;margin-bottom:10px;">Retry</button>'
+        + '<p style="margin:8px 0 0 0;font-size:12px;color:#999;">The send call will still pass this template ID to Resend; this preview just couldn\'t render the layout locally.</p>'
+        + '</div></body></html>';
+}
+
+// Fetch a template's preview HTML from the dedicated JSON endpoint and
+// invoke onSuccess(html) / onError(html). Both callbacks receive HTML
+// suitable for iframe srcdoc or document.write.
+function fetchResendTemplatePreviewHtml(templateId, subject, retryHandlerName, onSuccess, onError) {
+    fetch('/api/resend/templates/' + encodeURIComponent(templateId) + '/preview')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data && data.success) {
+            onSuccess(buildResendTemplateSuccessHtml(templateId, data.name || templateId, subject || '', data.html || ''));
+        } else {
+            var msg = (data && data.error && data.error.message) ? data.error.message : 'Could not fetch template';
+            onError(buildResendTemplateErrorHtml(templateId, msg, retryHandlerName));
+        }
+    })
+    .catch(function(err) {
+        onError(buildResendTemplateErrorHtml(templateId, (err && err.message) ? err.message : 'Network error', retryHandlerName));
+    });
+}
+
+// Last-fired retry handler for new-window single/combined popup previews.
+// Reused by Retry button -> window.opener call.
+window._lastSinglePreviewRetry = null;
+
 function previewEmailHtml(chKey) {
     var ta = document.getElementById('ta-' + chKey);
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to preview', 'error'); return; }
     var subjectInput = document.getElementById('subject-' + chKey);
     var subject = (subjectInput ? subjectInput.value.trim() : '') || 'Chartmetric Product Update';
+    var templateId = '';
+    if (chKey === 'email_standalone') {
+        var templateSel = document.getElementById('template-' + chKey);
+        if (templateSel && templateSel.value) templateId = templateSel.value;
+    }
+
+    if (templateId) {
+        var w = window.open('', '_blank');
+        if (!w) { showToast('Popup blocked', 'error'); return; }
+        w.document.write(buildResendTemplateLoadingHtml(templateId, subject));
+        w.document.close();
+        window._lastSinglePreviewRetry = function() { previewEmailHtml(chKey); };
+        fetchResendTemplatePreviewHtml(templateId, subject, '_lastSinglePreviewRetry', function(okHtml) {
+            try { w.document.open(); w.document.write(okHtml); w.document.close(); } catch (e) {}
+        }, function(errHtml) {
+            try { w.document.open(); w.document.write(errHtml); w.document.close(); } catch (e) {}
+        });
+        return;
+    }
+
     var payload = { content: content, subject: subject };
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
     if (fid) payload.feature_id = fid;
@@ -6671,10 +6794,6 @@ function previewEmailHtml(chKey) {
         var fromNameInput = document.getElementById('fromname-' + chKey);
         if (fromNameInput && fromNameInput.value.trim()) {
             payload.from_name = fromNameInput.value.trim();
-        }
-        var templateSel = document.getElementById('template-' + chKey);
-        if (templateSel && templateSel.value) {
-            payload.template_id = templateSel.value;
         }
     }
     var imgMap = contentViewImageMap[chKey];
@@ -8580,7 +8699,22 @@ function scheduleCombinedEmailPreview(immediate) {
     _combinedEmailPreviewTimer = setTimeout(refreshCombinedEmailLivePreview, delay);
 }
 
-function refreshCombinedEmailLivePreview() {
+// Exposed so the in-iframe Retry button can call back into us via window.parent.
+window._retryCombinedEmailLivePreview = function() {
+    refreshCombinedEmailLivePreview(true);
+};
+
+function _stampCombinedPreviewUpdated() {
+    var s = document.getElementById('combined-email-preview-status');
+    if (!s) return;
+    var t = new Date();
+    var hh = ('0' + t.getHours()).slice(-2);
+    var mm = ('0' + t.getMinutes()).slice(-2);
+    var ss = ('0' + t.getSeconds()).slice(-2);
+    s.textContent = 'Updated ' + hh + ':' + mm + ':' + ss;
+}
+
+function refreshCombinedEmailLivePreview(force) {
     var iframe = document.getElementById('combined-email-live-preview');
     if (!iframe) return;
     var data = _buildCombinedEmailPayload();
@@ -8589,18 +8723,39 @@ function refreshCombinedEmailLivePreview() {
     var fromName = fromNameEl ? fromNameEl.value.trim() : 'Chartmetric';
     var templateSel = document.getElementById('combined-email-template');
     var templateId = templateSel ? templateSel.value : '';
+
+    var statusEl = document.getElementById('combined-email-preview-status');
+    if (statusEl) statusEl.textContent = templateId ? 'Loading template...' : 'Updating...';
+    var seq = ++_combinedEmailPreviewSeq;
+
+    if (templateId) {
+        // Show loading skeleton immediately to avoid blank-pane flicker
+        iframe.srcdoc = buildResendTemplateLoadingHtml(templateId, data.subject || '');
+        fetchResendTemplatePreviewHtml(templateId, data.subject || '', '_retryCombinedEmailLivePreview', function(okHtml) {
+            if (seq !== _combinedEmailPreviewSeq) return;
+            var ifr = document.getElementById('combined-email-live-preview');
+            if (!ifr) return;
+            ifr.srcdoc = okHtml;
+            _stampCombinedPreviewUpdated();
+        }, function(errHtml) {
+            if (seq !== _combinedEmailPreviewSeq) return;
+            var ifr = document.getElementById('combined-email-live-preview');
+            if (!ifr) return;
+            ifr.srcdoc = errHtml;
+            var s = document.getElementById('combined-email-preview-status');
+            if (s) s.textContent = 'Template preview failed';
+        });
+        return;
+    }
+
     var payload = {
         content: data.body,
         subject: data.subject,
         from_name: fromName,
         feature_ids: data.featureIds
     };
-    if (templateId) payload.template_id = templateId;
     if (Object.keys(data.imageMap).length > 0) payload.images = data.imageMap;
 
-    var statusEl = document.getElementById('combined-email-preview-status');
-    if (statusEl) statusEl.textContent = 'Updating...';
-    var seq = ++_combinedEmailPreviewSeq;
     fetch('/api/publish/email/preview', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -8612,14 +8767,7 @@ function refreshCombinedEmailLivePreview() {
         var ifr = document.getElementById('combined-email-live-preview');
         if (!ifr) return;
         ifr.srcdoc = html;
-        var s = document.getElementById('combined-email-preview-status');
-        if (s) {
-            var t = new Date();
-            var hh = ('0' + t.getHours()).slice(-2);
-            var mm = ('0' + t.getMinutes()).slice(-2);
-            var ss = ('0' + t.getSeconds()).slice(-2);
-            s.textContent = 'Updated ' + hh + ':' + mm + ':' + ss;
-        }
+        _stampCombinedPreviewUpdated();
     })
     .catch(function(err) {
         if (seq !== _combinedEmailPreviewSeq) return;
@@ -8801,6 +8949,8 @@ function onCombinedEmailBccInputChange() {
     countSpan.textContent = list.length + ' BCC';
 }
 
+window._lastCombinedPopupPreviewRetry = null;
+
 function previewCombinedEmail() {
     var data = _buildCombinedEmailPayload();
     if (!data) { showToast('No items to preview', 'error'); return; }
@@ -8808,13 +8958,27 @@ function previewCombinedEmail() {
     var fromName = fromNameEl ? fromNameEl.value.trim() : 'Chartmetric';
     var templateSel = document.getElementById('combined-email-template');
     var templateId = templateSel ? templateSel.value : '';
+
+    if (templateId) {
+        var w = window.open('', '_blank');
+        if (!w) { showToast('Popup blocked', 'error'); return; }
+        w.document.write(buildResendTemplateLoadingHtml(templateId, data.subject || ''));
+        w.document.close();
+        window._lastCombinedPopupPreviewRetry = function() { previewCombinedEmail(); };
+        fetchResendTemplatePreviewHtml(templateId, data.subject || '', '_lastCombinedPopupPreviewRetry', function(okHtml) {
+            try { w.document.open(); w.document.write(okHtml); w.document.close(); } catch (e) {}
+        }, function(errHtml) {
+            try { w.document.open(); w.document.write(errHtml); w.document.close(); } catch (e) {}
+        });
+        return;
+    }
+
     var payload = {
         content: data.body,
         subject: data.subject,
         from_name: fromName,
         feature_ids: data.featureIds
     };
-    if (templateId) payload.template_id = templateId;
     if (Object.keys(data.imageMap).length > 0) payload.images = data.imageMap;
     fetch('/api/publish/email/preview', {
         method: 'POST',

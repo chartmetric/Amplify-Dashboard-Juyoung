@@ -1662,52 +1662,11 @@ def preview_email():
         from_name = request.args.get("from_name", "Chartmetric")
         template_id = ""
 
-    if template_id:
-        from integrations.sendgrid_client import get_resend_template
-        from markupsafe import escape
-        import html as _html_mod
-        safe_tid = escape(template_id)
-        safe_subject = escape(subject)
-        result = get_resend_template(template_id)
-        if not result.get("success"):
-            err_msg = escape(result.get("error", "Unknown error"))
-            html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f4f4f7;padding:32px 16px;">
-<div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:8px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-<span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:#dc2626;color:#fff;font-size:12px;font-weight:700;text-align:center;line-height:18px;">!</span>
-<h2 style="margin:0;font-size:15px;color:#dc2626;font-weight:700;">Could not load Resend template</h2>
-</div>
-<p style="margin:0 0 10px 0;font-size:13px;color:#444;">Template ID: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:12px;">{safe_tid}</code></p>
-<p style="margin:0 0 14px 0;font-size:13px;color:#666;line-height:1.5;">{err_msg}</p>
-<p style="margin:0;font-size:12px;color:#999;">The send call will still pass this template ID to Resend; this preview just couldn't render the layout locally.</p>
-</div>
-</body></html>"""
-            return html, 200, {"Content-Type": "text/html; charset=utf-8"}
-
-        tpl_html = result.get("html") or ""
-        tpl_name = result.get("name") or template_id
-        if not tpl_html.strip():
-            tpl_html = """<!DOCTYPE html><html><body style="margin:0;padding:48px 24px;font-family:-apple-system,sans-serif;color:#888;text-align:center;background:#fff;">
-<p style="margin:0;font-size:14px;">This Resend template has no HTML body to preview.</p>
-<p style="margin:8px 0 0 0;font-size:12px;color:#aaa;">It may use Resend's React/MJML editor or be empty.</p></body></html>"""
-
-        safe_inner = _html_mod.escape(tpl_html, quote=True)
-        safe_name = escape(tpl_name)
-        html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>html,body{{margin:0;padding:0;height:100%;background:#f4f4f7;}}</style></head>
-<body style="display:flex;flex-direction:column;height:100vh;">
-<div style="background:#1a1d23;color:#fff;padding:8px 14px;font:600 12px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;flex:0 0 auto;border-bottom:2px solid #00C9A7;display:flex;align-items:center;gap:8px;">
-<span style="background:#00C9A7;color:#0a1f1a;padding:2px 7px;border-radius:3px;font-size:10px;letter-spacing:0.4px;text-transform:uppercase;">Resend template</span>
-<span style="color:#fff;">{safe_name}</span>
-<span style="opacity:0.55;font-weight:400;">({safe_tid})</span>
-<span style="margin-left:auto;opacity:0.6;font-weight:400;">Subject: {safe_subject}</span>
-</div>
-<iframe srcdoc="{safe_inner}" sandbox="allow-same-origin" style="flex:1 1 auto;width:100%;border:0;background:#fff;" title="Resend template preview"></iframe>
-</body></html>"""
-        return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+    # Note: when a Resend template_id is selected, the frontend fetches the
+    # template HTML directly from /api/resend/templates/<id>/preview (JSON)
+    # and renders its own iframe + loading/error UI. We still keep this
+    # endpoint focused on locally-rendered email previews and ignore
+    # template_id here on purpose.
 
     feature_id = data.get("feature_id", "") if request.method == "POST" else request.args.get("feature_id", "")
     feature_ids = data.get("feature_ids", None) if request.method == "POST" else None
@@ -1721,6 +1680,31 @@ def preview_email():
         videos = _build_video_map(feature_id)
     html = render_email_html(subject, content, images=images, from_name=from_name, videos=videos)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/api/resend/templates/<template_id>/preview", methods=["GET"])
+def get_resend_template_preview(template_id):
+    """Read-only: fetch a Resend template's name and HTML body.
+
+    Success: {"success": true, "id": "...", "name": "...", "html": "..."}
+    Failure: {"success": false, "error": {"status": "<kind>", "message": "..."}}
+    Always 200 so the frontend can render its own error card; errors are in the body.
+    """
+    from integrations.sendgrid_client import get_resend_template
+    tid = (template_id or "").strip()
+    if not tid:
+        return jsonify({"success": False, "error": {"status": "invalid_request", "message": "Template ID is required"}}), 200
+    result = get_resend_template(tid)
+    if result.get("success"):
+        return jsonify({"success": True, "id": result.get("id", tid), "name": result.get("name", "") or tid, "html": result.get("html", "") or ""}), 200
+    err_msg = (result.get("error") or "").lower()
+    if "not configured" in err_msg or "missing" in err_msg:
+        kind = "not_configured"
+    elif "not found" in err_msg or "404" in err_msg:
+        kind = "not_found"
+    else:
+        kind = "fetch_failed"
+    return jsonify({"success": False, "id": tid, "error": {"status": kind, "message": result.get("error", "Unknown error")}}), 200
 
 
 @app.route("/api/resend/templates", methods=["GET"])
