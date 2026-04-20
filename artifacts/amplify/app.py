@@ -46,6 +46,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger("amplify")
 
+
+@app.errorhandler(Exception)
+def _global_exception_handler(e):
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e
+    try:
+        _payload_preview = ""
+        if request.is_json:
+            _j = request.get_json(silent=True) or {}
+            _payload_preview = ", ".join(f"{k}={type(v).__name__}({len(v) if hasattr(v,'__len__') else v})" for k, v in list(_j.items())[:8])
+    except Exception:
+        _payload_preview = "<unreadable>"
+    logger.exception(
+        f"[unhandled] {request.method} {request.path} type={type(e).__name__} repr={e!r} "
+        f"args={dict(request.args)} payload_keys={_payload_preview}"
+    )
+    return jsonify({"success": False, "error": f"Server error: {type(e).__name__}: {e}"}), 500
+
 SOURCE_REGISTRY = {
     "asana": AsanaSource(project_gid="1213445772342530"),
     "slack": SlackSource(channel_id="C014BMSCGS2"),
@@ -1730,10 +1749,18 @@ def publish_twitter():
 
     feature_id = data.get("feature_id", "")
     image_base64 = data.get("image")
-    result = publish_tweet(content, image_base64=image_base64)
+    try:
+        result = publish_tweet(content, image_base64=image_base64)
+    except Exception as _e:
+        logger.exception(f"[publish/twitter] UNCAUGHT type={type(_e).__name__} repr={_e!r}")
+        return jsonify({"success": False, "error": f"Server error: {type(_e).__name__}: {_e}"}), 500
     if result.get("success") and result.get("method") == "api" and feature_id:
         mark_published(feature_id, "twitter", tweet_url=result.get("tweet_url"))
     status_code = 200 if result.get("success") else 500
+    if result.get("success"):
+        logger.info(f"[publish/twitter] OK method={result.get('method')!r} tweet_url={result.get('tweet_url','')!r}")
+    else:
+        logger.error(f"[publish/twitter] FAIL status={status_code} error={result.get('error')!r} full_result={result}")
     return jsonify(result), status_code
 
 
@@ -1775,10 +1802,25 @@ def _build_video_map(feature_id):
 @app.route("/api/publish/email", methods=["POST"])
 def publish_email():
     from integrations.sendgrid_client import send_email
+    import time as _time
+    _t0 = _time.time()
 
     data = request.get_json() or {}
     content = data.get("content", "").strip()
+    _to_dbg = (data.get("to_email", "") or "").strip()
+    _audience_dbg = data.get("audience_id", "") or data.get("audienceId", "")
+    _tpl_dbg = (data.get("template_id", "") or "").strip()
+    _imgs_dbg = data.get("images") or {}
+    _fids_dbg = data.get("feature_ids") if isinstance(data.get("feature_ids"), list) else ([data.get("feature_id")] if data.get("feature_id") else [])
+    logger.info(
+        f"[publish/email] REQ channel={data.get('channel','')!r} is_test={data.get('is_test', True)} "
+        f"content_len={len(content)} subject_len={len((data.get('subject','') or '').strip())} "
+        f"to_email_len={len(_to_dbg)} recipients_count={len([e for e in _to_dbg.split(',') if e.strip()])} "
+        f"audience_id={_audience_dbg!r} template_id={_tpl_dbg!r} "
+        f"images={len(_imgs_dbg) if isinstance(_imgs_dbg, dict) else 'n/a'} feature_ids={_fids_dbg}"
+    )
     if not content:
+        logger.warning("[publish/email] REJECT empty content")
         return jsonify({"success": False, "error": "content is required"}), 400
 
     subject = data.get("subject", "").strip()
@@ -1818,13 +1860,19 @@ def publish_email():
     template_id = data.get("template_id", "").strip() or None
     bcc_email = data.get("bcc_email", "").strip() or None
 
-    if feature_ids:
-        videos = {}
-        for fid in feature_ids:
-            videos.update(_build_video_map(fid))
-    else:
-        videos = _build_video_map(feature_id)
-    result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id, videos=videos, bcc_email=bcc_email)
+    try:
+        if feature_ids:
+            videos = {}
+            for fid in feature_ids:
+                videos.update(_build_video_map(fid))
+        else:
+            videos = _build_video_map(feature_id)
+        logger.info(f"[publish/email] videos_attached={len(videos)} keys={list(videos.keys())[:5]}")
+        result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id, videos=videos, bcc_email=bcc_email)
+    except Exception as _e:
+        logger.exception(f"[publish/email] UNCAUGHT exception during send: type={type(_e).__name__} repr={_e!r}")
+        return jsonify({"success": False, "error": f"Server error: {type(_e).__name__}: {_e}"}), 500
+
     if result.get("success") and result.get("method") in ("sendgrid", "resend"):
         if feature_ids:
             for fid in feature_ids:
@@ -1832,6 +1880,11 @@ def publish_email():
         elif feature_id:
             mark_published(feature_id, channel)
     status_code = 200 if result.get("success") else 500
+    _dt = (_time.time() - _t0) * 1000
+    if result.get("success"):
+        logger.info(f"[publish/email] OK method={result.get('method')!r} count={result.get('count')} id={result.get('message_id','')!r} dt={_dt:.0f}ms")
+    else:
+        logger.error(f"[publish/email] FAIL status={status_code} error={result.get('error')!r} method={result.get('method','')!r} dt={_dt:.0f}ms full_result={result}")
     return jsonify(result), status_code
 
 
@@ -1930,10 +1983,17 @@ def get_resend_contacts(audience_id):
 def publish_inapp():
     from integrations.inapp_client import publish_announcement
     import re
+    import time as _time
+    _t0 = _time.time()
 
     data = request.get_json() or {}
     content = data.get("content", "").strip()
+    logger.info(
+        f"[publish/inapp] REQ feature_id={data.get('feature_id','')!r} category={data.get('category','')!r} "
+        f"feature_title_len={len(data.get('feature_title','') or '')} content_len={len(content)}"
+    )
     if not content:
+        logger.warning("[publish/inapp] REJECT empty content")
         return jsonify({"success": False, "error": "content is required"}), 400
 
     feature_title = data.get("feature_title", "")
@@ -1951,10 +2011,20 @@ def publish_inapp():
         title = lines[0].strip()
         body = lines[1].strip() if len(lines) > 1 else ""
 
-    result = publish_announcement(title=title, body=body, feature_id=feature_id, category=category)
+    try:
+        result = publish_announcement(title=title, body=body, feature_id=feature_id, category=category)
+    except Exception as _e:
+        logger.exception(f"[publish/inapp] UNCAUGHT exception: type={type(_e).__name__} repr={_e!r}")
+        return jsonify({"success": False, "error": f"Server error: {type(_e).__name__}: {_e}"}), 500
+
     if result.get("success") and feature_id:
         mark_published(feature_id, "inapp")
     status_code = 200 if result.get("success") else 500
+    _dt = (_time.time() - _t0) * 1000
+    if result.get("success"):
+        logger.info(f"[publish/inapp] OK ann_id={result.get('id','')!r} dt={_dt:.0f}ms")
+    else:
+        logger.error(f"[publish/inapp] FAIL status={status_code} error={result.get('error')!r} dt={_dt:.0f}ms full_result={result}")
     return jsonify(result), status_code
 
 
@@ -2196,21 +2266,27 @@ def regenerate_intro_endpoint():
 
 @app.route("/api/publish/video", methods=["POST"])
 def save_video_endpoint():
+    import time as _time
+    _t0 = _time.time()
     data = request.get_json() or {}
     feature_id = data.get("feature_id", "")
     data_url = data.get("dataUrl", "")
     filename = data.get("name", "video.mp4")
+    logger.info(f"[publish/video] REQ feature_id={feature_id!r} filename={filename!r} dataUrl_len={len(data_url)}")
     if not feature_id or not data_url:
+        logger.warning(f"[publish/video] REJECT missing fields feature_id_set={bool(feature_id)} dataUrl_set={bool(data_url)}")
         return jsonify({"success": False, "error": "feature_id, dataUrl required"}), 400
     try:
         video_id = save_publish_video(feature_id, data_url, filename)
     except ValueError as e:
+        logger.warning(f"[publish/video] REJECT ValueError: {e}")
         return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
-        logging.error(f"[video] Upload failed: {e}")
-        return jsonify({"success": False, "error": "Video upload failed"}), 500
+        logger.exception(f"[publish/video] UNCAUGHT type={type(e).__name__} repr={e!r}")
+        return jsonify({"success": False, "error": f"Video upload failed: {type(e).__name__}: {e}"}), 500
     thumb_url = f"/api/videos/{video_id}/thumb"
     video_url = f"/api/videos/{video_id}"
+    logger.info(f"[publish/video] OK video_id={video_id} dt={(_time.time()-_t0)*1000:.0f}ms")
     return jsonify({"success": True, "video_id": video_id, "thumb_url": thumb_url, "video_url": video_url}), 200
 
 
