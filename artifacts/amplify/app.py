@@ -1129,14 +1129,24 @@ def _check_admin_auth():
 
 @app.route("/api/admin/backfill-low-signal-classifications", methods=["POST"])
 def backfill_low_signal_classifications():
-    """Walk the classification cache and rewrite any entry whose title+description
-    fails the new low-signal guardrail. Useful for one-shot cleanup of historical
-    rows (like the ',etc.' bug) that were classified before the guardrail existed.
+    """Walk the classification cache and rewrite any entry whose TITLE alone
+    is obviously junk (',etc.', '[Duplicate] ...', 'tbd', 'v16 -> v17').
+    Useful for one-shot cleanup of historical rows (like the ',etc.' bug)
+    that were classified before the guardrail existed.
 
-    Category: Admin
+    Scope note: this uses a TITLE-ONLY heuristic (is_obviously_junk_title)
+    rather than the full has_sufficient_signal(title, description) check
+    used at classification time. Cached rows do not preserve the original
+    source description, so a title-only check avoids false positives on
+    legitimate short titles whose descriptions we no longer have.
+    Quick-keyword rows are also intentionally skipped — they are already
+    score 1 and not affected by the hallucination bug class this addresses.
+
+    Category: Admin (gated by AMPLIFY_ADMIN_TOKEN)
 
     Query/body params:
     - dry_run (bool, default false): preview without mutating the cache.
+    - admin_token: passed via header X-Admin-Token, query, or body.
 
     Response: {"scanned": N, "downgraded": N, "samples": [{feature_id, old_score, title}, ...]}
     """
