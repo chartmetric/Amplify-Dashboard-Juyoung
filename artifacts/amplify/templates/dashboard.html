@@ -973,6 +973,40 @@
         .feature-attachments-section.dropdown-open .attachments-view-toggle .chev { transform: rotate(-135deg); margin-bottom: -2px; }
         .attachments-list-dropdown { display: none; width: 100%; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
         .feature-attachments-section.dropdown-open .attachments-list-dropdown { display: block; }
+        .feature-url-row {
+            display: flex; align-items: center; gap: 10px;
+            width: 100%; margin-top: 12px; padding-top: 12px;
+            border-top: 1px dashed var(--border);
+        }
+        .feature-url-label {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+            text-transform: uppercase; color: var(--text-muted); white-space: nowrap;
+        }
+        .feature-url-input {
+            flex: 1 1 auto; min-width: 0;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border); border-radius: 6px;
+            color: var(--text); padding: 7px 10px; font-size: 13px;
+            font-family: inherit; transition: border-color 0.15s, background 0.15s;
+        }
+        .feature-url-input:focus {
+            outline: none; border-color: #2d8cf0;
+            background: rgba(45,140,240,0.06);
+        }
+        .feature-url-input::placeholder { color: var(--text-muted); opacity: 0.7; }
+        .feature-url-open {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 30px; height: 30px; border-radius: 6px;
+            background: rgba(45,140,240,0.08); border: 1px solid rgba(45,140,240,0.3);
+            color: #2d8cf0; text-decoration: none; font-size: 14px;
+            transition: all 0.15s;
+        }
+        .feature-url-open:hover { background: rgba(45,140,240,0.18); border-color: #2d8cf0; }
+        .feature-url-open.disabled { opacity: 0.35; pointer-events: none; }
+        .feature-url-hint {
+            font-size: 11px; color: var(--text-muted); white-space: nowrap;
+        }
         .attachments-list-dropdown .attachments-list,
         .attachments-list-dropdown .feature-image-preview,
         .attachments-list-dropdown .feature-link-preview { width: 100%; }
@@ -1953,12 +1987,19 @@
                 </div>
                 <div class="attachments-actions" id="feature-image-upload">
                     <button class="btn-attach-action" id="btn-attach-media" onclick="showAttachMenu(this)" title="Attach an image, GIF, or video">+ Media</button>
-                    <button class="btn-attach-action btn-attach-link" id="btn-add-link" onclick="promptFeatureLink()" title="Store a hyperlink to insert into channels">+ Link</button>
                 </div>
+            </div>
+            <div class="feature-url-row">
+                <span class="feature-url-label">&#128279; Feature URL</span>
+                <input type="url" id="feature-url-input" class="feature-url-input"
+                       placeholder="https://app.chartmetric.com/charts  (optional &mdash; AI links the CTA to this URL)"
+                       autocomplete="off" spellcheck="false"
+                       oninput="onFeatureUrlInput(event)" onblur="onFeatureUrlBlur(event)">
+                <a id="feature-url-open" class="feature-url-open disabled" target="_blank" rel="noopener noreferrer" title="Open in new tab">&#8599;</a>
             </div>
             <div class="attachments-list-dropdown" id="attachments-list-dropdown">
                 <div class="attachments-list" id="attachments-list">
-                    <div class="attachments-empty" id="attachments-empty">No attachments yet. Use <strong>+ Media</strong> to add an image or video, or <strong>+ Link</strong> to store a URL.</div>
+                    <div class="attachments-empty" id="attachments-empty">No attachments yet. Use <strong>+ Media</strong> to add an image or video.</div>
                     <div class="feature-image-preview" id="feature-image-preview" style="display:none;"></div>
                     <div class="feature-link-preview" id="feature-link-preview" style="display:none;"></div>
                 </div>
@@ -4891,7 +4932,10 @@ function enterContentView(feature) {
             if (localFeatLink) {
                 contentViewFeatureLink = localFeatLink;
                 renderFeatureLinkPreview();
+            } else {
+                contentViewFeatureLink = null;
             }
+            syncFeatureUrlInput();
             var idx = 0;
             function revealNext() {
                 if (idx >= keys.length) {
@@ -6649,8 +6693,66 @@ function promptFeatureLink() {
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
     if (fid) persistFeatureLink(fid, url);
     renderFeatureLinkPreview();
+    syncFeatureUrlInput();
     showInsertLinkButtons();
     showToast('Link stored!', 'success');
+}
+
+function syncFeatureUrlInput() {
+    var inp = document.getElementById('feature-url-input');
+    var open = document.getElementById('feature-url-open');
+    if (inp) {
+        if (document.activeElement !== inp) inp.value = contentViewFeatureLink || '';
+    }
+    if (open) {
+        if (contentViewFeatureLink) {
+            open.href = contentViewFeatureLink;
+            open.classList.remove('disabled');
+        } else {
+            open.removeAttribute('href');
+            open.classList.add('disabled');
+        }
+    }
+}
+
+function _normalizeFeatureUrl(raw) {
+    var url = (raw || '').trim();
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url) && !/^mailto:/i.test(url)) url = 'https://' + url;
+    return url;
+}
+
+function onFeatureUrlInput(e) {
+    var open = document.getElementById('feature-url-open');
+    var raw = (e && e.target ? e.target.value : '').trim();
+    if (open) {
+        if (raw) { open.href = _normalizeFeatureUrl(raw); open.classList.remove('disabled'); }
+        else { open.removeAttribute('href'); open.classList.add('disabled'); }
+    }
+}
+
+function onFeatureUrlBlur(e) {
+    var raw = (e && e.target ? e.target.value : '').trim();
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    if (!raw) {
+        if (contentViewFeatureLink) {
+            contentViewFeatureLink = null;
+            if (fid) persistFeatureLink(fid, null);
+            renderFeatureLinkPreview();
+            hideInsertLinkButtons();
+            syncFeatureUrlInput();
+            showToast('Feature URL cleared', 'success');
+        }
+        return;
+    }
+    var url = _normalizeFeatureUrl(raw);
+    if (url === contentViewFeatureLink) { syncFeatureUrlInput(); return; }
+    contentViewFeatureLink = url;
+    if (fid) persistFeatureLink(fid, url);
+    renderFeatureLinkPreview();
+    syncFeatureUrlInput();
+    showInsertLinkButtons();
+    showToast('Feature URL saved', 'success');
 }
 
 function renderFeatureLinkPreview() {

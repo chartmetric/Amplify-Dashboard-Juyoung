@@ -125,9 +125,9 @@ IMPORTANT RULES:
 - Reference specific Chartmetric features/pages by name when relevant (e.g., 'Artist Page', 'Track Page', 'Playlist tab')
 - Never fabricate data points or statistics \u2014 only reference data if it's in the feature context
 - ABSOLUTELY NEVER use the em dash character (\u2014) in any generated content. This is a hard rule with zero exceptions. Use periods, commas, or semicolons instead. Rewrite sentences to avoid needing dashes entirely. Also never use en dashes (\u2013). Only use regular hyphens (-) for compound words.
-- ALWAYS include a Chartmetric discovery link in the CTA so the reader can go try the feature. This is REQUIRED for every channel except Twitter and HMC article (see channel rules below). Never produce content for those required channels without a link.
-  - If a specific Feature URL is provided, use it. Embed it as a markdown hyperlink with natural anchor text: [anchor text](URL). Do NOT paste the raw URL.
-  - If no Feature URL is provided, infer the most relevant Chartmetric section URL from the feature title/description and link to that section root. NEVER fabricate entity IDs (no fake artist/track/playlist IDs). Use the section ROOT URL only. Common section roots:
+- LINK HANDLING:
+  - If a specific Feature URL IS provided in the input, do NOT embed it as a markdown hyperlink in the body. The URL is shown to the reader separately (as a CTA button or attachment) and is applied at publish time. Instead, write a natural CTA phrase that names the destination without hyperlinking it (e.g., "Explore the new Genius charts in your Charts tab.", "Open it in your Artist Page.", "Try it now in Sync."). Do NOT paste the raw URL or use markdown link syntax `[text](URL)` for the feature URL when one is provided.
+  - If NO Feature URL is provided, include a Chartmetric discovery link in the CTA so the reader can go try the feature. Required for every channel except Twitter and HMC article (see channel rules below). Infer the most relevant Chartmetric section URL from the feature title/description and link to that section root. NEVER fabricate entity IDs (no fake artist/track/playlist IDs). Use the section ROOT URL only. Common section roots:
     * Charts (any chart-related feature, including Genius/lyric/social charts): https://app.chartmetric.com/charts
     * Artist Page / artist analytics / fan metrics: https://app.chartmetric.com/artist
     * Track Page / track analytics: https://app.chartmetric.com/track
@@ -139,13 +139,13 @@ IMPORTANT RULES:
     * Fans / audience / demographics: https://app.chartmetric.com/audience
     * Anything else (general/cross-cutting): https://app.chartmetric.com
   - Anchor text must be a natural phrase that names the destination, e.g. [explore the new Genius charts](https://app.chartmetric.com/charts), [open your Artist Page](https://app.chartmetric.com/artist), [try it in Sync](https://app.chartmetric.com/sync). Avoid generic "click here".
-- Channel-specific rules for URLs:
-  - Twitter: Do NOT include any URL in the tweet text. URLs get added separately.
-  - Email (newsletter, email_short, email_medium, email_long): REQUIRED. End with a markdown CTA hyperlink [text](URL).
-  - In-app: REQUIRED. Use markdown hyperlink format [text](URL) in the CTA.
-  - LinkedIn: REQUIRED. Use markdown hyperlink format [text](URL) or a plain URL at the end.
-  - Notion monthly: REQUIRED. Include as a markdown hyperlink reference.
-  - HMC article: Do not include the feature URL."""
+- Channel-specific rules for URLs (apply ONLY when no Feature URL is provided and you are inferring a section root):
+  - Twitter: Do NOT include any URL in the tweet text under any circumstance. URLs get added separately.
+  - Email (newsletter, email_short, email_medium, email_long): End with a markdown CTA hyperlink [text](URL).
+  - In-app: Use markdown hyperlink format [text](URL) in the CTA.
+  - LinkedIn: Use markdown hyperlink format [text](URL) or a plain URL at the end.
+  - Notion monthly: Include as a markdown hyperlink reference.
+  - HMC article: Do not include any feature URL."""
 
 USER_PROMPT_TEMPLATE = """FEATURE CONTEXT:
 Title: {title}
