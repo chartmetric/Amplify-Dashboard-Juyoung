@@ -648,6 +648,41 @@ def list_resend_contacts(audience_id: str) -> list:
         return []
 
 
+def get_resend_template(template_id: str) -> dict:
+    """Fetch a single Resend template's metadata and HTML body.
+
+    Returns a dict with `success` plus, on success, `id`, `name`, `html`.
+    On failure returns `success=False` and `error` (string).
+    """
+    if not template_id:
+        return {"success": False, "error": "Template ID is required"}
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    if not resend_api_key:
+        return {"success": False, "error": "Resend is not configured (missing RESEND_API_KEY)"}
+    import resend
+    resend.api_key = resend_api_key
+    try:
+        resp = resend.Templates.get(template_id)
+        if isinstance(resp, dict):
+            data = resp
+        else:
+            data = {
+                "id": getattr(resp, "id", ""),
+                "name": getattr(resp, "name", ""),
+                "html": getattr(resp, "html", "") or getattr(resp, "content", ""),
+            }
+        html_body = data.get("html") or data.get("content") or ""
+        return {
+            "success": True,
+            "id": data.get("id", "") or template_id,
+            "name": data.get("name", "") or template_id,
+            "html": html_body,
+        }
+    except Exception as e:
+        logger.error(f"[resend] Failed to fetch template {template_id}: {e}")
+        return {"success": False, "error": str(e), "id": template_id}
+
+
 def list_resend_templates() -> list:
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     if not resend_api_key:

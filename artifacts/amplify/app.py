@@ -1663,32 +1663,49 @@ def preview_email():
         template_id = ""
 
     if template_id:
+        from integrations.sendgrid_client import get_resend_template
         from markupsafe import escape
-        safe_subject = escape(subject)
-        safe_from = escape(from_name)
+        import html as _html_mod
         safe_tid = escape(template_id)
-        html = f"""<!DOCTYPE html>
+        safe_subject = escape(subject)
+        result = get_resend_template(template_id)
+        if not result.get("success"):
+            err_msg = escape(result.get("error", "Unknown error"))
+            html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:24px 0;">
-<tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-<tr><td style="background:#1a1d23;padding:20px 32px;border-radius:8px 8px 0 0;">
-<span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">{safe_from}</span>
-</td></tr>
-<tr><td style="background:#ffffff;padding:32px;border-radius:0 0 8px 8px;">
-<div style="background:#fffbe6;border:1px solid #ffe58f;border-radius:6px;padding:16px;margin-bottom:20px;">
-<p style="margin:0 0 8px 0;font-weight:700;color:#8b6914;">Resend Template Selected</p>
-<p style="margin:0;color:#666;font-size:14px;">This email will be sent using the Resend template <strong>(ID: {safe_tid})</strong>. The template layout is managed in the Resend dashboard and cannot be previewed locally.</p>
+<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f4f4f7;padding:32px 16px;">
+<div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:8px;padding:22px 24px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+<span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:#dc2626;color:#fff;font-size:12px;font-weight:700;text-align:center;line-height:18px;">!</span>
+<h2 style="margin:0;font-size:15px;color:#dc2626;font-weight:700;">Could not load Resend template</h2>
 </div>
-<p style="margin:0 0 8px 0;color:#333;font-size:14px;"><strong>Subject:</strong> {safe_subject}</p>
-<p style="margin:0;color:#333;font-size:14px;"><strong>From:</strong> {safe_from}</p>
-<hr style="border:none;border-top:1px solid #e8e8eb;margin:28px 0 16px 0;">
-<p style="margin:0;color:#999999;font-size:12px;">{safe_from} &middot; Product Update</p>
-</td></tr>
-</table>
-</td></tr>
-</table>
+<p style="margin:0 0 10px 0;font-size:13px;color:#444;">Template ID: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:12px;">{safe_tid}</code></p>
+<p style="margin:0 0 14px 0;font-size:13px;color:#666;line-height:1.5;">{err_msg}</p>
+<p style="margin:0;font-size:12px;color:#999;">The send call will still pass this template ID to Resend; this preview just couldn't render the layout locally.</p>
+</div>
+</body></html>"""
+            return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+        tpl_html = result.get("html") or ""
+        tpl_name = result.get("name") or template_id
+        if not tpl_html.strip():
+            tpl_html = """<!DOCTYPE html><html><body style="margin:0;padding:48px 24px;font-family:-apple-system,sans-serif;color:#888;text-align:center;background:#fff;">
+<p style="margin:0;font-size:14px;">This Resend template has no HTML body to preview.</p>
+<p style="margin:8px 0 0 0;font-size:12px;color:#aaa;">It may use Resend's React/MJML editor or be empty.</p></body></html>"""
+
+        safe_inner = _html_mod.escape(tpl_html, quote=True)
+        safe_name = escape(tpl_name)
+        html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>html,body{{margin:0;padding:0;height:100%;background:#f4f4f7;}}</style></head>
+<body style="display:flex;flex-direction:column;height:100vh;">
+<div style="background:#1a1d23;color:#fff;padding:8px 14px;font:600 12px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;flex:0 0 auto;border-bottom:2px solid #00C9A7;display:flex;align-items:center;gap:8px;">
+<span style="background:#00C9A7;color:#0a1f1a;padding:2px 7px;border-radius:3px;font-size:10px;letter-spacing:0.4px;text-transform:uppercase;">Resend template</span>
+<span style="color:#fff;">{safe_name}</span>
+<span style="opacity:0.55;font-weight:400;">({safe_tid})</span>
+<span style="margin-left:auto;opacity:0.6;font-weight:400;">Subject: {safe_subject}</span>
+</div>
+<iframe srcdoc="{safe_inner}" sandbox="allow-same-origin" style="flex:1 1 auto;width:100%;border:0;background:#fff;" title="Resend template preview"></iframe>
 </body></html>"""
         return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
