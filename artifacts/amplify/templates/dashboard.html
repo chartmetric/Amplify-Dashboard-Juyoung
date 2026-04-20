@@ -9165,7 +9165,13 @@ function renderCombinedEmailComposer(items) {
                   '<div style="flex:1;"><label style="font-size:11px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Banner month</label>' +
                       '<input type="text" id="combined-banner-month" value="' + escHtml(defaultBannerMonth) + '" placeholder="' + escHtml(defaultBannerMonth) + '" oninput="onCombinedBannerInputChange()" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;"></div>' +
               '</div>' +
-              '<div><label style="font-size:11px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Intro paragraph</label>' +
+              '<div>' +
+                  '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;gap:8px;">' +
+                      '<label style="font-size:11px;color:var(--text-muted);font-weight:600;">Intro paragraph</label>' +
+                      '<button type="button" id="combined-banner-intro-regen" onclick="regenerateCombinedIntro()" title="Rewrite intro with AI based on the features in this digest" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:2px 8px;font-size:11px;font-weight:600;border-radius:4px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">' +
+                          '<span style="font-size:11px;">&#10024;</span><span class="regen-label">Regenerate with AI</span>' +
+                      '</button>' +
+                  '</div>' +
                   '<textarea id="combined-banner-intro" placeholder="' + escHtml(defaultIntroText) + '" oninput="onCombinedIntroInputChange()" style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;line-height:1.4;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);box-sizing:border-box;font-family:inherit;resize:vertical;">' + escHtml(defaultIntroText) + '</textarea></div>' +
           '</div>'
         : '';
@@ -9391,6 +9397,76 @@ function onCombinedBannerInputChange() {
     } else {
         bodyEl.value = newTag + '\n\n' + bodyEl.value;
     }
+}
+
+function regenerateCombinedIntro() {
+    var btn = document.getElementById('combined-banner-intro-regen');
+    var introEl = document.getElementById('combined-banner-intro');
+    if (!introEl) return;
+    var titleEl = document.getElementById('combined-banner-title');
+    var monthEl = document.getElementById('combined-banner-month');
+    var defaults = window._combinedBannerDefaults || {};
+
+    // Pull the features the user is currently digesting. prepBatchResults is
+    // the source of truth for what's actually in the combined email; fall
+    // back to allFeatures only if it's empty (shouldn't happen in practice).
+    var items = [];
+    var results = (typeof prepBatchResults !== 'undefined' && prepBatchResults) ? prepBatchResults : [];
+    for (var i = 0; i < results.length; i++) {
+        var r = results[i] || {};
+        if (r.skipped || r.error) continue;
+        var title = r.feature_title || '';
+        var summary = '';
+        if (typeof allFeatures !== 'undefined' && r.feature_id) {
+            for (var j = 0; j < allFeatures.length; j++) {
+                if (allFeatures[j] && allFeatures[j].id === r.feature_id) {
+                    var cls = allFeatures[j].classification || {};
+                    summary = cls.marketing_summary || allFeatures[j].description || '';
+                    if (!title) title = allFeatures[j].title || '';
+                    break;
+                }
+            }
+        }
+        if (title) items.push({ title: title, summary: summary });
+    }
+    if (!items.length) {
+        showToast('No features in this digest yet — generate drafts first.', 'warning');
+        return;
+    }
+
+    var labelEl = btn ? btn.querySelector('.regen-label') : null;
+    var origLabel = labelEl ? labelEl.textContent : '';
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.style.cursor = 'wait'; }
+    if (labelEl) labelEl.textContent = 'Rewriting...';
+
+    fetch('/api/intro/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            banner_title: (titleEl && titleEl.value) || defaults.title || '',
+            banner_month: (monthEl && monthEl.value) || defaults.month || '',
+            items: items
+        })
+    })
+    .then(function(r) { return r.json().then(function(d) { return { status: r.status, data: d }; }); })
+    .then(function(out) {
+        if (!out.data || !out.data.success || !out.data.intro) {
+            showToast('Intro regeneration failed: ' + ((out.data && out.data.error) || ('HTTP ' + out.status)), 'error');
+            return;
+        }
+        introEl.value = out.data.intro;
+        // Push the new intro into the stitched body so the live preview updates.
+        onCombinedIntroInputChange();
+        introEl.dispatchEvent(new Event('input'));
+        showToast('Intro paragraph rewritten', 'success');
+    })
+    .catch(function(err) {
+        showToast('Intro regeneration failed: ' + err.message, 'error');
+    })
+    .finally(function() {
+        if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = 'pointer'; }
+        if (labelEl) labelEl.textContent = origLabel || 'Regenerate with AI';
+    });
 }
 
 function onCombinedIntroInputChange() {

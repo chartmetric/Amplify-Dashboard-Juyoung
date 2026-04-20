@@ -2093,6 +2093,72 @@ def delete_image_endpoint():
     return jsonify({"success": True}), 200
 
 
+@app.route("/api/intro/regenerate", methods=["POST"])
+def regenerate_intro_endpoint():
+    """Generate a fresh 1-2 sentence intro paragraph for the combined
+    standalone email banner using the list of feature titles/summaries
+    the user is currently digesting.
+    """
+    from ai.claude_client import generate_content
+
+    data = request.get_json() or {}
+    banner_title = (data.get("banner_title") or "Product Updates").strip()[:120]
+    banner_month = (data.get("banner_month") or "").strip()[:60]
+    instructions = (data.get("instructions") or "").strip()[:500]
+    items = data.get("items") or []
+    if not isinstance(items, list):
+        items = []
+
+    cleaned = []
+    for it in items[:25]:
+        if not isinstance(it, dict):
+            continue
+        t = (it.get("title") or "").strip()
+        if not t:
+            continue
+        s = (it.get("summary") or "").strip()
+        cleaned.append({"title": t[:200], "summary": s[:300]})
+    if not cleaned:
+        return jsonify({"success": False, "error": "No feature titles to summarize."}), 400
+
+    bullets = "\n".join(
+        "- " + c["title"] + ((" — " + c["summary"]) if c["summary"] else "")
+        for c in cleaned
+    )
+    header_bits = []
+    if banner_title:
+        header_bits.append(f"Banner title: {banner_title}")
+    if banner_month:
+        header_bits.append(f"Edition: {banner_month}")
+    header = "\n".join(header_bits)
+
+    system_prompt = (
+        "You write the short opening paragraph for Chartmetric's monthly "
+        "product-update email. Tone: warm, plain-spoken, concise, no hype. "
+        "Output exactly one paragraph of 1-2 sentences (max ~45 words). "
+        "Do not list every feature. Do not use markdown. Do not start with "
+        "'In this email' or 'This month we'. No emojis. No salutation. "
+        "Return ONLY the paragraph text — no quotes, no preamble."
+    )
+    user_prompt = (
+        f"{header}\n\nFeatures included in this digest:\n{bullets}\n\n"
+        + (f"Editor guidance: {instructions}\n\n" if instructions else "")
+        + "Write the intro paragraph now."
+    )
+
+    result = generate_content(system_prompt, user_prompt, max_tokens=200)
+    if not result.get("success"):
+        return jsonify({"success": False, "error": result.get("error") or "Generation failed"}), 502
+
+    intro = (result.get("content") or "").strip()
+    # Strip any wrapping quotes Claude may have added despite the instruction.
+    if len(intro) >= 2 and intro[0] in ('"', "'") and intro[-1] == intro[0]:
+        intro = intro[1:-1].strip()
+    if not intro:
+        return jsonify({"success": False, "error": "Empty intro returned"}), 502
+    return jsonify({"success": True, "intro": intro}), 200
+
+
 @app.route("/api/publish/video", methods=["POST"])
 def save_video_endpoint():
     data = request.get_json() or {}
