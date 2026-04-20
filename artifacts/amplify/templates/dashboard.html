@@ -7590,7 +7590,7 @@ function startBatchGeneration() {
         prepBatchResults.forEach(function(r, idx) {
             var stripped = stripEmailSubjectLine(r.content || '');
             if (stripped.subject && !firstSubject) firstSubject = stripped.subject;
-            r.content = stripped.body;
+            r.content = _reattachAttachmentsToContent(stripped.body, idx);
             prepBatchApproved[idx] = false;
             prepBatchInitialDrafts[idx] = r.content;
             prepBatchRegenFeedback[idx] = '';
@@ -7769,6 +7769,35 @@ function insertBatchMicrosyntax(idx, kind) {
     autoResizeTextarea(ta);
 }
 
+function _reattachAttachmentsToContent(content, idx) {
+    var out = (content == null) ? '' : String(content);
+    var img = (window.prepBatchImages || {})[idx];
+    if (img && img.name) {
+        var marker = '[image: ' + img.name + ']';
+        if (out.indexOf(marker) === -1) {
+            out = out.replace(/\s+$/, '') + '\n\n' + marker;
+        }
+    }
+    var vids = (window.prepBatchVideos || {})[idx] || [];
+    vids.forEach(function(v) {
+        if (!v || !v.name) return;
+        var vmarker = '[video: ' + v.name + ']';
+        if (out.indexOf(vmarker) === -1) {
+            out = out.replace(/\s+$/, '') + '\n\n' + vmarker;
+        }
+    });
+    var lnks = (window.prepBatchLinks || {})[idx] || [];
+    lnks.forEach(function(l) {
+        if (!l || !l.url) return;
+        var label = l.text || l.url;
+        var md = '[' + label + '](' + l.url + ')';
+        if (out.indexOf(l.url) === -1) {
+            out = out.replace(/\s+$/, '') + '\n\n' + md;
+        }
+    });
+    return out;
+}
+
 function reconcileBatchAttachmentState(idx) {
     var ta = document.getElementById('batch-ta-' + idx);
     if (!ta) return;
@@ -7865,9 +7894,11 @@ function batchRegenItem(idx) {
         if (actionsEl) actionsEl.style.display = 'flex';
         if (data.error) { showToast('Regeneration failed: ' + data.error, 'error'); return; }
 
+        var newContent = data.content || '';
+        newContent = _reattachAttachmentsToContent(newContent, idx);
         var ta = document.getElementById('batch-ta-' + idx);
-        if (ta) { ta.value = data.content || ''; autoResizeTextarea(ta); ta.dispatchEvent(new Event('input')); }
-        prepBatchResults[idx].content = data.content || '';
+        if (ta) { ta.value = newContent; autoResizeTextarea(ta); ta.dispatchEvent(new Event('input')); }
+        prepBatchResults[idx].content = newContent;
         prepBatchRegenFeedback[idx] = feedback;
         if (feedbackInput) feedbackInput.value = '';
         if (prepBatchApproved[idx]) {
