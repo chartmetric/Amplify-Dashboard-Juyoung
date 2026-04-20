@@ -300,9 +300,30 @@ def feature_from_url():
     Response: {"source": "slack"|"asana"|"github"|"manual", "feature": {...}}
     """
     data = request.get_json() or {}
+
+    # Manual entry path: caller provides explicit title (and optional description).
+    # We accept this on the same endpoint so the frontend has a single ingestion
+    # path regardless of whether the feature came from a URL or was hand-typed.
+    manual_title = (data.get("title") or "").strip()
+    if manual_title:
+        manual_desc = (data.get("description") or "").strip()
+        if len(manual_title) > 300:
+            manual_title = manual_title[:300]
+        if len(manual_desc) > 4000:
+            manual_desc = manual_desc[:4000]
+        feature = {
+            "id": f"manual-{__import__('uuid').uuid4().hex[:12]}",
+            "title": manual_title,
+            "description": manual_desc,
+            "source": "manual",
+            "released": False,
+            "asana_linked": False,
+        }
+        return jsonify({"source": "manual", "feature": feature})
+
     raw_input = (data.get("url") or "").strip()
     if not raw_input:
-        return jsonify({"error": "url or text is required"}), 400
+        return jsonify({"error": "url, text, or title is required"}), 400
 
     inputs = [line.strip() for line in raw_input.replace(",", "\n").split("\n") if line.strip()]
     results = []

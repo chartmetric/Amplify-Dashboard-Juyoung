@@ -551,6 +551,75 @@
         .paste-status.loading { color: var(--text-muted); }
         .paste-status.error { color: #ef4444; }
         .paste-status.success { color: var(--accent); }
+        .btn-add-manual {
+            flex: 0 0 auto; background: var(--bg-card); color: var(--text-body); border: 1px solid var(--border);
+            border-radius: 6px; padding: 7px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+            font-family: inherit; transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+            white-space: nowrap;
+        }
+        .btn-add-manual:hover { color: var(--accent); border-color: var(--accent); background: var(--bg-input); }
+        .btn-add-manual:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        .manual-modal-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 9999;
+            display: flex; align-items: center; justify-content: center; padding: 20px;
+            animation: manualOverlayIn 0.15s ease-out;
+        }
+        @keyframes manualOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+        .manual-modal {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+            width: 100%; max-width: 540px; max-height: calc(100vh - 40px); display: flex; flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: manualModalIn 0.2s cubic-bezier(.2,.9,.3,1);
+        }
+        @keyframes manualModalIn { from { transform: translateY(8px) scale(0.98); opacity: 0; } to { transform: none; opacity: 1; } }
+        .manual-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; border-bottom: 1px solid var(--border);
+        }
+        .manual-modal-header h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); }
+        .manual-modal-close {
+            background: transparent; border: 0; color: var(--text-muted); font-size: 22px; line-height: 1;
+            cursor: pointer; padding: 0 4px; border-radius: 4px;
+        }
+        .manual-modal-close:hover { color: var(--text-primary); }
+        .manual-modal-body { padding: 18px 20px 8px; overflow-y: auto; }
+        .manual-modal-label {
+            display: block; font-size: 12px; font-weight: 600; color: var(--text-muted);
+            margin: 0 0 6px 2px; text-transform: uppercase; letter-spacing: 0.4px;
+        }
+        .manual-modal-required { color: #ef4444; font-weight: 700; }
+        .manual-modal-optional { color: var(--text-faint); font-weight: 400; text-transform: none; letter-spacing: 0; }
+        .manual-modal-input, .manual-modal-textarea {
+            width: 100%; box-sizing: border-box; background: var(--bg-input); color: var(--text-body);
+            border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+            font-size: 13px; font-family: inherit; outline: none;
+            transition: border-color 0.15s; margin-bottom: 4px;
+        }
+        .manual-modal-input:focus, .manual-modal-textarea:focus { border-color: var(--accent); }
+        .manual-modal-textarea { resize: vertical; min-height: 110px; line-height: 1.5; }
+        .manual-modal-hint { font-size: 11px; color: var(--text-faint); margin: 0 0 14px 2px; }
+        .manual-modal-error {
+            background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #fca5a5; border-radius: 6px; padding: 8px 12px; font-size: 12px; margin: 4px 0 8px;
+        }
+        .manual-modal-footer {
+            display: flex; justify-content: flex-end; gap: 10px;
+            padding: 14px 20px 18px; border-top: 1px solid var(--border);
+        }
+        .btn-manual-cancel, .btn-manual-save {
+            border: 0; border-radius: 6px; padding: 9px 18px; font-size: 13px; font-weight: 600;
+            font-family: inherit; cursor: pointer; transition: opacity 0.15s, background-color 0.15s;
+        }
+        .btn-manual-cancel { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+        .btn-manual-cancel:hover { color: var(--text-body); border-color: var(--border-hover); }
+        .btn-manual-save { background: var(--accent); color: #0a1f1a; }
+        .btn-manual-save:hover { opacity: 0.9; }
+        .btn-manual-save:disabled { opacity: 0.5; cursor: not-allowed; }
+        @media (max-width: 600px) {
+            .btn-add-manual { padding: 6px 10px; font-size: 11px; }
+            .manual-modal { max-width: 100%; }
+        }
         @keyframes cardHighlight {
             0% { box-shadow: 0 0 0 2px rgba(0,201,167,0.6), 0 0 20px rgba(0,201,167,0.3); }
             100% { box-shadow: none; }
@@ -1665,8 +1734,33 @@
 
         <div class="paste-bar" id="paste-bar">
             <input type="text" id="paste-input" class="paste-input" placeholder="Paste Slack thread, Asana task, or GitHub PR URL... (or type a feature title)">
+            <button type="button" id="btn-add-manual" class="btn-add-manual" onclick="openManualFeatureModal()" title="Add a feature with title and description">+ Add manually</button>
         </div>
         <div class="paste-status" id="paste-status" style="display:none;"></div>
+
+        <div id="manual-feature-modal" class="manual-modal-overlay" style="display:none;" onclick="onManualModalOverlayClick(event)">
+            <div class="manual-modal" role="dialog" aria-labelledby="manual-modal-title" aria-modal="true">
+                <div class="manual-modal-header">
+                    <h2 id="manual-modal-title">Add feature manually</h2>
+                    <button type="button" class="manual-modal-close" onclick="closeManualFeatureModal()" aria-label="Close">&times;</button>
+                </div>
+                <div class="manual-modal-body">
+                    <label class="manual-modal-label" for="manual-feature-title">Title <span class="manual-modal-required">*</span></label>
+                    <input type="text" id="manual-feature-title" class="manual-modal-input" maxlength="300" placeholder="What's the feature called?">
+                    <div class="manual-modal-hint" id="manual-title-hint"></div>
+
+                    <label class="manual-modal-label" for="manual-feature-desc">Description <span class="manual-modal-optional">(optional)</span></label>
+                    <textarea id="manual-feature-desc" class="manual-modal-textarea" maxlength="4000" rows="6" placeholder="What does it do? Who is it for? Any context that should shape the marketing copy."></textarea>
+                    <div class="manual-modal-hint"><span id="manual-desc-count">0</span> / 4000</div>
+
+                    <div class="manual-modal-error" id="manual-modal-error" style="display:none;"></div>
+                </div>
+                <div class="manual-modal-footer">
+                    <button type="button" class="btn-manual-cancel" onclick="closeManualFeatureModal()">Cancel</button>
+                    <button type="button" class="btn-manual-save" id="btn-manual-save" onclick="submitManualFeature()">Add feature</button>
+                </div>
+            </div>
+        </div>
 
         <div id="feature-list" class="feature-list"></div>
         <div id="loading" class="loading-container" style="display:none;">
@@ -10093,6 +10187,132 @@ function submitPasteBar() {
         input.disabled = false;
         status.textContent = 'Error: ' + err.message;
         status.className = 'paste-status error';
+    });
+}
+
+// ----- Manual feature add modal -----
+
+function openManualFeatureModal() {
+    var modal = document.getElementById('manual-feature-modal');
+    var titleEl = document.getElementById('manual-feature-title');
+    var descEl = document.getElementById('manual-feature-desc');
+    var errEl = document.getElementById('manual-modal-error');
+    var saveBtn = document.getElementById('btn-manual-save');
+    var countEl = document.getElementById('manual-desc-count');
+    if (!modal) return;
+    titleEl.value = '';
+    descEl.value = '';
+    if (countEl) countEl.textContent = '0';
+    errEl.style.display = 'none';
+    errEl.textContent = '';
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Add feature';
+    modal.style.display = 'flex';
+    setTimeout(function() { titleEl.focus(); }, 60);
+}
+
+function closeManualFeatureModal() {
+    var modal = document.getElementById('manual-feature-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function onManualModalOverlayClick(e) {
+    if (e.target && e.target.id === 'manual-feature-modal') {
+        closeManualFeatureModal();
+    }
+}
+
+document.addEventListener('keydown', function(e) {
+    var modal = document.getElementById('manual-feature-modal');
+    if (!modal || modal.style.display === 'none') return;
+    if (e.key === 'Escape') { e.preventDefault(); closeManualFeatureModal(); }
+    if ((e.key === 'Enter') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitManualFeature(); }
+});
+
+document.addEventListener('input', function(e) {
+    if (e.target && e.target.id === 'manual-feature-desc') {
+        var c = document.getElementById('manual-desc-count');
+        if (c) c.textContent = String(e.target.value.length);
+    }
+    if (e.target && e.target.id === 'manual-feature-title') {
+        var hint = document.getElementById('manual-title-hint');
+        var val = (e.target.value || '').trim();
+        if (hint) hint.textContent = val.length > 0 ? '' : '';
+        var errEl = document.getElementById('manual-modal-error');
+        if (errEl && errEl.style.display !== 'none' && val.length > 0) {
+            errEl.style.display = 'none';
+        }
+    }
+});
+
+function submitManualFeature() {
+    var titleEl = document.getElementById('manual-feature-title');
+    var descEl = document.getElementById('manual-feature-desc');
+    var errEl = document.getElementById('manual-modal-error');
+    var saveBtn = document.getElementById('btn-manual-save');
+    var statusBar = document.getElementById('paste-status');
+    if (!titleEl || !descEl || !saveBtn) return;
+
+    var title = (titleEl.value || '').trim();
+    var desc = (descEl.value || '').trim();
+
+    if (!title) {
+        errEl.textContent = 'Title is required.';
+        errEl.style.display = 'block';
+        titleEl.focus();
+        return;
+    }
+    if (title.length > 300) {
+        errEl.textContent = 'Title must be 300 characters or fewer.';
+        errEl.style.display = 'block';
+        return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Adding...';
+    errEl.style.display = 'none';
+
+    fetch('/api/features/from-url', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ title: title, description: desc })
+    })
+    .then(function(r) { return r.json().then(function(body) { return { ok: r.ok, status: r.status, body: body }; }); })
+    .then(function(res) {
+        if (!res.ok || !res.body || !res.body.feature) {
+            var msg = (res.body && res.body.error) ? res.body.error : 'Could not add feature (status ' + res.status + ').';
+            errEl.textContent = msg;
+            errEl.style.display = 'block';
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Add feature';
+            return;
+        }
+        var f = res.body.feature;
+        if (!f.classification) {
+            f.classification = { importance_score: 0, category: 'unknown', categories: ['unknown'], unclassified: true };
+        }
+        f._justAdded = true;
+        allFeatures.unshift(f);
+        renderAll();
+
+        closeManualFeatureModal();
+
+        if (statusBar) {
+            statusBar.textContent = 'Added: ' + f.title;
+            statusBar.className = 'paste-status success';
+            statusBar.style.display = 'block';
+            setTimeout(function() { statusBar.style.display = 'none'; }, 3000);
+        }
+
+        var firstCard = document.querySelector('.feature-card.just-added');
+        if (firstCard) firstCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(function() { delete f._justAdded; }, 2500);
+    })
+    .catch(function(err) {
+        errEl.textContent = 'Network error: ' + (err && err.message ? err.message : 'failed');
+        errEl.style.display = 'block';
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Add feature';
     });
 }
 
