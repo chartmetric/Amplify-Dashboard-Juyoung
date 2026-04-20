@@ -268,6 +268,9 @@ RULES FOR recommended_channels:
 - email_newsletter is reserved for the best features (score >= 4) -- it's a curated monthly digest, not a catch-all
 - article_hmc is almost never for a single feature -- it's for thematic bundles. Only include for score 5 standalone features
 
+INSUFFICIENT INPUT RULE (CRITICAL):
+- If the title is a single fragment (e.g. ",etc.", "tbd", "n/a", a single arrow/punctuation), starts with punctuation, or is fewer than 3 alphabetic words, AND the description is empty or under ~40 characters, you MUST NOT invent context. Return: category="unknown", importance_score=0, skip_reason="insufficient_input", marketing_summary="", recommended_channels=[]. Do NOT guess what the feature might be about. Do NOT pattern-match to other Chartmetric features.
+
 RULES FOR target_audience -- pick the most relevant subset of:
 ["artists", "managers", "labels", "publishers", "curators", "all"]
 - If the feature benefits everyone broadly, use ["all"]
@@ -308,7 +311,84 @@ CATEGORY_CAPS = {
 NO_CHANNEL_CATEGORIES = {"bug_fix", "infrastructure"}
 
 
-def _enforce_classification_rules(classification: dict):
+_LOW_SIGNAL_LEAD_TRAIL = re.compile(
+    r"^[\s\.,;:!\?\-_'\"`~/\\\(\)\[\]\{\}<>•·…→←↑↓\u2022]+|"
+    r"[\s\.,;:!\?\-_'\"`~/\\\(\)\[\]\{\}<>•·…→←↑↓\u2022]+$"
+)
+
+
+_JUNK_TITLE_SENTINELS = {"tbd", "n/a", "na", "?", "??", "tba", "todo", "wip", "..."}
+
+
+def is_obviously_junk_title(title: str) -> bool:
+    """Title-only check: True if the title alone is so degenerate that no
+    description could rescue it (sentinel words, leading punctuation, fewer
+    than 2 alphabetic tokens, or version-bump shorthand like 'v16 -> v17').
+    Used for backfilling historical cache rows where the source description
+    is no longer available.
+    """
+    if not title:
+        return True
+    t = title.strip()
+    if not t:
+        return True
+    if t.lower() in _JUNK_TITLE_SENTINELS:
+        return True
+    # Leading punctuation/symbol on the original title — strong junk signal.
+    if not re.match(r"^[A-Za-z0-9]", t):
+        return True
+    alpha_tokens = [tok for tok in re.findall(r"[A-Za-z]+", t) if len(tok) >= 2]
+    if len(alpha_tokens) < 2:
+        return True
+    return False
+
+
+def has_sufficient_signal(title: str, description: str) -> bool:
+    """Return True if title+description has enough content to classify meaningfully.
+
+    Mirrors the slack-side `is_low_quality_title` gate but also considers the
+    description: a one-word title with a real description is fine; a garbage
+    title with empty description is not.
+    """
+    title = title or ""
+    description = description or ""
+    combined = (title + " " + description).strip()
+    if len(combined) < 10:
+        return False
+
+    # Check the ORIGINAL title's leading char (not the trimmed version), so a
+    # title like ",etc." correctly flags as starting with junk.
+    title_lead = title.lstrip()
+    if title_lead and not re.match(r"^[A-Za-z0-9]", title_lead):
+        # Title starts with junk — require richer description to compensate.
+        if len(description.strip()) < 40:
+            return False
+
+    alpha_tokens = [t for t in re.findall(r"[A-Za-z]+", combined) if len(t) >= 2]
+    if len(alpha_tokens) < 3:
+        return False
+
+    return True
+
+
+def _low_signal_result(feature_id: str, title: str) -> dict:
+    return {
+        "feature_id": feature_id,
+        "title": title,
+        "category": "unknown",
+        "categories": ["unknown"],
+        "importance_score": 0,
+        "importance_score_reason": "Insufficient input to classify (title and description too short or low-signal).",
+        "is_user_facing": False,
+        "target_audience": [],
+        "marketing_summary": "",
+        "recommended_channels": [],
+        "skip_reason": "insufficient_input",
+        "classification_method": "guardrail_low_signal",
+    }
+
+
+def _enforce_classification_rules(classification: dict, source_title: str = "", source_description: str = ""):
     category = classification.get("category", "")
     score = classification.get("importance_score", 0)
 
@@ -321,6 +401,27 @@ def _enforce_classification_rules(classification: dict):
         classification["recommended_channels"] = []
 
     score = classification.get("importance_score", 0)
+
+    # Defense-in-depth: if Claude returned a confident score on garbage input, downgrade it.
+    if score >= 3 and (source_title or source_description):
+        if not has_sufficient_signal(source_title, source_description):
+            logger.warning(
+                f"[guardrail] Downgrading hallucinated classification for "
+                f"feature_id={classification.get('feature_id')!r} "
+                f"title={source_title[:60]!r}: Claude returned score={score} on low-signal input"
+            )
+            classification["importance_score"] = 0
+            classification["category"] = "unknown"
+            classification["categories"] = ["unknown"]
+            classification["recommended_channels"] = []
+            classification["skip_reason"] = "insufficient_input"
+            classification["importance_score_reason"] = (
+                "Downgraded by guardrail: model returned a high score on low-signal input."
+            )
+            classification["marketing_summary"] = ""
+            classification["classification_method"] = "guardrail_low_signal"
+            return
+
     if score <= 1:
         classification["recommended_channels"] = []
 
@@ -381,6 +482,19 @@ def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
 
     title = feature_data.get("title", "")
     description = feature_data.get("description", "")
+
+    # Pre-flight guardrail: don't burn a Claude call on garbage input.
+    if not has_sufficient_signal(title, description):
+        logger.info(
+            f"[guardrail] Short-circuiting classification for {feature_id!r} "
+            f"title={title[:60]!r} desc_len={len(description or '')} — insufficient signal"
+        )
+        result = _low_signal_result(feature_id, title)
+        if feature_id:
+            CLASSIFICATION_CACHE[feature_id] = result
+            _mark_dirty()
+        return result
+
     release_status = "Released" if feature_data.get("release_status") else "In Progress"
     urgency_score = feature_data.get("urgency_score", "N/A")
 
@@ -429,7 +543,7 @@ def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
             classification["categories"] = [classification.get("category", "unknown")]
         if "category" not in classification and classification.get("categories"):
             classification["category"] = classification["categories"][0]
-        _enforce_classification_rules(classification)
+        _enforce_classification_rules(classification, source_title=title, source_description=description)
         _migrate_channels(classification)
         if feature_id:
             CLASSIFICATION_CACHE[feature_id] = classification
@@ -541,7 +655,7 @@ def apply_manual_overrides(classified_features: list[dict]) -> list[dict]:
 def get_classification_tier_stats() -> dict:
     quick_count = 0
     claude_count = 0
-    claude_pending = 0
+    guardrail_count = 0
 
     for fid, cl in CLASSIFICATION_CACHE.items():
         method = cl.get("classification_method", "")
@@ -551,9 +665,12 @@ def get_classification_tier_stats() -> dict:
             claude_count += 1
         elif method == "claude_error":
             claude_count += 1
+        elif method == "guardrail_low_signal":
+            guardrail_count += 1
 
     return {
         "auto_skipped": quick_count,
         "ai_classified": claude_count,
+        "guardrail_low_signal": guardrail_count,
         "total_cached": len(CLASSIFICATION_CACHE),
     }

@@ -1,4 +1,5 @@
 import re
+import sys
 import time
 import logging
 from datetime import datetime, timedelta, timezone
@@ -108,6 +109,31 @@ def _resolve_slack_links(text: str) -> str:
 
 def _strip_slack_links(text: str) -> str:
     return re.sub(r"<https?://[^>]+>", "", text).strip()
+
+
+_LEADING_TRAILING_PUNCT = r"[\s\.,;:!\?\-_'\"`~/\\\(\)\[\]\{\}<>•·…→←↑↓\u2022]+"
+
+
+def is_low_quality_title(title: str) -> bool:
+    """Return True if the title looks like garbage (single fragment, mostly punctuation, etc.).
+
+    Catches things like ',etc.', 'tbd', 'n/a', '→', single-word stubs.
+    """
+    if not title:
+        return True
+    stripped = re.sub(r"^" + _LEADING_TRAILING_PUNCT, "", title)
+    stripped = re.sub(_LEADING_TRAILING_PUNCT + r"$", "", stripped)
+    if len(stripped) < 10:
+        return True
+    if not re.match(r"^[A-Za-z0-9]", stripped):
+        return True
+    alpha_tokens = [t for t in re.findall(r"[A-Za-z]+", stripped) if len(t) >= 2]
+    if len(alpha_tokens) < 2:
+        return True
+    junk_singletons = {"tbd", "na", "etc", "wip", "todo", "fixme"}
+    if len(alpha_tokens) == 2 and all(t.lower() in junk_singletons for t in alpha_tokens):
+        return True
+    return False
 
 
 def _parse_feature_bullet(line: str, require_bullet: bool = True) -> dict | None:
@@ -286,6 +312,14 @@ class SlackSource(SourceAdapter):
             for line in lines:
                 parsed = _parse_feature_bullet(line)
                 if parsed:
+                    if is_low_quality_title(parsed["title"]):
+                        parse_errors.append({
+                            "ts": msg_ts,
+                            "reason": "low_quality_title",
+                            "preview": parsed["title"][:120],
+                        })
+                        logger.info(f"[slack-first] Skipping low-quality bullet title: {parsed['title'][:80]!r}")
+                        continue
                     found_bullets = True
                     feature_id = f"slack-{msg_ts}-{bullet_idx}"
 
@@ -442,3 +476,27 @@ class SlackSource(SourceAdapter):
                 "links": links,
             },
         )
+
+
+if __name__ == "__main__":
+    cases = [
+        (",etc.", True),
+        ("tbd", True),
+        ("n/a", True),
+        ("→", True),
+        (".", True),
+        ("wip todo", True),
+        ("Add Spotify Followers chart to Track page", False),
+        ("Fix typo in tooltip", False),
+        ("Polish TikTok Videos Trend area chart", False),
+    ]
+    failed = 0
+    for title, expected in cases:
+        actual = is_low_quality_title(title)
+        ok = actual == expected
+        marker = "OK" if ok else "FAIL"
+        print(f"  [{marker}] is_low_quality_title({title!r}) = {actual} (expected {expected})")
+        if not ok:
+            failed += 1
+    print(f"\n{len(cases) - failed}/{len(cases)} passed")
+    sys.exit(1 if failed else 0)

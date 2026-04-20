@@ -482,6 +482,27 @@
         }
         .show-more-link { color: var(--accent); cursor: pointer; font-size: 13px; margin-top: 6px; display: inline-block; }
         .show-more-link:hover { text-decoration: underline; }
+        .raw-input-panel { margin-top: 10px; border: 1px dashed var(--border); border-radius: 6px; background: var(--bg-input); }
+        .raw-input-panel summary {
+            cursor: pointer; padding: 6px 12px; font-size: 11px; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.4px; user-select: none; outline: none;
+            font-weight: 600;
+        }
+        .raw-input-panel summary:hover { color: var(--text-body); }
+        .raw-input-panel[open] summary { border-bottom: 1px dashed var(--border); }
+        .raw-input-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+        .raw-row { display: flex; gap: 10px; align-items: flex-start; font-size: 12px; }
+        .raw-label {
+            flex: 0 0 90px; color: var(--text-dim); font-size: 10px; text-transform: uppercase;
+            letter-spacing: 0.4px; padding-top: 3px; font-weight: 600;
+        }
+        .raw-val {
+            flex: 1; min-width: 0; margin: 0; background: var(--bg-primary); border: 1px solid var(--border);
+            border-radius: 4px; padding: 6px 8px; font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 12px; color: var(--text-body); white-space: pre-wrap; word-break: break-word;
+            max-height: 240px; overflow-y: auto;
+        }
+        .raw-val-inline { font-family: 'SF Mono', 'Fira Code', monospace; padding: 3px 8px; max-height: none; }
         .meta-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
         .meta-pill { font-size: 11px; padding: 3px 10px; border-radius: 99px; background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-muted); }
         .meta-pill.released { border-color: rgba(0,201,167,0.3); color: #00C9A7; }
@@ -3429,13 +3450,35 @@ function linkifyText(text) {
 
 function buildDescBlock(f) {
     var desc = f.description || '';
-    if (!desc) return '';
-    var truncated = desc.length > 500;
-    var displayDesc = truncated ? desc.substring(0, 500) + '...' : desc;
-    var html = '<div class="desc-block"><span class="desc-text">' + linkifyText(displayDesc) + '</span>';
-    if (truncated) html += '<br><span class="show-more-link" data-full="' + escAttr(desc) + '">Show more...</span>';
-    html += '</div>';
+    var html = '';
+    if (desc) {
+        var truncated = desc.length > 500;
+        var displayDesc = truncated ? desc.substring(0, 500) + '...' : desc;
+        html += '<div class="desc-block"><span class="desc-text">' + linkifyText(displayDesc) + '</span>';
+        if (truncated) html += '<br><span class="show-more-link" data-full="' + escAttr(desc) + '">Show more...</span>';
+        html += '</div>';
+    }
+    html += buildRawInputPanel(f);
     return html;
+}
+
+function buildRawInputPanel(f) {
+    var cl = f.classification || {};
+    var method = cl.classification_method || '(none)';
+    var skip = cl.skip_reason || '';
+    var title = f.title || '';
+    var desc = f.description || '';
+    return (
+        '<details class="raw-input-panel">' +
+            '<summary>Show raw input sent to classifier</summary>' +
+            '<div class="raw-input-body">' +
+                '<div class="raw-row"><span class="raw-label">Title</span><pre class="raw-val">' + escHtml(title || '(empty)') + '</pre></div>' +
+                '<div class="raw-row"><span class="raw-label">Description</span><pre class="raw-val">' + escHtml(desc || '(empty)') + '</pre></div>' +
+                '<div class="raw-row"><span class="raw-label">Method</span><span class="raw-val raw-val-inline">' + escHtml(method) + '</span></div>' +
+                (skip ? '<div class="raw-row"><span class="raw-label">Skip reason</span><span class="raw-val raw-val-inline">' + escHtml(skip) + '</span></div>' : '') +
+            '</div>' +
+        '</details>'
+    );
 }
 
 function buildMetaPills(f) {

@@ -22,6 +22,8 @@ from ai.classifier import (
     CLASSIFICATION_CACHE,
     quick_classify, get_keyword_list, add_keyword, remove_keyword,
     record_keyword_override, get_classification_tier_stats,
+    has_sufficient_signal, _low_signal_result, _save_cache_to_disk,
+    is_obviously_junk_title,
 )
 from ai.pre_filter import pre_filter_batch  # kept for backward compat, not used in main pipeline
 from ai.generator import generate_for_channel, generate_all_channels
@@ -1100,6 +1102,72 @@ def classifications_status():
         "classified": classified,
         "pending": max(0, total - classified),
         "in_progress": in_progress,
+    })
+
+
+@app.route("/api/admin/backfill-low-signal-classifications", methods=["POST"])
+def backfill_low_signal_classifications():
+    """Walk the classification cache and rewrite any entry whose title+description
+    fails the new low-signal guardrail. Useful for one-shot cleanup of historical
+    rows (like the ',etc.' bug) that were classified before the guardrail existed.
+
+    Category: Admin
+
+    Query/body params:
+    - dry_run (bool, default false): preview without mutating the cache.
+
+    Response: {"scanned": N, "downgraded": N, "samples": [{feature_id, old_score, title}, ...]}
+    """
+    def _parse_bool(v):
+        if isinstance(v, bool):
+            return v
+        if v is None:
+            return False
+        return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+    data = request.get_json(silent=True) or {}
+    dry_run = _parse_bool(data.get("dry_run", request.args.get("dry_run")))
+
+    scanned = 0
+    downgraded = 0
+    samples = []
+
+    # Use the title-only check: cache rows don't preserve the original source
+    # description, so we can't reliably re-run `has_sufficient_signal`. We only
+    # downgrade rows whose TITLE alone is so degenerate that no description
+    # could rescue it (e.g. ',etc.', 'tbd', 'v16 -> v17').
+    for fid, cl in list(CLASSIFICATION_CACHE.items()):
+        scanned += 1
+        method = cl.get("classification_method", "")
+        if method in ("quick_keyword", "guardrail_low_signal"):
+            continue
+        title = cl.get("title", "") or ""
+        if not is_obviously_junk_title(title):
+            continue
+        old_score = cl.get("importance_score", 0)
+        if len(samples) < 50:
+            samples.append({
+                "feature_id": fid,
+                "title": title[:120],
+                "old_score": old_score,
+                "old_method": method,
+            })
+        if not dry_run:
+            CLASSIFICATION_CACHE[fid] = _low_signal_result(fid, title)
+        downgraded += 1
+
+    if not dry_run and downgraded > 0:
+        # Force a flush; _save_cache_to_disk only saves when dirty, so mark it.
+        from ai import classifier as _cl_mod
+        _cl_mod._cache_dirty = True
+        _save_cache_to_disk()
+
+    logger.info(f"[backfill] scanned={scanned} downgraded={downgraded} dry_run={dry_run}")
+    return jsonify({
+        "scanned": scanned,
+        "downgraded": downgraded,
+        "dry_run": dry_run,
+        "samples": samples,
     })
 
 
