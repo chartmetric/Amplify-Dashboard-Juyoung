@@ -1717,6 +1717,18 @@
                         </div>
                     </div>
                     <input type="hidden" id="sort-by" value="importance">
+                    <span class="filter-label">Window</span>
+                    <div class="custom-dropdown" id="days-window-dropdown">
+                        <div class="custom-dropdown-toggle" onclick="toggleCustomDropdown('days-window-dropdown')">
+                            <span class="dd-label">Last 90 days</span><span class="dd-arrow">&#9662;</span>
+                        </div>
+                        <div class="custom-dropdown-menu">
+                            <div class="custom-dropdown-item" data-value="30" onclick="selectDropdownItem('days-window-dropdown', this); onDaysWindowChange();">Last 30 days</div>
+                            <div class="custom-dropdown-item" data-value="60" onclick="selectDropdownItem('days-window-dropdown', this); onDaysWindowChange();">Last 60 days</div>
+                            <div class="custom-dropdown-item active" data-value="90" onclick="selectDropdownItem('days-window-dropdown', this); onDaysWindowChange();">Last 90 days</div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="days-window" value="90">
                     <span class="filter-label">Min importance</span>
                     <div class="custom-dropdown" id="importance-filter-dropdown">
                         <div class="custom-dropdown-toggle" onclick="toggleCustomDropdown('importance-filter-dropdown')">
@@ -2367,8 +2379,8 @@ function renderFunnelBar(data, activeStep) {
         {
             id: 'total',
             count: totalFiltered,
-            label: 'Total Features Released in the last 30 days',
-            tooltip: 'Total number of features released in the last 30 days.',
+            label: 'Total Features Released in the last ' + getDaysWindow() + ' days',
+            tooltip: 'Total number of features released in the last ' + getDaysWindow() + ' days.',
             clickable: false,
         },
         {
@@ -2713,7 +2725,7 @@ function loadFeatures() {
     hideProgressBar();
 
     currentPage = 1;
-    fetch('/api/features/all')
+    fetch('/api/features/all?days=' + getDaysWindow())
         .then(function(r) { return r.json(); })
         .then(function(data) {
             loading.style.display = 'none';
@@ -2747,6 +2759,19 @@ function loadFeatures() {
             errEl.innerHTML = '<div class="empty-icon">&#9888;&#65039;</div><h3>Failed to load features</h3><p>' + escHtml(err.message) + '</p><button class="btn-retry" onclick="loadFeatures()">Retry</button>';
             errEl.style.display = 'block';
         });
+}
+
+function getDaysWindow() {
+    var el = document.getElementById('days-window');
+    var v = el ? parseInt(el.value, 10) : 90;
+    return (v === 30 || v === 60 || v === 90) ? v : 90;
+}
+
+function onDaysWindowChange() {
+    // Re-pull features for the newly selected window. Force refresh=true
+    // is unnecessary — the backend caches per-days bucket — but we do want
+    // to reset the view and re-run classification on the new set.
+    loadFeatures();
 }
 
 function formatTimeAgo(ts) {
@@ -2794,7 +2819,7 @@ function manualRefresh() {
     hideProgressBar();
     currentPage = 1;
 
-    fetch('/api/features/all?refresh=true')
+    fetch('/api/features/all?refresh=true&days=' + getDaysWindow())
         .then(function(r) { return r.json(); })
         .then(function(data) {
             loading.style.display = 'none';
@@ -2834,7 +2859,7 @@ function startAutoRefreshTimer() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(function() {
         if (isAllTasksMode) return;
-        fetch('/api/features/all')
+        fetch('/api/features/all?days=' + getDaysWindow())
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data.error) return;

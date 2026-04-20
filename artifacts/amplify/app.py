@@ -937,11 +937,13 @@ def all_features_unclassified():
 
     Category: Sources
 
-    Query Params: ?days=30&limit=100&refresh=false
+    Query Params: ?days=90&limit=100&refresh=false
 
-    Response: {"features": [...], "total": N}
+    Response: {"features": [...], "total": N, "days": N}
     """
-    days = request.args.get("days", default=30, type=int)
+    days = request.args.get("days", default=90, type=int)
+    if days not in (30, 60, 90):
+        days = 90
     force_refresh = request.args.get("refresh", default="false").lower() == "true"
     try:
         result = _get_slack_first_features(days=days, force_refresh=force_refresh)
@@ -970,6 +972,7 @@ def all_features_unclassified():
     return jsonify({
         "features": features,
         "total": len(features),
+        "days": days,
         "last_refreshed": last_refreshed,
     })
 
