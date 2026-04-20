@@ -1007,6 +1007,19 @@
         .feature-url-hint {
             font-size: 11px; color: var(--text-muted); white-space: nowrap;
         }
+        .batch-item-feature-url {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 14px; margin: 0 0 0 0;
+            border-top: 1px dashed var(--border);
+            background: rgba(255,255,255,0.015);
+        }
+        .btn-batch-media .batch-media-count {
+            display: inline-block; min-width: 16px; padding: 0 5px;
+            margin-left: 4px; border-radius: 8px;
+            background: rgba(45,140,240,0.18); color: #2d8cf0;
+            font-size: 10px; font-weight: 700; line-height: 14px;
+            text-align: center;
+        }
         .attachments-list-dropdown .attachments-list,
         .attachments-list-dropdown .feature-image-preview,
         .attachments-list-dropdown .feature-link-preview { width: 100%; }
@@ -6027,6 +6040,68 @@ function promptBatchVideoUrl(idx) {
     showToast('Video link added', 'success');
 }
 
+function getBatchMediaCount(idx) {
+    var n = 0;
+    var img = (window.prepBatchImages || {})[idx];
+    if (img && img.dataUrl) n++;
+    var vids = (window.prepBatchVideos || {})[idx];
+    if (vids && vids.length) n += vids.length;
+    return n;
+}
+
+function getBatchMediaButtonLabel(idx) {
+    var n = getBatchMediaCount(idx);
+    if (n > 0) return '\uD83D\uDCCE Media <span class="batch-media-count">' + n + '</span> \u25be';
+    return '\uD83D\uDCCE Attach \u25be';
+}
+
+function refreshBatchMediaButton(idx) {
+    var btn = document.getElementById('batch-attach-btn-' + idx);
+    if (btn) btn.innerHTML = getBatchMediaButtonLabel(idx);
+}
+
+function _normalizeFeatureUrl_b(raw) {
+    var url = (raw || '').trim();
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url) && !/^mailto:/i.test(url)) url = 'https://' + url;
+    return url;
+}
+
+function onBatchFeatureUrlInput(idx, e) {
+    var open = document.getElementById('batch-furl-open-' + idx);
+    var raw = (e && e.target ? e.target.value : '').trim();
+    if (!open) return;
+    if (raw) { open.href = _normalizeFeatureUrl_b(raw); open.classList.remove('disabled'); }
+    else { open.removeAttribute('href'); open.classList.add('disabled'); }
+}
+
+function onBatchFeatureUrlBlur(idx, e) {
+    var raw = (e && e.target ? e.target.value : '').trim();
+    var r = (prepBatchResults || [])[idx] || {};
+    var fid = r.feature_id || '';
+    if (!fid) return;
+    var current = getPersistedFeatureLink(fid) || '';
+    if (!raw) {
+        if (current) {
+            persistFeatureLink(fid, null);
+            var open = document.getElementById('batch-furl-open-' + idx);
+            if (open) { open.removeAttribute('href'); open.classList.add('disabled'); }
+            showToast('Feature URL cleared', 'success');
+        }
+        return;
+    }
+    var url = _normalizeFeatureUrl_b(raw);
+    if (url === current) {
+        if (e && e.target) e.target.value = url;
+        return;
+    }
+    persistFeatureLink(fid, url);
+    if (e && e.target) e.target.value = url;
+    var open2 = document.getElementById('batch-furl-open-' + idx);
+    if (open2) { open2.href = url; open2.classList.remove('disabled'); }
+    showToast('Feature URL saved', 'success');
+}
+
 function promptBatchLink(idx) {
     var existing = document.getElementById('batch-link-popover');
     if (existing) existing.remove();
@@ -8327,7 +8402,15 @@ function exitPrepWorkflow() {
 
 var BATCH_ATTACH_STORAGE_KEY = 'amplify:batchAttachments:v1';
 
+function _refreshAllBatchMediaButtons() {
+    var results = prepBatchResults || [];
+    for (var i = 0; i < results.length; i++) {
+        if (typeof refreshBatchMediaButton === 'function') refreshBatchMediaButton(i);
+    }
+}
+
 function _persistBatchAttachments() {
+    try { _refreshAllBatchMediaButtons(); } catch(_e) {}
     try {
         var existing = {};
         try {
@@ -8930,9 +9013,21 @@ function buildBatchItem(r, idx) {
         '</div>' +
         '<div class="img-preview-wrap" id="batch-img-wrap-' + idx + '" style="display:none;"></div>' +
         '<div class="batch-item-loading" id="batch-loading-' + idx + '" style="display:none;"><div class="spinner"></div><span>Regenerating...</span></div>' +
+        '<div class="batch-item-feature-url" id="batch-furl-row-' + idx + '">' +
+            '<span class="feature-url-label">\uD83D\uDD17 Feature URL</span>' +
+            '<input type="url" class="feature-url-input" id="batch-furl-' + idx + '"' +
+                ' placeholder="https://app.chartmetric.com/...  (optional &mdash; AI links the CTA to this URL)"' +
+                ' value="' + escAttr(getPersistedFeatureLink(batchFid) || '') + '"' +
+                ' autocomplete="off" spellcheck="false"' +
+                ' oninput="onBatchFeatureUrlInput(' + idx + ', event)"' +
+                ' onblur="onBatchFeatureUrlBlur(' + idx + ', event)">' +
+            '<a id="batch-furl-open-' + idx + '" class="feature-url-open ' + (getPersistedFeatureLink(batchFid) ? '' : 'disabled') + '"' +
+                ' href="' + escAttr(getPersistedFeatureLink(batchFid) || '#') + '"' +
+                ' target="_blank" rel="noopener noreferrer" title="Open in new tab">\u2197</a>' +
+        '</div>' +
         '<div class="batch-item-actions" id="batch-actions-' + idx + '">' +
             '<button class="btn-approve" id="batch-approve-btn-' + idx + '" onclick="batchApproveItem(' + idx + ')">Approve \u2713</button>' +
-            '<button class="btn-add-image" id="batch-attach-btn-' + idx + '" onclick="showBatchAttachMenu(this, ' + idx + ')" title="Attach image, GIF, video, or link">\uD83D\uDCCE Attach \u25be</button>' +
+            '<button class="btn-add-image btn-batch-media" id="batch-attach-btn-' + idx + '" onclick="showBatchAttachMenu(this, ' + idx + ')" title="Attach image, GIF, video, or link">' + getBatchMediaButtonLabel(idx) + '</button>' +
             '<input type="text" class="regen-feedback-input" id="batch-feedback-' + idx + '" placeholder="Optional: what to change...">' +
             '<button class="btn-regen" onclick="batchRegenItem(' + idx + ')">Regenerate</button>' +
         '</div>';
