@@ -188,20 +188,27 @@ def _get_video_thumbnail(url: str) -> str:
 _VIDEO_ATTACH_MAX_TOTAL = 22 * 1024 * 1024  # keep under Gmail's 25MB inbound cap (with HTML headroom)
 
 
-def _build_video_attachments(video_map: dict) -> list:
+def _build_video_attachments(video_map: dict) -> tuple:
     """Build Resend attachment dicts for locally-uploaded videos.
 
     Skips external URLs (YouTube/Vimeo) and caps total payload size.
+
+    Returns ``(attachments, skipped)`` where ``skipped`` is a list of dicts
+    describing locally-stored videos that could not be attached because they
+    would exceed the per-email size cap. Each skipped entry has::
+
+        {"filename": str, "size_bytes": int, "cap_bytes": int}
     """
     if not video_map:
-        return []
+        return [], []
     try:
         from ai.publish_store import get_video_path
     except Exception:
-        return []
+        return [], []
     import os as _os
     import re as _re
     attachments = []
+    skipped = []
     total = 0
     seen_ids = set()
     seen_names = set()
@@ -244,6 +251,11 @@ def _build_video_attachments(video_map: dict) -> list:
                 f"[email] Skipping video attachment '{fname}' ({size} bytes) — "
                 f"would exceed {_VIDEO_ATTACH_MAX_TOTAL} byte cap"
             )
+            skipped.append({
+                "filename": fname or f"{vid_id}.mp4",
+                "size_bytes": int(size),
+                "cap_bytes": int(_VIDEO_ATTACH_MAX_TOTAL),
+            })
             continue
         try:
             with open(path, "rb") as f:
@@ -268,7 +280,7 @@ def _build_video_attachments(video_map: dict) -> list:
         })
         total += size
         logger.info(f"[email] Attached video '{safe_name}' ({size} bytes) to email")
-    return attachments
+    return attachments, skipped
 
 
 def _composited_external_thumb_url(remote_thumb_url: str) -> str:
@@ -582,9 +594,14 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     hosted_images = _build_hosted_image_map(images)
     bcc_list = [e.strip() for e in (bcc_email or "").split(",") if e.strip()] if bcc_email else None
     html_content = render_email_html(final_subject, body, images=hosted_images, from_name=from_name, videos=videos)
-    video_attachments = _build_video_attachments(videos) if videos else []
+    if videos:
+        video_attachments, skipped_videos = _build_video_attachments(videos)
+    else:
+        video_attachments, skipped_videos = [], []
     result = _send_via_resend(final_subject, html_content, recipients, is_test, attachments=video_attachments or None, from_name=from_name, template_id=template_id, bcc_emails=bcc_list)
     if result:
+        if skipped_videos:
+            result["skipped_videos"] = skipped_videos
         return result
 
     return {

@@ -7183,6 +7183,40 @@ function showPublishConfirm(message, onConfirm, opts) {
     modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
 }
 
+function _formatVideoSizeMB(bytes) {
+    var b = Number(bytes) || 0;
+    if (b <= 0) return '0 MB';
+    var mb = b / (1024 * 1024);
+    if (mb >= 10) return mb.toFixed(0) + ' MB';
+    return mb.toFixed(1) + ' MB';
+}
+
+function showSkippedVideosNotice(skipped) {
+    if (!skipped || !skipped.length) return;
+    var capBytes = skipped[0].cap_bytes || (22 * 1024 * 1024);
+    var capLabel = _formatVideoSizeMB(capBytes);
+    var intro = skipped.length === 1
+        ? '1 video was too large to attach to the email (cap: ' + capLabel + '). Recipients will see the in-body thumbnail with a play button instead of an inline player.'
+        : skipped.length + ' videos were too large to attach to the email (cap: ' + capLabel + '). Recipients will see the in-body thumbnail with a play button instead of an inline player.';
+    var html = '<div style="text-align:left;">'
+        + '<p style="margin:0 0 12px 0;color:#ccc;font-size:14px;line-height:1.5;">' + escHtml(intro) + '</p>'
+        + '<ul style="margin:0;padding-left:20px;color:#ccc;font-size:13px;line-height:1.6;">';
+    for (var i = 0; i < skipped.length; i++) {
+        var s = skipped[i] || {};
+        var name = s.filename || 'video';
+        html += '<li><span style="color:#fff;font-weight:600;">' + escHtml(name) + '</span>'
+            + ' <span style="color:#999;">(' + escHtml(_formatVideoSizeMB(s.size_bytes)) + ')</span></li>';
+    }
+    html += '</ul></div>';
+    showPublishConfirm(html, function(){}, {
+        title: 'Some videos were too large to attach',
+        icon: '\u26A0\uFE0F',
+        confirmText: 'Got it',
+        hideCancel: true,
+        isHtml: true,
+    });
+}
+
 function closeDropdown(ddId) {
     var dd = document.getElementById(ddId);
     if (dd) {
@@ -7462,6 +7496,9 @@ function doPublishToChannel(chKey) {
                 ? 'Email sent to ' + sentCount + ' recipients \u2705'
                 : (data.to ? 'Email sent to ' + data.to + ' \u2705' : 'Email sent successfully! \u2705');
             showToast(toastMsg);
+            if (data.skipped_videos && data.skipped_videos.length) {
+                showSkippedVideosNotice(data.skipped_videos);
+            }
             return;
         }
         if (data.method === 'fallback') {
@@ -7715,7 +7752,7 @@ function publishAllApproved() {
                             contentViewPublished[chKey] = true;
                             trackPublish(fid, chKey, 'posted');
                             updateChannelStatus(chKey);
-                            results[chKey] = { status: 'published' };
+                            results[chKey] = { status: 'published', skipped_videos: (isEmail && data.skipped_videos) ? data.skipped_videos : null };
                         }
                     } else {
                         results[chKey] = { status: 'failed', error: data.error || data.hint || 'Unknown error' };
@@ -7751,6 +7788,14 @@ function showPublishSummary(results) {
     showPublishConfirm(html, function(){}, { title: title, confirmText: 'Done', hideCancel: true, isHtml: true });
     var btn = document.getElementById('btn-publish');
     if (btn && failed === 0) { btn.textContent = 'Published \u2705'; btn.disabled = true; }
+    var allSkipped = [];
+    for (var sk = 0; sk < keys.length; sk++) {
+        var sr = results[keys[sk]];
+        if (sr && sr.skipped_videos && sr.skipped_videos.length) {
+            allSkipped = allSkipped.concat(sr.skipped_videos);
+        }
+    }
+    if (allSkipped.length) showSkippedVideosNotice(allSkipped);
 }
 
 function updateApprovalCounter() {
@@ -9637,6 +9682,9 @@ function publishCombinedEmail() {
                 ? 'Email sent to ' + sentCount + ' recipients \u2705 (' + items.length + ' features marked published)'
                 : (resp.to ? 'Email sent to ' + resp.to + ' \u2705 (' + items.length + ' features marked published)' : 'Email sent! \u2705 (' + items.length + ' features marked published)');
             showToast(toastMsg);
+            if (resp.skipped_videos && resp.skipped_videos.length) {
+                showSkippedVideosNotice(resp.skipped_videos);
+            }
             if (btn) { btn.textContent = 'Published \u2705'; btn.disabled = true; }
         })
         .catch(function(err) {
