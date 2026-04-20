@@ -125,27 +125,19 @@ IMPORTANT RULES:
 - Reference specific Chartmetric features/pages by name when relevant (e.g., 'Artist Page', 'Track Page', 'Playlist tab')
 - Never fabricate data points or statistics \u2014 only reference data if it's in the feature context
 - ABSOLUTELY NEVER use the em dash character (\u2014) in any generated content. This is a hard rule with zero exceptions. Use periods, commas, or semicolons instead. Rewrite sentences to avoid needing dashes entirely. Also never use en dashes (\u2013). Only use regular hyphens (-) for compound words.
-- LINK HANDLING:
-  - If a specific Feature URL IS provided in the input, do NOT embed it as a markdown hyperlink in the body. The URL is shown to the reader separately (as a CTA button or attachment) and is applied at publish time. Instead, write a natural CTA phrase that names the destination without hyperlinking it (e.g., "Explore the new Genius charts in your Charts tab.", "Open it in your Artist Page.", "Try it now in Sync."). Do NOT paste the raw URL or use markdown link syntax `[text](URL)` for the feature URL when one is provided.
-  - If NO Feature URL is provided, include a Chartmetric discovery link in the CTA so the reader can go try the feature. Required for every channel except Twitter and HMC article (see channel rules below). Infer the most relevant Chartmetric section URL from the feature title/description and link to that section root. NEVER fabricate entity IDs (no fake artist/track/playlist IDs). Use the section ROOT URL only. Common section roots:
-    * Charts (any chart-related feature, including Genius/lyric/social charts): https://app.chartmetric.com/charts
-    * Artist Page / artist analytics / fan metrics: https://app.chartmetric.com/artist
-    * Track Page / track analytics: https://app.chartmetric.com/track
-    * Playlists / playlist discovery / curator tools: https://app.chartmetric.com/playlists
-    * Sync licensing: https://app.chartmetric.com/sync
-    * Radio / airplay: https://app.chartmetric.com/radio
-    * TikTok / short-form / social listening: https://app.chartmetric.com/tiktok
-    * Reports / exports / API: https://app.chartmetric.com/reports
-    * Fans / audience / demographics: https://app.chartmetric.com/audience
-    * Anything else (general/cross-cutting): https://app.chartmetric.com
-  - Anchor text must be a natural phrase that names the destination, e.g. [explore the new Genius charts](https://app.chartmetric.com/charts), [open your Artist Page](https://app.chartmetric.com/artist), [try it in Sync](https://app.chartmetric.com/sync). Avoid generic "click here".
-- Channel-specific rules for URLs (apply ONLY when no Feature URL is provided and you are inferring a section root):
-  - Twitter: Do NOT include any URL in the tweet text under any circumstance. URLs get added separately.
-  - Email (newsletter, email_short, email_medium, email_long): End with a markdown CTA hyperlink [text](URL).
-  - In-app: Use markdown hyperlink format [text](URL) in the CTA.
-  - LinkedIn: Use markdown hyperlink format [text](URL) or a plain URL at the end.
-  - Notion monthly: Include as a markdown hyperlink reference.
-  - HMC article: Do not include any feature URL."""
+- LINK HANDLING (HARD RULES, NO EXCEPTIONS):
+  - NEVER embed a URL, markdown hyperlink `[text](URL)`, plain URL, or `<a>` tag anywhere in the body. Not even as a CTA. Not even when a Feature URL is provided. The Feature URL is shown to the reader separately (as a CTA button or attachment) and is applied at publish time by the platform. The body is link-free.
+  - Write a natural CTA phrase that names the destination without hyperlinking it. Examples:
+    * "Explore the new Genius charts in your Charts tab."
+    * "Open it in your Artist Page."
+    * "Try it now in Sync."
+    * "Check it out on your dashboard."
+  - Do NOT write markdown link syntax such as `[Check out My Insights](https://...)` or `[learn more](...)`. Do NOT include `https://` or `www.` anywhere in the body. Do NOT paste raw URLs.
+  - Reference Chartmetric features and pages by name (e.g., "Charts", "Artist Page", "Sync"), but never as a hyperlink.
+- Channel-specific notes:
+  - Twitter: No URL in tweet text. URLs are added separately at publish time.
+  - HMC article: No feature URL anywhere.
+  - All other channels (email, in-app, LinkedIn, Notion monthly): No embedded link in the body. The CTA is a verbal phrase only."""
 
 USER_PROMPT_TEMPLATE = """FEATURE CONTEXT:
 Title: {title}

@@ -5823,7 +5823,37 @@ function _renderBatchAttachMenu(btn, idx, view) {
 
     var html = '';
     if (view === 'root') {
-        html =
+        var attachedHtml = '';
+        var img = (window.prepBatchImages || {})[idx];
+        var vids = (window.prepBatchVideos || {})[idx] || [];
+        var hasAny = (img && img.dataUrl) || vids.length > 0;
+        if (hasAny) {
+            var rowStyle = 'padding:8px 16px;display:flex;align-items:center;gap:10px;font-size:12px;color:#e0e0e0;';
+            var nameStyle = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            var badgeImg = '<span style="background:#1f6f4a;color:#7ee5b4;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">IMAGE</span>';
+            var badgeVid = '<span style="background:#3a2a5e;color:#c4a8ff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">VIDEO</span>';
+            var rmStyle = 'background:none;border:1px solid #444;color:#888;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;';
+            attachedHtml += '<div style="' + headerStyle + '">Attached to this feature</div>';
+            if (img && img.dataUrl) {
+                attachedHtml +=
+                    '<div style="' + rowStyle + '">' +
+                        badgeImg +
+                        '<span style="' + nameStyle + '" title="' + escAttr(img.name || 'image') + '">' + escHtml(img.name || 'image') + '</span>' +
+                        '<button class="batch-attach-remove" data-rm-kind="image" style="' + rmStyle + '">Remove</button>' +
+                    '</div>';
+            }
+            for (var vi = 0; vi < vids.length; vi++) {
+                var vname = (vids[vi] && (vids[vi].name || vids[vi].url)) || 'video';
+                attachedHtml +=
+                    '<div style="' + rowStyle + '">' +
+                        badgeVid +
+                        '<span style="' + nameStyle + '" title="' + escAttr(vname) + '">' + escHtml(vname) + '</span>' +
+                        '<button class="batch-attach-remove" data-rm-kind="video" data-rm-vidx="' + vi + '" style="' + rmStyle + '">Remove</button>' +
+                    '</div>';
+            }
+            attachedHtml += '<div style="height:1px;background:#2a2d35;margin:6px 0;"></div>';
+        }
+        html = attachedHtml +
             '<div style="' + headerStyle + '">Attach to this feature</div>' +
             '<div class="attach-menu-item" data-action="type-image" style="' + itemStyle + '">' +
                 '<span style="font-size:18px;">&#128247;</span> Image <span style="' + hintStyle + '">PNG, JPG, WEBP &rsaquo;</span></div>' +
@@ -5865,6 +5895,29 @@ function _renderBatchAttachMenu(btn, idx, view) {
         back.onmouseenter = function() { this.style.color = '#e0e0e0'; };
         back.onmouseleave = function() { this.style.color = '#888'; };
         back.onclick = function(e) { e.stopPropagation(); _renderBatchAttachMenu(btn, idx, 'root'); };
+    }
+
+    var rmBtns = menu.querySelectorAll('.batch-attach-remove');
+    for (var ri = 0; ri < rmBtns.length; ri++) {
+        rmBtns[ri].onmouseenter = function() { this.style.background = '#3a1f1f'; this.style.color = '#ff8888'; this.style.borderColor = '#7a3a3a'; };
+        rmBtns[ri].onmouseleave = function() { this.style.background = 'none'; this.style.color = '#888'; this.style.borderColor = '#444'; };
+        rmBtns[ri].onclick = function(e) {
+            e.stopPropagation();
+            var kind = this.getAttribute('data-rm-kind');
+            if (kind === 'image') {
+                if (typeof removeBatchImage === 'function') removeBatchImage(idx);
+                else if (window.prepBatchImages) { delete window.prepBatchImages[idx]; if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments(); }
+            } else if (kind === 'video') {
+                var vidx = parseInt(this.getAttribute('data-rm-vidx'), 10);
+                var arr = (window.prepBatchVideos || {})[idx] || [];
+                if (!isNaN(vidx) && arr[vidx]) {
+                    var nm = arr[vidx].name || arr[vidx].url;
+                    if (typeof removeBatchVideoByName === 'function' && nm) removeBatchVideoByName(idx, nm);
+                    else { arr.splice(vidx, 1); if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments(); }
+                }
+            }
+            _renderBatchAttachMenu(btn, idx, 'root');
+        };
     }
 
     var items = menu.querySelectorAll('.attach-menu-item');
