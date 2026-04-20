@@ -387,6 +387,25 @@
             font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
             background: rgba(234,179,8,0.12); color: #eab308; white-space: nowrap; cursor: default;
         }
+        .btn-star {
+            background: transparent; border: 1px solid var(--border, #2a3a4a); color: var(--text-dim, #99aabb);
+            padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
+            display: inline-flex; align-items: center; gap: 5px; transition: all 0.15s ease;
+        }
+        .btn-star:hover { color: #ffc857; border-color: #ffc857; }
+        .btn-star svg { opacity: 0.6; transition: all 0.15s ease; }
+        .btn-star:hover svg { opacity: 1; }
+        .btn-star.starred { color: #ffc857; border-color: #ffc857; background: rgba(255, 200, 87, 0.08); }
+        .btn-star.starred svg { opacity: 1; filter: drop-shadow(0 0 2px rgba(255, 200, 87, 0.5)); }
+        .btn-star.starred .btn-star-label::before { content: '\2713 '; }
+        #starred-counter {
+            display: none; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 14px;
+            background: rgba(255, 200, 87, 0.12); border: 1px solid rgba(255, 200, 87, 0.4);
+            color: #ffc857; font-size: 12px; font-weight: 600; cursor: pointer;
+        }
+        #starred-counter:hover { background: rgba(255, 200, 87, 0.2); }
+        #starred-counter .sc-x { opacity: 0.6; margin-left: 2px; font-size: 14px; line-height: 1; }
+        #starred-counter:hover .sc-x { opacity: 1; }
         .btn-reclassify {
             background: rgba(168,85,247,0.15); color: #a855f7; border: 1px solid rgba(168,85,247,0.3);
             padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 600;
@@ -1755,6 +1774,11 @@
                         </div>
                     </div>
                     <input type="hidden" id="owner-filter" value="">
+                    <span id="starred-counter" onclick="clearStarred()" title="Click to clear shortlist">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 2.5l2.92 6.18 6.58.77-4.86 4.7 1.3 6.85L12 17.6l-5.94 3.4 1.3-6.85L2.5 9.45l6.58-.77z"/></svg>
+                        <span class="sc-num">0</span> selected
+                        <span class="sc-x">&times;</span>
+                    </span>
                     <span id="btn-generate-all-top" style="display:none;"></span>
                 </div>
                 <span id="dyk-toggle" style="display:none;"></span>
@@ -3180,6 +3204,61 @@ function updateFunnelAfterFilter() {
 
 function applyFilters() { currentPage = 1; renderAll(); updateTierStats(); updateFunnelAfterFilter(); }
 
+var STARRED_STORAGE_KEY = 'amplify:starred:v1';
+var starredIds = {};
+(function _loadStarred() {
+    try {
+        var raw = localStorage.getItem(STARRED_STORAGE_KEY);
+        if (raw) {
+            var arr = JSON.parse(raw);
+            if (Array.isArray(arr)) arr.forEach(function(id) { if (id) starredIds[String(id)] = true; });
+        }
+    } catch (e) { starredIds = {}; }
+})();
+
+function _saveStarred() {
+    try { localStorage.setItem(STARRED_STORAGE_KEY, JSON.stringify(Object.keys(starredIds))); } catch (e) {}
+}
+
+function isStarred(fid) { return !!starredIds[String(fid || '')]; }
+
+function getStarredCount() { return Object.keys(starredIds).length; }
+
+function toggleStar(fid, ev) {
+    if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+    var key = String(fid || '');
+    if (!key) return;
+    if (starredIds[key]) { delete starredIds[key]; }
+    else { starredIds[key] = true; }
+    _saveStarred();
+    document.querySelectorAll('.btn-star[data-fid="' + key.replace(/"/g, '\\"') + '"]').forEach(function(btn) {
+        btn.classList.toggle('starred', !!starredIds[key]);
+        btn.setAttribute('title', starredIds[key] ? 'Remove from prep shortlist' : 'Add to prep shortlist');
+    });
+    updateStarredCounter();
+}
+
+function updateStarredCounter() {
+    var el = document.getElementById('starred-counter');
+    if (!el) return;
+    var n = getStarredCount();
+    if (n > 0) {
+        el.style.display = 'inline-flex';
+        el.querySelector('.sc-num').textContent = n;
+    } else {
+        el.style.display = 'none';
+    }
+}
+
+function clearStarred() {
+    if (getStarredCount() === 0) return;
+    if (!confirm('Clear all ' + getStarredCount() + ' starred features from your prep shortlist?')) return;
+    starredIds = {};
+    _saveStarred();
+    document.querySelectorAll('.btn-star.starred').forEach(function(btn) { btn.classList.remove('starred'); btn.setAttribute('title', 'Add to prep shortlist'); });
+    updateStarredCounter();
+}
+
 function getFeatureOwner(f) {
     var name = (f && (f.assignee || f.engineer)) || '';
     return (typeof name === 'string') ? name.trim() : '';
@@ -3372,6 +3451,7 @@ function renderAll() {
         }
     });
     populateOwnerFilter();
+    updateStarredCounter();
     var result = getFilteredFeatures();
     var classified = result.classified;
     var autoSkipped = result.autoSkipped;
@@ -3639,6 +3719,7 @@ function buildCard(f, isAutoSkippedCard) {
                 '<div class="card-bottom-row">' +
                     '<div class="channel-pills">' + channelHtml + '</div>' +
                     '<div class="card-actions">' +
+                        '<button class="btn-star' + (isStarred(fid) ? ' starred' : '') + '" data-fid="' + escAttr(fid) + '" title="' + (isStarred(fid) ? 'Remove from prep shortlist' : 'Add to prep shortlist') + '" onclick="toggleStar(\'' + escAttr(fid) + '\', event)"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.92 6.18 6.58.77-4.86 4.7 1.3 6.85L12 17.6l-5.94 3.4 1.3-6.85L2.5 9.45l6.58-.77z"/></svg><span class="btn-star-label">Select</span></button>' +
                         (isAutoClassified && !isOverridden ? '<button class="btn-reclassify" data-fid="' + escAttr(fid) + '" data-title="' + escAttr(f.title || '') + '" data-desc="' + escAttr((f.description || '').substring(0, 500)) + '"><span class="btn-spinner"></span><span class="btn-label">Reclassify with AI &#10024;</span></button>' : '') +
                         actionBtn +
                     '</div>' +
@@ -8285,10 +8366,26 @@ function renderUseCaseGrid() {
 function selectUseCase(channelKey) {
     prepChannel = channelKey;
     prepSelectedIds = {};
+    var seededFromStarred = 0;
+    var missingFromStarred = 0;
+    var totalStarred = getStarredCount();
+    if (totalStarred > 0) {
+        var idSet = {};
+        allFeatures.forEach(function(f) { idSet[String(f.id)] = true; });
+        Object.keys(starredIds).forEach(function(sid) {
+            if (idSet[sid]) { prepSelectedIds[sid] = true; seededFromStarred++; }
+            else { missingFromStarred++; }
+        });
+    }
     var uc = USE_CASES.find(function(u) { return u.key === channelKey; });
     document.getElementById('step2-title').textContent = 'Prepping: ' + (uc ? uc.name : channelKey);
     loadSavedSets();
     prepGoToStep(2);
+    if (seededFromStarred > 0) {
+        var msg = 'Pre-selected ' + seededFromStarred + ' starred feature' + (seededFromStarred === 1 ? '' : 's');
+        if (missingFromStarred > 0) msg += ' (' + missingFromStarred + ' no longer in current view)';
+        showToast(msg);
+    }
 }
 
 function getPickerFeatures() {
