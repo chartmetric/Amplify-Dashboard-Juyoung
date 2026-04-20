@@ -308,6 +308,10 @@ def feature_from_url():
     # path regardless of whether the feature came from a URL or was hand-typed.
     manual_title = (data.get("title") or "").strip()
     if manual_title:
+        from sources.manual_source import validate_manual_title
+        title_error = validate_manual_title(manual_title)
+        if title_error:
+            return jsonify({"error": title_error}), 400
         manual_desc = (data.get("description") or "").strip()
         if len(manual_title) > 300:
             manual_title = manual_title[:300]
@@ -330,16 +334,36 @@ def feature_from_url():
     inputs = [line.strip() for line in raw_input.replace(",", "\n").split("\n") if line.strip()]
     results = []
 
+    from sources.manual_source import validate_manual_title, LOW_QUALITY_TITLE_MESSAGE
+
     for item in inputs:
         try:
             result = _extract_feature_from_input(item)
+            # Apply the low-quality title gate to any extracted feature, no
+            # matter the source. Slack/Asana/GitHub URLs can still resolve to
+            # tasks with garbage titles like "[Duplicate] xyz" or ",etc.", and
+            # the same is true for plain-text fallbacks.
+            if (
+                isinstance(result, dict)
+                and result.get("feature")
+                and validate_manual_title(result["feature"].get("title", ""))
+            ):
+                results.append({
+                    "source": "error",
+                    "error": LOW_QUALITY_TITLE_MESSAGE,
+                    "input": item[:200],
+                })
+                continue
             results.append(result)
         except Exception as e:
             logger.error(f"from-url extraction error for '{item[:80]}': {e}")
             results.append({"source": "error", "error": str(e), "input": item[:200]})
 
     if len(results) == 1:
-        return jsonify(results[0])
+        single = results[0]
+        if single.get("source") == "error" and single.get("error") == LOW_QUALITY_TITLE_MESSAGE:
+            return jsonify({"error": LOW_QUALITY_TITLE_MESSAGE}), 400
+        return jsonify(single)
     return jsonify({"results": results, "total": len(results)})
 
 

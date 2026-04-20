@@ -5,6 +5,7 @@ import re
 import asana
 import config
 from sources.base import SourceAdapter, FeatureContext
+from sources.slack_source import is_low_quality_title
 
 logger = logging.getLogger("amplify.asana")
 
@@ -335,9 +336,17 @@ class AsanaSource(SourceAdapter):
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
         unannounced = []
+        skipped_low_quality = 0
         for task in all_tasks:
             task_id = task.get("id", "")
             if task_id in announced_task_ids:
+                continue
+
+            if is_low_quality_title(task.get("title", "")):
+                skipped_low_quality += 1
+                logger.info(
+                    f"[asana-only] Skipping low-quality title: {task.get('title', '')[:80]!r}"
+                )
                 continue
 
             task_date_str = task.get("date", "")
@@ -362,7 +371,7 @@ class AsanaSource(SourceAdapter):
             task["reactions_breakdown"] = {}
             unannounced.append(task)
 
-        logger.info(f"[asana-only] Found {len(unannounced)} unannounced tasks (out of {len(all_tasks)} total, {len(announced_task_ids)} already announced)")
+        logger.info(f"[asana-only] Found {len(unannounced)} unannounced tasks (out of {len(all_tasks)} total, {len(announced_task_ids)} already announced, {skipped_low_quality} skipped low-quality)")
         return unannounced
 
     def get_feature_context(self, feature_id: str, **kwargs) -> FeatureContext:

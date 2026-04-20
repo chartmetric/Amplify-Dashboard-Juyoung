@@ -10288,6 +10288,22 @@ function submitPasteBar() {
 
 // ----- Manual feature add modal -----
 
+function isLowQualityTitle(title) {
+    if (!title) return true;
+    var cleaned = String(title).trim();
+    if (!cleaned) return true;
+    if (!/^[A-Za-z0-9]/.test(cleaned)) return true;
+    var leadTrail = /[\s\.,;:!\?\-_'"`~\/\\\(\)\[\]\{\}<>•·…→←↑↓\u2022]+/;
+    var body = cleaned.replace(new RegExp('^' + leadTrail.source), '');
+    body = body.replace(new RegExp(leadTrail.source + '$'), '');
+    if (body.length < 10) return true;
+    var alphaTokens = (body.match(/[A-Za-z]+/g) || []).filter(function(t) { return t.length >= 2; });
+    if (alphaTokens.length < 2) return true;
+    var junk = {tbd:1, na:1, etc:1, wip:1, todo:1, fixme:1};
+    if (alphaTokens.length === 2 && alphaTokens.every(function(t) { return junk[t.toLowerCase()]; })) return true;
+    return false;
+}
+
 function openManualFeatureModal() {
     var modal = document.getElementById('manual-feature-modal');
     var titleEl = document.getElementById('manual-feature-title');
@@ -10361,6 +10377,12 @@ function submitManualFeature() {
     if (title.length > 300) {
         errEl.textContent = 'Title must be 300 characters or fewer.';
         errEl.style.display = 'block';
+        return;
+    }
+    if (isLowQualityTitle(title)) {
+        errEl.textContent = 'This title looks too short or generic — please add more detail.';
+        errEl.style.display = 'block';
+        titleEl.focus();
         return;
     }
 
