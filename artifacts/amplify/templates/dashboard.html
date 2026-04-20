@@ -6418,7 +6418,7 @@ function setupCardDragDrop(cardEl, chKey, isBatch, batchIdx) {
     if (!body) return;
     var dropZone = document.createElement('div');
     dropZone.className = 'img-drop-zone';
-    dropZone.textContent = 'Drop image here';
+    dropZone.textContent = 'Drop image, GIF or video here';
     body.appendChild(dropZone);
     var counter = 0;
     cardEl.addEventListener('dragenter', function(e) {
@@ -6439,7 +6439,11 @@ function setupCardDragDrop(cardEl, chKey, isBatch, batchIdx) {
         if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
             var droppedFile = e.dataTransfer.files[0];
             if (droppedFile.type.startsWith('video/')) {
-                handleVideoFile(droppedFile);
+                if (isBatch) {
+                    handleBatchVideoFile(droppedFile, batchIdx);
+                } else {
+                    handleVideoFile(droppedFile);
+                }
             } else {
                 handleImageFile(droppedFile, chKey, isBatch, batchIdx);
             }
