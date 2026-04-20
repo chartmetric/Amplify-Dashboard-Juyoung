@@ -4948,19 +4948,25 @@ function _renderBatchAttachMenu(btn, idx, view) {
             '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
             '<div style="' + headerStyle + '">Add image</div>' +
             '<div class="attach-menu-item" data-action="upload-image" style="' + itemStyle + '">' +
-                '<span style="font-size:16px;">&#128190;</span> Upload from device</div>';
+                '<span style="font-size:16px;">&#128190;</span> Upload from device</div>' +
+            '<div class="attach-menu-item" data-action="paste-image" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128203;</span> Paste from clipboard</div>';
     } else if (view === 'gif') {
         html =
             '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
             '<div style="' + headerStyle + '">Add GIF</div>' +
             '<div class="attach-menu-item" data-action="upload-gif" style="' + itemStyle + '">' +
-                '<span style="font-size:16px;">&#128190;</span> Upload GIF file</div>';
+                '<span style="font-size:16px;">&#128190;</span> Upload GIF file</div>' +
+            '<div class="attach-menu-item" data-action="paste-gif" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128203;</span> Paste GIF from clipboard</div>';
     } else if (view === 'video') {
         html =
             '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
             '<div style="' + headerStyle + '">Add video</div>' +
             '<div class="attach-menu-item" data-action="upload-video" style="' + itemStyle + '">' +
-                '<span style="font-size:16px;">&#128190;</span> Upload video file</div>';
+                '<span style="font-size:16px;">&#128190;</span> Upload video file</div>' +
+            '<div class="attach-menu-item" data-action="video-url" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128279;</span> Paste video URL</div>';
     }
     menu.innerHTML = html;
 
@@ -4984,8 +4990,11 @@ function _renderBatchAttachMenu(btn, idx, view) {
             if (action === 'type-link') { menu.remove(); promptBatchLink(idx); return; }
             menu.remove();
             if (action === 'upload-image') triggerBatchImagePicker(idx, false);
+            else if (action === 'paste-image') pasteBatchImageFromClipboard(idx, false);
             else if (action === 'upload-gif') triggerBatchImagePicker(idx, true);
+            else if (action === 'paste-gif') pasteBatchImageFromClipboard(idx, true);
             else if (action === 'upload-video') triggerBatchVideoPicker(idx);
+            else if (action === 'video-url') promptBatchVideoUrl(idx);
         };
     }
     document.body.appendChild(menu);
@@ -5044,6 +5053,52 @@ function handleBatchVideoFile(file, idx) {
         showToast('Video attached', 'success');
     };
     reader.readAsDataURL(file);
+}
+
+function pasteBatchImageFromClipboard(idx, gifOnly) {
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+        showToast('Clipboard access not available. Try Ctrl+V / Cmd+V instead.', 'warning');
+        return;
+    }
+    navigator.clipboard.read().then(function(items) {
+        for (var i = 0; i < items.length; i++) {
+            var types = items[i].types;
+            for (var t = 0; t < types.length; t++) {
+                var ty = types[t];
+                if (gifOnly ? (ty === 'image/gif') : (ty.indexOf('image') !== -1)) {
+                    items[i].getType(ty).then(function(blob) {
+                        var fname = gifOnly ? 'pasted.gif' : 'pasted-image.png';
+                        var file = new File([blob], fname, { type: blob.type });
+                        handleImageFile(file, null, true, idx);
+                        showToast((gifOnly ? 'GIF' : 'Image') + ' pasted!', 'success');
+                    });
+                    return;
+                }
+            }
+        }
+        showToast('No ' + (gifOnly ? 'GIF' : 'image') + ' found in clipboard', 'warning');
+    }).catch(function() {
+        showToast('Could not read clipboard. Try Ctrl+V / Cmd+V instead.', 'warning');
+    });
+}
+
+function promptBatchVideoUrl(idx) {
+    var url = prompt('Enter a video URL (YouTube, Vimeo, or direct .mp4 link):');
+    if (!url || !url.trim()) return;
+    url = url.trim();
+    if (!/^https?:\/\//i.test(url)) {
+        showToast('Please enter a valid URL starting with http:// or https://', 'warning');
+        return;
+    }
+    var ta = document.getElementById('batch-ta-' + idx);
+    if (!ta) { showToast('Editor not found', 'warning'); return; }
+    var marker = '[video: ' + url + ']';
+    if (ta.value.indexOf(marker) === -1) {
+        ta.value = ta.value.replace(/\s+$/, '') + '\n' + marker;
+        ta.dispatchEvent(new Event('input'));
+    }
+    switchToBatchPreview(idx);
+    showToast('Video link added', 'success');
 }
 
 function promptBatchLink(idx) {
