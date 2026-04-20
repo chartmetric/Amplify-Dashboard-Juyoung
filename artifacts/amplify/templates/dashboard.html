@@ -482,6 +482,12 @@
         .channel-pills { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
         .channel-pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-muted); }
         .channel-pill.ch-published { border-color: #4ade80; color: #4ade80; background: rgba(74,222,128,0.1); }
+        .channel-pill.ch-generated { border-color: #7c3aed; color: #c4b5fd; background: rgba(124,58,237,0.12); }
+        .channel-pill.ch-published.ch-generated { border-color: #4ade80; color: #4ade80; background: rgba(74,222,128,0.1); }
+        .generated-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 7px; border-radius: 99px; border: 1px solid #7c3aed; color: #c4b5fd; background: rgba(124,58,237,0.12); font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; margin-left: 6px; vertical-align: middle; }
+        .btn-generate.btn-regenerate { background: rgba(124,58,237,0.15); color: #c4b5fd; border: 1px solid rgba(124,58,237,0.55); }
+        .btn-generate.btn-regenerate:hover { background: rgba(124,58,237,0.25); box-shadow: 0 4px 12px rgba(124,58,237,0.25); filter: brightness(1.05); }
+        .picker-row-gen { font-size: 10px; padding: 1px 6px; border-radius: 99px; border: 1px solid #7c3aed; color: #c4b5fd; background: rgba(124,58,237,0.12); font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; margin-left: 6px; }
         .published-channels-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; padding-left: 56px; }
         .pub-ch-pill { font-size: 10px; padding: 2px 7px; border-radius: 99px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
         .pub-ch-pill.pub-posted { background: #1a3a2a; color: #4ade80; }
@@ -2180,6 +2186,7 @@ var activePublishFilter = null;
 var featureSearchQuery = '';
 var activePublishChannelFilters = [];
 var serverPublishedMap = {};
+var generatedContentMap = {};
 var pollInterval = null;
 var classificationTotal = 0;
 var classificationDone = 0;
@@ -3113,6 +3120,53 @@ function toggleSourceFilter(source, btn) {
     updateFunnelAfterFilter();
 }
 
+function loadGeneratedContentIndex() {
+    return fetch('/api/content/cache-index')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var incoming = data || {};
+        Object.keys(incoming).forEach(function(fid) {
+            var rawList = incoming[fid] || [];
+            var normalized = [];
+            rawList.forEach(function(ch) {
+                var nk = migrateChannelKey(ch);
+                if (normalized.indexOf(nk) === -1) normalized.push(nk);
+            });
+            var existing = generatedContentMap[fid] || [];
+            normalized.forEach(function(nk) {
+                if (existing.indexOf(nk) === -1) existing.push(nk);
+            });
+            generatedContentMap[fid] = existing;
+        });
+        renderAll();
+    })
+    .catch(function() {});
+}
+
+function getFeatureGeneratedChannels(fid) {
+    var arr = generatedContentMap[fid];
+    return arr ? arr : [];
+}
+
+function hasGeneratedContent(fid) {
+    var arr = generatedContentMap[fid];
+    return !!(arr && arr.length);
+}
+
+function markGeneratedChannels(fid, channels) {
+    if (!fid || !channels || !channels.length) return;
+    var existing = generatedContentMap[fid] || [];
+    var changed = false;
+    channels.forEach(function(ch) {
+        var nk = migrateChannelKey(ch);
+        if (existing.indexOf(nk) === -1) { existing.push(nk); changed = true; }
+    });
+    if (changed) {
+        generatedContentMap[fid] = existing;
+        try { renderAll(); } catch (_e) {}
+    }
+}
+
 function loadPublishedMap() {
     fetch('/api/publish/all')
     .then(function(r) { return r.json(); })
@@ -3681,12 +3735,21 @@ function buildCard(f, isAutoSkippedCard) {
     }
 
     var channelHtml = '';
+    var hasGen = false;
     if (!isAutoSkippedCard) {
         var pubChs = getFeaturePublishedChannels(fid);
+        var genChs = getFeatureGeneratedChannels(fid);
+        hasGen = genChs.length > 0;
         channels.forEach(function(ch) {
             var isPub = pubChs.indexOf(ch) !== -1;
-            channelHtml += '<span class="channel-pill' + (isPub ? ' ch-published' : '') + '" data-ch="' + escAttr(ch) + '">' +
-                (isPub ? '&#10003; ' : '') + escHtml(ch) + '</span>';
+            var isGen = genChs.indexOf(ch) !== -1;
+            var cls = 'channel-pill';
+            if (isPub) cls += ' ch-published';
+            if (isGen && !isPub) cls += ' ch-generated';
+            var titleAttr = isPub ? 'Published' : (isGen ? 'Content generated (cached)' : '');
+            channelHtml += '<span class="' + cls + '" data-ch="' + escAttr(ch) + '"' +
+                (titleAttr ? ' title="' + titleAttr + '"' : '') + '>' +
+                (isPub ? '&#10003; ' : (isGen ? '&#9679; ' : '')) + escHtml(ch) + '</span>';
         });
     }
 
@@ -3694,6 +3757,9 @@ function buildCard(f, isAutoSkippedCard) {
     if (isAutoSkippedCard) {
         actionBtn = '<button class="btn-classify-now" data-fid="' + escAttr(fid) + '">' +
             '<span class="btn-spinner"></span><span class="btn-label">Classify</span></button>';
+    } else if (hasGen) {
+        actionBtn = '<button class="btn-generate btn-regenerate" data-fid="' + escAttr(fid) +
+            '" title="Content already generated for this feature. Click to view or regenerate.">Re-generate &rarr;</button>';
     } else {
         actionBtn = '<button class="btn-generate" data-fid="' + escAttr(fid) + '">Generate Content &rarr;</button>';
     }
@@ -4252,6 +4318,7 @@ function getApiChannelKey(chKey) {
 
 function migrateChannelKey(ch) {
     if (ch === 'email_short' || ch === 'email_medium' || ch === 'email_long') return 'email_standalone';
+    if (ch === 'email_standalone_digest') return 'email_standalone';
     return ch;
 }
 
@@ -4731,6 +4798,7 @@ function enterContentView(feature) {
         Object.keys(rawResults).forEach(function(k) {
             results[migrateChannelKey(k)] = rawResults[k];
         });
+        try { markGeneratedChannels(feature.id || '', Object.keys(results)); } catch (_e) {}
         var grid = document.getElementById('channel-grid');
         grid.innerHTML = '';
 
@@ -8425,11 +8493,14 @@ function renderFeaturePicker() {
         var titleDateHtml = pd
             ? '<span class="picker-row-date" title="Posted on Slack ' + escAttr(pd.iso) + '">' + escHtml(pd.short) + '</span>'
             : '';
+        var genBadge = hasGeneratedContent(f.id)
+            ? '<span class="picker-row-gen" title="Content already generated (cached)">Generated</span>'
+            : '';
         return '<label class="picker-row' + selected + '" data-fid="' + escAttr(f.id) + '">' +
             '<input type="checkbox"' + checked + ' onchange="togglePickerFeature(\'' + escAttr(f.id) + '\', this.checked)">' +
             '<span class="score-badge score-' + score + '" style="width:26px;height:26px;font-size:13px;">' + score + '</span>' +
             '<div style="flex:1;min-width:0;">' +
-                '<div class="picker-row-title">' + escHtml(f.title) + titleDateHtml + '</div>' +
+                '<div class="picker-row-title">' + escHtml(f.title) + titleDateHtml + genBadge + '</div>' +
                 (summary ? '<div class="picker-row-summary">' + escHtml(summary) + '</div>' : '') +
             '</div>' +
             catHtml +
@@ -8638,6 +8709,11 @@ function startBatchGeneration() {
         if (data.error) { showToast('Batch generation failed: ' + data.error, 'error'); return; }
 
         prepBatchResults = data.results || [];
+        try {
+            prepBatchResults.forEach(function(r) {
+                if (r && r.feature_id && r.content) markGeneratedChannels(r.feature_id, [apiChannel]);
+            });
+        } catch (_e) {}
         var restoredCount = _restoreBatchAttachmentsFromStorage();
         var memRestored = 0;
         var mem = window._batchMemBackup || { images: {}, videos: {}, links: {} };
@@ -10221,6 +10297,7 @@ function generateAllTopFeatures() {
             var rawContent = r.generated_content || {};
             var content = {};
             Object.keys(rawContent).forEach(function(k) { content[migrateChannelKey(k)] = rawContent[k]; });
+            try { markGeneratedChannels(r.feature_id, Object.keys(content)); } catch (_e) {}
             var channelCount = 0;
             GENALL_CHANNELS.forEach(function(ch) { if (content[ch]) channelCount++; });
             totalDrafts += channelCount;
@@ -11310,6 +11387,7 @@ document.addEventListener('keydown', function(e) {
 checkHealth();
 loadFeatures();
 loadPublishedMap();
+loadGeneratedContentIndex();
 </script>
 </body>
 </html>

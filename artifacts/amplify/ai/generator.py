@@ -67,6 +67,19 @@ def get_content_cache_stats():
         return {"total_cached": len(_content_cache)}
 
 
+def get_content_cache_index():
+    index = {}
+    with _content_cache_lock:
+        for key in _content_cache.keys():
+            if ":" not in key:
+                continue
+            fid, ch = key.split(":", 1)
+            if not fid or not ch:
+                continue
+            index.setdefault(fid, []).append(ch)
+    return index
+
+
 _load_content_cache()
 
 

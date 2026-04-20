@@ -26,7 +26,7 @@ from ai.classifier import (
     is_obviously_junk_title,
 )
 from ai.pre_filter import pre_filter_batch  # kept for backward compat, not used in main pipeline
-from ai.generator import generate_for_channel, generate_all_channels
+from ai.generator import generate_for_channel, generate_all_channels, get_content_cache_index
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
 from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published, save_video as save_publish_video, get_video_path, get_video_thumb_path, list_feature_videos
@@ -2119,6 +2119,11 @@ function dismiss(id) {{
 @app.route("/api/publish/all", methods=["GET"])
 def get_all_published_endpoint():
     return jsonify(get_all_published()), 200
+
+
+@app.route("/api/content/cache-index", methods=["GET"])
+def get_content_cache_index_endpoint():
+    return jsonify(get_content_cache_index()), 200
 
 
 @app.route("/api/publish/image", methods=["POST"])
