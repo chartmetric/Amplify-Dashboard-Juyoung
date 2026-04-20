@@ -1722,15 +1722,15 @@
                     <span class="filter-label">Window</span>
                     <div class="custom-dropdown" id="days-window-dropdown">
                         <div class="custom-dropdown-toggle" onclick="toggleCustomDropdown('days-window-dropdown')">
-                            <span class="dd-label">Last 90 days</span><span class="dd-arrow">&#9662;</span>
+                            <span class="dd-label">Last 30 days</span><span class="dd-arrow">&#9662;</span>
                         </div>
                         <div class="custom-dropdown-menu">
-                            <div class="custom-dropdown-item" data-value="30" onclick="selectDropdownItem('days-window-dropdown', this); onDaysWindowChange();">Last 30 days</div>
+                            <div class="custom-dropdown-item active" data-value="30" onclick="selectDropdownItem('days-window-dropdown', this); onDaysWindowChange();">Last 30 days</div>
                             <div class="custom-dropdown-item" data-value="60" onclick="selectDropdownItem('days-window-dropdown', this); onDaysWindowChange();">Last 60 days</div>
-                            <div class="custom-dropdown-item active" data-value="90" onclick="selectDropdownItem('days-window-dropdown', this); onDaysWindowChange();">Last 90 days</div>
+                            <div class="custom-dropdown-item" data-value="90" onclick="selectDropdownItem('days-window-dropdown', this); onDaysWindowChange();">Last 90 days</div>
                         </div>
                     </div>
-                    <input type="hidden" id="days-window" value="90">
+                    <input type="hidden" id="days-window" value="30">
                     <span class="filter-label">Min importance</span>
                     <div class="custom-dropdown" id="importance-filter-dropdown">
                         <div class="custom-dropdown-toggle" onclick="toggleCustomDropdown('importance-filter-dropdown')">
