@@ -5826,14 +5826,28 @@ function _renderBatchAttachMenu(btn, idx, view) {
         var attachedHtml = '';
         var img = (window.prepBatchImages || {})[idx];
         var vids = (window.prepBatchVideos || {})[idx] || [];
-        var hasAny = (img && img.dataUrl) || vids.length > 0;
+        var lks = (window.prepBatchLinks || {})[idx] || [];
+        var _r = (prepBatchResults || [])[idx] || {};
+        var _fid = _r.feature_id || '';
+        var featLink = (_fid && typeof getPersistedFeatureLink === 'function') ? getPersistedFeatureLink(_fid) : null;
+        var hasAny = (img && img.dataUrl) || vids.length > 0 || lks.length > 0 || !!featLink;
         if (hasAny) {
             var rowStyle = 'padding:8px 16px;display:flex;align-items:center;gap:10px;font-size:12px;color:#e0e0e0;';
             var nameStyle = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
             var badgeImg = '<span style="background:#1f6f4a;color:#7ee5b4;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">IMAGE</span>';
             var badgeVid = '<span style="background:#3a2a5e;color:#c4a8ff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">VIDEO</span>';
+            var badgeLnk = '<span style="background:#1e3a5e;color:#7ec1ff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">LINK</span>';
+            var badgeFurl = '<span style="background:#5e3a1e;color:#ffc17e;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">URL</span>';
             var rmStyle = 'background:none;border:1px solid #444;color:#888;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;';
             attachedHtml += '<div style="' + headerStyle + '">Attached to this feature</div>';
+            if (featLink) {
+                attachedHtml +=
+                    '<div style="' + rowStyle + '">' +
+                        badgeFurl +
+                        '<span style="' + nameStyle + '" title="' + escAttr(featLink) + '">' + escHtml(featLink) + '</span>' +
+                        '<button class="batch-attach-remove" data-rm-kind="furl" style="' + rmStyle + '">Remove</button>' +
+                    '</div>';
+            }
             if (img && img.dataUrl) {
                 attachedHtml +=
                     '<div style="' + rowStyle + '">' +
@@ -5849,6 +5863,16 @@ function _renderBatchAttachMenu(btn, idx, view) {
                         badgeVid +
                         '<span style="' + nameStyle + '" title="' + escAttr(vname) + '">' + escHtml(vname) + '</span>' +
                         '<button class="batch-attach-remove" data-rm-kind="video" data-rm-vidx="' + vi + '" style="' + rmStyle + '">Remove</button>' +
+                    '</div>';
+            }
+            for (var li = 0; li < lks.length; li++) {
+                var lobj = lks[li] || {};
+                var ldisp = lobj.text ? (lobj.text + '  \u2022  ' + (lobj.url || '')) : (lobj.url || 'link');
+                attachedHtml +=
+                    '<div style="' + rowStyle + '">' +
+                        badgeLnk +
+                        '<span style="' + nameStyle + '" title="' + escAttr(ldisp) + '">' + escHtml(ldisp) + '</span>' +
+                        '<button class="batch-attach-remove" data-rm-kind="link" data-rm-lidx="' + li + '" style="' + rmStyle + '">Remove</button>' +
                     '</div>';
             }
             attachedHtml += '<div style="height:1px;background:#2a2d35;margin:6px 0;"></div>';
@@ -5914,6 +5938,23 @@ function _renderBatchAttachMenu(btn, idx, view) {
                     var nm = arr[vidx].name || arr[vidx].url;
                     if (typeof removeBatchVideoByName === 'function' && nm) removeBatchVideoByName(idx, nm);
                     else { arr.splice(vidx, 1); if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments(); }
+                }
+            } else if (kind === 'link') {
+                var lidx = parseInt(this.getAttribute('data-rm-lidx'), 10);
+                var larr = (window.prepBatchLinks || {})[idx] || [];
+                if (!isNaN(lidx) && larr[lidx]) {
+                    larr.splice(lidx, 1);
+                    if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
+                }
+            } else if (kind === 'furl') {
+                var rr = (prepBatchResults || [])[idx] || {};
+                if (rr.feature_id && typeof persistFeatureLink === 'function') {
+                    persistFeatureLink(rr.feature_id, null);
+                    var furlInput = document.getElementById('batch-furl-' + idx);
+                    if (furlInput) furlInput.value = '';
+                    var furlOpen = document.getElementById('batch-furl-open-' + idx);
+                    if (furlOpen) { furlOpen.removeAttribute('href'); furlOpen.classList.add('disabled'); }
+                    if (typeof refreshBatchMediaButton === 'function') refreshBatchMediaButton(idx);
                 }
             }
             _renderBatchAttachMenu(btn, idx, 'root');
@@ -6099,6 +6140,11 @@ function getBatchMediaCount(idx) {
     if (img && img.dataUrl) n++;
     var vids = (window.prepBatchVideos || {})[idx];
     if (vids && vids.length) n += vids.length;
+    var lks = (window.prepBatchLinks || {})[idx];
+    if (lks && lks.length) n += lks.length;
+    var r = (prepBatchResults || [])[idx] || {};
+    var fid = r.feature_id;
+    if (fid && typeof getPersistedFeatureLink === 'function' && getPersistedFeatureLink(fid)) n++;
     return n;
 }
 
