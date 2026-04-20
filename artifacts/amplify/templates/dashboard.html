@@ -1961,17 +1961,24 @@ function findFeatureById(fid) {
 
 function renderBatchCatBadges(fid, batchRow) {
     var cats;
+    var cls = null;
     var f = findFeatureById(fid);
     if (f) {
         cats = getCategories(f);
+        cls = f.classification || {};
     } else {
         var rc = (batchRow && batchRow.classification) || {};
+        cls = rc;
         if (rc.categories && rc.categories.length > 0) cats = rc.categories.slice();
         else if (rc.category) cats = [rc.category];
         else cats = ['unknown'];
     }
+    var isOverridden = !!(cls && cls.manual_override);
+    var origCats = (cls && cls._original_categories) || null;
     return cats.map(function(c) {
-        return '<span class="cat-badge cat-' + c + '" style="font-size:10px;padding:1px 8px;">' + (CAT_LABELS[c] || c) + '</span>';
+        var catChanged = isOverridden && (!origCats || origCats.indexOf(c) === -1);
+        var indicator = catChanged ? '<span class="override-indicator" title="Manually overridden" style="top:-4px;right:-4px;width:12px;height:12px;font-size:8px;">&#9998;</span>' : '';
+        return '<span class="cat-badge cat-' + c + '" style="font-size:10px;padding:1px 8px;position:relative;">' + (CAT_LABELS[c] || c) + indicator + '</span>';
     }).join('');
 }
 
@@ -1991,16 +1998,24 @@ function refreshBatchCatsForFeature(fid) {
 
 function renderBatchScoreBadge(fid, batchRow) {
     var score = 0;
+    var cls = null;
     var f = fid ? findFeatureById(fid) : null;
     if (f && f.classification && f.classification.importance_score) {
         score = f.classification.importance_score;
+        cls = f.classification;
     } else if (batchRow && batchRow.classification && batchRow.classification.importance_score) {
         score = batchRow.classification.importance_score;
+        cls = batchRow.classification;
     } else if (batchRow && batchRow.importance_score) {
         score = batchRow.importance_score;
+        cls = batchRow.classification || null;
     }
     var safeScore = Math.max(0, Math.min(score, 5));
-    return '<span class="score-badge score-' + safeScore + '" style="min-width:26px;width:26px;height:26px;border-radius:6px;font-size:13px;">' + (score || '\u2014') + '</span>';
+    var isOverridden = !!(cls && cls.manual_override);
+    var origScore = cls ? cls._original_score : undefined;
+    var scoreDiffers = (origScore === undefined || origScore === null) ? true : (origScore !== score);
+    var indicator = (isOverridden && scoreDiffers) ? '<span class="override-indicator" title="Manually overridden" style="top:-4px;right:-4px;width:13px;height:13px;font-size:8px;">&#9998;</span>' : '';
+    return '<span class="score-badge score-' + safeScore + '" style="min-width:26px;width:26px;height:26px;border-radius:6px;font-size:13px;">' + (score || '\u2014') + indicator + '</span>';
 }
 
 function refreshBatchScoreForFeature(fid) {
