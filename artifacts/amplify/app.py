@@ -588,6 +588,13 @@ _PIPELINE_TTL = 120
 _FEATURES_CACHE_DIR = os.path.dirname(__file__)
 _pipeline_refresh_lock = threading.Lock()
 _pipeline_refreshing_keys = set()
+# Per-days-bucket condition vars used to coalesce simultaneous SYNC fetches
+# of the same window. Without this, N concurrent requests for an uncached
+# window each fire their own _run_pipeline_fetch in parallel, exhausting the
+# Asana HTTP connection pool (max 40) and dragging cold loads from ~30s to
+# ~5min.
+_pipeline_inflight_lock = threading.Lock()
+_pipeline_inflight_events: dict = {}
 _disk_write_lock = threading.Lock()
 
 
@@ -725,7 +732,32 @@ def _get_slack_first_features(days: int = 30, force_refresh: bool = False) -> di
             _trigger_background_refresh(days=days)
             return {"features": cached["features"], "debug": cached["debug"]}
 
-    return _run_pipeline_fetch(days=days)
+    # COALESCE: if another thread is already running the pipeline for this
+    # bucket, wait for it instead of firing a parallel fetch (which would
+    # multiply Asana load and exhaust the connection pool).
+    with _pipeline_inflight_lock:
+        ev = _pipeline_inflight_events.get(cache_key)
+        is_leader = ev is None
+        if is_leader:
+            ev = threading.Event()
+            _pipeline_inflight_events[cache_key] = ev
+
+    if not is_leader:
+        # Wait up to 6 minutes for the leader to finish, then return whatever
+        # ended up in the cache. If nothing did, fall through and fetch.
+        ev.wait(timeout=360)
+        cached = _pipeline_cache.get(cache_key)
+        if cached is not None:
+            return {"features": cached["features"], "debug": cached["debug"]}
+        # Leader failed and cache is still empty; do a fresh attempt ourselves.
+        return _run_pipeline_fetch(days=days)
+
+    try:
+        return _run_pipeline_fetch(days=days)
+    finally:
+        with _pipeline_inflight_lock:
+            _pipeline_inflight_events.pop(cache_key, None)
+        ev.set()
 
 
 def _get_enriched_features():
