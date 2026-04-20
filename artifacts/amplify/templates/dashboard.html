@@ -5536,12 +5536,18 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
             renderFeatureImagePreview();
             showImageToggles();
             var allChKeys = Object.keys(contentViewChannels);
+            var fidLocal = contentViewFeature ? (contentViewFeature.id || '') : '';
             for (var ci = 0; ci < allChKeys.length; ci++) {
-                if (contentViewImageInclude[allChKeys[ci]]) {
-                    addImageMarkerToChannel(allChKeys[ci]);
-                    autoSaveDraft(allChKeys[ci]);
-                }
+                var chk = allChKeys[ci];
+                contentViewImageInclude[chk] = true;
+                addImageMarkerToChannel(chk);
+                if (!window.contentViewImageMap) window.contentViewImageMap = {};
+                if (!contentViewImageMap[chk]) contentViewImageMap[chk] = {};
+                contentViewImageMap[chk][imgData.name] = imgData.dataUrl;
+                if (fidLocal) persistImageInclude(fidLocal, chk, true);
+                autoSaveDraft(chk);
             }
+            updateChannelMediaPickers();
             var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
             if (fid) {
                 persistFeatureImage(fid, imgData);
@@ -8725,7 +8731,17 @@ function startBatchGeneration() {
             if (mem.links[mfid] && !window.prepBatchLinks[mi]) { window.prepBatchLinks[mi] = mem.links[mfid]; memRestored++; }
         }
         window._batchMemBackup = null;
-        var totalRestored = restoredCount + memRestored;
+        var persistedRestored = 0;
+        for (var pi = 0; pi < prepBatchResults.length; pi++) {
+            var pfid = prepBatchResults[pi] && prepBatchResults[pi].feature_id;
+            if (!pfid || window.prepBatchImages[pi]) continue;
+            var persistedImg = (typeof getPersistedFeatureImage === 'function') ? getPersistedFeatureImage(pfid) : null;
+            if (persistedImg && persistedImg.dataUrl && persistedImg.name) {
+                window.prepBatchImages[pi] = persistedImg;
+                persistedRestored++;
+            }
+        }
+        var totalRestored = restoredCount + memRestored + persistedRestored;
         if (totalRestored > 0) {
             showToast('Restored ' + totalRestored + ' attachment' + (totalRestored === 1 ? '' : 's'), 'success');
         }
