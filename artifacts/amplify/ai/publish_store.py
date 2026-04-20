@@ -265,6 +265,83 @@ def _video_dir(video_id):
     return vdir
 
 
+def _probe_video_streams(path):
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error",
+             "-show_entries", "stream=codec_type,codec_name:format=format_name",
+             "-of", "json", path],
+            capture_output=True, timeout=30, text=True,
+        )
+        if result.returncode != 0:
+            return None, None, ""
+        info = json.loads(result.stdout or "{}")
+        streams = info.get("streams", []) or []
+        vcodec = next((s.get("codec_name") for s in streams if s.get("codec_type") == "video"), None)
+        acodec = next((s.get("codec_name") for s in streams if s.get("codec_type") == "audio"), None)
+        fmt = ((info.get("format") or {}).get("format_name") or "")
+        return vcodec, acodec, fmt
+    except Exception as e:
+        logger.warning(f"[publish_store] ffprobe failed for {path}: {e}")
+        return None, None, ""
+
+
+def _normalize_video_to_mp4(src_path, dst_path):
+    """Produce a Gmail-friendly MP4 (H.264/AAC, +faststart) at dst_path.
+
+    If the source is already H.264 + AAC in MP4, stream-copies (remux). Otherwise
+    transcodes. Returns True on success, False on any failure.
+    """
+    vcodec, acodec, fmt = _probe_video_streams(src_path)
+    fmt_parts = {p.strip() for p in (fmt or "").split(",") if p.strip()}
+    is_mp4_container = bool(fmt_parts & {"mp4", "m4a", "3gp", "3g2", "mj2"})
+    can_remux = (vcodec == "h264") and (acodec in (None, "aac")) and is_mp4_container
+
+    if can_remux:
+        cmd = [
+            "ffmpeg", "-y", "-i", src_path,
+            "-c", "copy",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            dst_path,
+        ]
+    else:
+        cmd = [
+            "ffmpeg", "-y", "-i", src_path,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            dst_path,
+        ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=300)
+        if result.returncode == 0 and os.path.exists(dst_path) and os.path.getsize(dst_path) > 0:
+            logger.info(
+                f"[publish_store] Normalized video to MP4 ({'remux' if can_remux else 'transcode'}): "
+                f"{os.path.getsize(dst_path)} bytes"
+            )
+            return True
+        err_tail = (result.stderr or b"")[-500:].decode("utf-8", errors="replace")
+        logger.warning(
+            f"[publish_store] ffmpeg normalize failed (rc={result.returncode}, remux={can_remux}): {err_tail}"
+        )
+        if os.path.exists(dst_path):
+            try:
+                os.remove(dst_path)
+            except Exception:
+                pass
+        return False
+    except Exception as e:
+        logger.warning(f"[publish_store] ffmpeg normalize exception: {e}")
+        if os.path.exists(dst_path):
+            try:
+                os.remove(dst_path)
+            except Exception:
+                pass
+        return False
+
+
 def save_video(feature_id, data_url, filename):
     _ensure_dirs()
 
@@ -290,14 +367,37 @@ def save_video(feature_id, data_url, filename):
     vdir = _video_dir(video_id)
     os.makedirs(vdir, exist_ok=True)
 
-    ext = os.path.splitext(filename)[1].lower() or ".mp4"
-    if ext not in (".mp4", ".mov", ".webm", ".avi", ".mkv"):
-        ext = ".mp4"
-    video_path = os.path.join(vdir, "video" + ext)
+    src_ext = os.path.splitext(filename)[1].lower() or ".mp4"
+    if src_ext not in (".mp4", ".mov", ".webm", ".avi", ".mkv"):
+        src_ext = ".mp4"
+    src_path = os.path.join(vdir, "source" + src_ext)
     thumb_path = os.path.join(vdir, "thumb.jpg")
 
-    with open(video_path, "wb") as f:
+    with open(src_path, "wb") as f:
         f.write(raw)
+
+    normalized_path = os.path.join(vdir, "video.mp4")
+    if _normalize_video_to_mp4(src_path, normalized_path):
+        ext = ".mp4"
+        video_path = normalized_path
+        try:
+            if os.path.abspath(src_path) != os.path.abspath(video_path):
+                os.remove(src_path)
+        except Exception:
+            pass
+    else:
+        ext = src_ext
+        video_path = os.path.join(vdir, "video" + ext)
+        # os.replace is atomic on the same filesystem; vdir was just created so
+        # src and dest share it. If this somehow fails, propagate so meta and
+        # get_video_path stay consistent rather than silently pointing at a
+        # nonexistent file.
+        os.replace(src_path, video_path)
+        if os.path.exists(normalized_path):
+            try:
+                os.remove(normalized_path)
+            except Exception:
+                pass
 
     thumb_ok = False
     try:
@@ -317,12 +417,16 @@ def save_video(feature_id, data_url, filename):
         except Exception as e:
             logger.warning(f"[publish_store] play-button composite failed for {video_id}: {e}")
 
+    try:
+        stored_size = os.path.getsize(video_path)
+    except Exception:
+        stored_size = len(raw)
     meta = {
         "video_id": video_id,
         "feature_id": feature_id,
         "filename": str(filename)[:200],
         "ext": ext,
-        "size": len(raw),
+        "size": stored_size,
         "has_thumb": thumb_ok,
     }
     with open(os.path.join(vdir, "meta.json"), "w") as f:

@@ -185,7 +185,7 @@ def _get_video_thumbnail(url: str) -> str:
     return 'https://via.placeholder.com/480x270/e0e0e0/999999?text=Video'
 
 
-_VIDEO_ATTACH_MAX_TOTAL = 35 * 1024 * 1024  # keep under Resend's ~40MB email cap
+_VIDEO_ATTACH_MAX_TOTAL = 22 * 1024 * 1024  # keep under Gmail's 25MB inbound cap (with HTML headroom)
 
 
 def _build_video_attachments(video_map: dict) -> list:
@@ -225,9 +225,16 @@ def _build_video_attachments(video_map: dict) -> list:
             result = get_video_path(vid_id)
         except Exception:
             continue
-        path = result[0] if isinstance(result, tuple) else result
+        if isinstance(result, tuple):
+            path = result[0]
+            vmeta = result[1] if len(result) > 1 else None
+        else:
+            path = result
+            vmeta = None
         if not path or not _os.path.exists(path):
             continue
+        stored_ext = (vmeta or {}).get("ext", "") if isinstance(vmeta, dict) else ""
+        is_normalized_mp4 = (stored_ext == ".mp4") or path.lower().endswith(".mp4")
         try:
             size = _os.path.getsize(path)
         except Exception:
@@ -245,15 +252,19 @@ def _build_video_attachments(video_map: dict) -> list:
             logger.warning(f"[email] Could not read video '{fname}': {e}")
             continue
         safe_name = fname or f"{vid_id}.mp4"
+        if is_normalized_mp4:
+            stem = _os.path.splitext(safe_name)[0] or vid_id
+            safe_name = f"{stem}.mp4"
         if safe_name in seen_names:
             stem, dot, ext = safe_name.rpartition(".")
             safe_name = f"{stem or safe_name}-{vid_id[:6]}{dot}{ext}" if dot else f"{safe_name}-{vid_id[:6]}"
         seen_names.add(safe_name)
         ext = _os.path.splitext(safe_name)[1].lower().lstrip(".")
+        content_type = "video/mp4" if is_normalized_mp4 else ctype_by_ext.get(ext, "video/mp4")
         attachments.append({
             "filename": safe_name,
             "content": list(data),
-            "content_type": ctype_by_ext.get(ext, "video/mp4"),
+            "content_type": content_type,
         })
         total += size
         logger.info(f"[email] Attached video '{safe_name}' ({size} bytes) to email")
