@@ -408,6 +408,8 @@
         .source-slack-only { background: rgba(234,179,8,0.12); color: #eab308; }
         .source-asana-only { background: rgba(249,115,22,0.12); color: #f97316; }
         .version-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(88,166,255,0.1); color: #58a6ff; font-family: 'SF Mono', 'Fira Code', monospace; white-space: nowrap; }
+        .date-pill { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(139,148,158,0.08); color: var(--text-muted); white-space: nowrap; display: inline-flex; align-items: center; }
+        .picker-row-date { font-size: 11px; color: var(--text-muted); font-weight: 500; margin-left: 8px; white-space: nowrap; }
         .prefix-label { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(139,148,158,0.1); color: #8b949e; font-weight: 600; }
         .link-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
         .link-row a { font-size: 12px; color: #58a6ff; text-decoration: none; display: flex; align-items: center; gap: 4px; }
@@ -3497,6 +3499,14 @@ function buildCard(f, isAutoSkippedCard) {
     if (rv.fe) versionHtml += '<span class="version-badge">FE ' + escHtml(rv.fe) + '</span>';
     if (rv.be) versionHtml += '<span class="version-badge">BE ' + escHtml(rv.be) + '</span>';
 
+    var dateHtml = '';
+    var postedDate = formatSlackPostedDate(f);
+    if (postedDate) {
+        dateHtml = '<span class="date-pill" title="Posted on Slack ' + escAttr(postedDate.iso) + '">' +
+            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' +
+            escHtml(postedDate.short) + '</span>';
+    }
+
     var prefixHtml = '';
     if (f.source_prefix) {
         prefixHtml = '<span class="prefix-label">' + escHtml(f.source_prefix) + '</span>';
@@ -3555,6 +3565,7 @@ function buildCard(f, isAutoSkippedCard) {
                     sourcePillHtml +
                     prefixHtml +
                     versionHtml +
+                    dateHtml +
                 '</div>' +
                 summaryHtml +
                 '<div class="card-bottom-row">' +
@@ -8245,11 +8256,15 @@ function renderFeaturePicker() {
         }).join('');
         var summary = cl.marketing_summary || '';
         if (summary.length > 80) summary = summary.substring(0, 80) + '...';
+        var pd = formatSlackPostedDate(f);
+        var titleDateHtml = pd
+            ? '<span class="picker-row-date" title="Posted on Slack ' + escAttr(pd.iso) + '">' + escHtml(pd.short) + '</span>'
+            : '';
         return '<label class="picker-row' + selected + '" data-fid="' + escAttr(f.id) + '">' +
             '<input type="checkbox"' + checked + ' onchange="togglePickerFeature(\'' + escAttr(f.id) + '\', this.checked)">' +
             '<span class="score-badge score-' + score + '" style="width:26px;height:26px;font-size:13px;">' + score + '</span>' +
             '<div style="flex:1;min-width:0;">' +
-                '<div class="picker-row-title">' + escHtml(f.title) + '</div>' +
+                '<div class="picker-row-title">' + escHtml(f.title) + titleDateHtml + '</div>' +
                 (summary ? '<div class="picker-row-summary">' + escHtml(summary) + '</div>' : '') +
             '</div>' +
             catHtml +
@@ -10540,6 +10555,31 @@ function escHtml(str) {
 function escAttr(str) {
     if (!str) return '';
     return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Format a feature's Slack-posted date for display. The backend stores
+// release_date as either "YYYY-MM-DD" (slack-first pipeline) or a raw
+// Slack ts like "1709876543.123456" (asana-only path). Returns
+// { short: "Apr 9, 2026", iso: "2026-04-09" } or null when no date.
+function formatSlackPostedDate(f) {
+    if (!f) return null;
+    var raw = f.release_date;
+    if (!raw) return null;
+    var d = null;
+    if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+        // Force UTC parse so YYYY-MM-DD doesn't shift a day in negative TZs.
+        d = new Date(raw + 'T00:00:00Z');
+    } else {
+        var n = parseFloat(raw);
+        if (!isNaN(n) && n > 0) d = new Date(n * 1000);
+    }
+    if (!d || isNaN(d.getTime())) return null;
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var iso = d.toISOString().slice(0, 10);
+    return {
+        iso: iso,
+        short: months[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + d.getUTCFullYear(),
+    };
 }
 
 function toggleCustomDropdown(dropdownId) {
