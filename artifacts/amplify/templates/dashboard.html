@@ -7549,6 +7549,16 @@ function startBatchGeneration() {
     var titleSuffix = (batchMode === 'digest') ? ' (digest)' : '';
     document.getElementById('step3-title').textContent = (uc ? uc.name : prepChannel) + ' - ' + selectedFeatures.length + ' features' + titleSuffix;
 
+    var _memBackup = { images: {}, videos: {}, links: {} };
+    (prepBatchResults || []).forEach(function(r, i) {
+        var fid = r && r.feature_id;
+        if (!fid) return;
+        if ((window.prepBatchImages || {})[i]) _memBackup.images[fid] = window.prepBatchImages[i];
+        if ((window.prepBatchVideos || {})[i]) _memBackup.videos[fid] = window.prepBatchVideos[i];
+        if ((window.prepBatchLinks || {})[i]) _memBackup.links[fid] = window.prepBatchLinks[i];
+    });
+    window._batchMemBackup = _memBackup;
+
     prepBatchResults = [];
     prepBatchApproved = {};
     prepBatchPublished = {};
@@ -7580,8 +7590,19 @@ function startBatchGeneration() {
 
         prepBatchResults = data.results || [];
         var restoredCount = _restoreBatchAttachmentsFromStorage();
-        if (restoredCount > 0) {
-            showToast('Restored ' + restoredCount + ' saved attachment' + (restoredCount === 1 ? '' : 's') + ' from your previous session', 'success');
+        var memRestored = 0;
+        var mem = window._batchMemBackup || { images: {}, videos: {}, links: {} };
+        for (var mi = 0; mi < prepBatchResults.length; mi++) {
+            var mfid = prepBatchResults[mi] && prepBatchResults[mi].feature_id;
+            if (!mfid) continue;
+            if (mem.images[mfid] && !window.prepBatchImages[mi]) { window.prepBatchImages[mi] = mem.images[mfid]; memRestored++; }
+            if (mem.videos[mfid] && !window.prepBatchVideos[mi]) { window.prepBatchVideos[mi] = mem.videos[mfid]; memRestored++; }
+            if (mem.links[mfid] && !window.prepBatchLinks[mi]) { window.prepBatchLinks[mi] = mem.links[mfid]; memRestored++; }
+        }
+        window._batchMemBackup = null;
+        var totalRestored = restoredCount + memRestored;
+        if (totalRestored > 0) {
+            showToast('Restored ' + totalRestored + ' attachment' + (totalRestored === 1 ? '' : 's'), 'success');
         }
         var list = document.getElementById('batch-results-list');
         list.innerHTML = '';
