@@ -137,7 +137,8 @@ IMPORTANT RULES:
 - Channel-specific notes:
   - Twitter: No URL in tweet text. URLs are added separately at publish time.
   - HMC article: No feature URL anywhere.
-  - All other channels (email, in-app, LinkedIn, Notion monthly): No embedded link in the body. The CTA is a verbal phrase only."""
+  - Email channels (email_newsletter, email_standalone): Do NOT write any verbal CTA phrase ("Check it out", "Try it now", "Open it in...", "Explore..."). The platform appends a real CTA button below the body automatically. End the body with a natural concluding sentence about the benefit, not an action prompt.
+  - In-app, LinkedIn, Notion monthly: No embedded link in the body. The CTA is a verbal phrase only."""
 
 USER_PROMPT_TEMPLATE = """FEATURE CONTEXT:
 Title: {title}

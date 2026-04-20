@@ -348,6 +348,28 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
             first_text_done = True
             continue
 
+        cta_match = re.match(r'^\[cta:\s*(?:text=([^|;\]]+))?(?:[|;]\s*url=([^\]]+))?\]$', stripped, re.IGNORECASE)
+        if cta_match:
+            close_list()
+            if pending_chip_html:
+                body_html += pending_chip_html
+                pending_chip_html = ""
+            cta_text = (cta_match.group(1) or "Learn more").strip()
+            cta_url = (cta_match.group(2) or "").strip()
+            if cta_url:
+                if not re.match(r'^(https?:|mailto:)', cta_url, re.IGNORECASE):
+                    cta_url = 'https://' + cta_url
+                body_html += (
+                    '<div style="text-align:center;margin:20px 0 24px 0;">'
+                    f'<a href="{_esc(cta_url)}" target="_blank" rel="noopener noreferrer" '
+                    'style="display:inline-block;background:#1a1d23;color:#ffffff;'
+                    'text-decoration:none;font-weight:600;font-size:14px;line-height:1;'
+                    'padding:12px 24px;border-radius:6px;mso-padding-alt:0;">'
+                    f'{_esc(cta_text)}</a></div>'
+                )
+                first_text_done = True
+            continue
+
         if re.match(r'^(---+|___+|\*\*\*+)$', stripped):
             close_list()
             if pending_chip_html:

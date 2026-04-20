@@ -5217,6 +5217,21 @@ function simpleMarkdown(text, opts) {
             flushPara();
             firstTextDone = true;
             result.push('<h3 style="margin:0 0 12px 0;font-weight:700;color:inherit;">' + line + '</h3>');
+        } else if (/^\[cta:\s*(?:text=[^|;\]]+)?(?:[|;]\s*url=[^\]]+)?\]$/i.test(lines[i].trim())) {
+            flushPara();
+            var ctaMatch = lines[i].trim().match(/^\[cta:\s*(?:text=([^|;\]]+))?(?:[|;]\s*url=([^\]]+))?\]$/i);
+            var ctaText = (ctaMatch && ctaMatch[1] ? ctaMatch[1].trim() : 'Learn more');
+            var ctaUrl = (ctaMatch && ctaMatch[2] ? ctaMatch[2].trim() : '');
+            if (ctaUrl) {
+                if (!/^(https?:|mailto:)/i.test(ctaUrl)) ctaUrl = 'https://' + ctaUrl;
+                result.push(
+                    '<div style="text-align:center;margin:16px 0 20px 0;">' +
+                    '<a href="' + escHtml(ctaUrl) + '" target="_blank" rel="noopener noreferrer" ' +
+                    'style="display:inline-block;background:#1a1d23;color:#ffffff;text-decoration:none;' +
+                    'font-weight:600;font-size:14px;line-height:1;padding:12px 24px;border-radius:6px;">' +
+                    escHtml(ctaText) + '</a></div>'
+                );
+            }
         } else if (/^\[video:\s*[^\]]+\]$/.test(lines[i].trim())) {
             flushPara();
             var vidRef = lines[i].trim().match(/\[video:\s*([^\]]+)\]/)[1].trim();
@@ -5246,10 +5261,10 @@ function simpleMarkdown(text, opts) {
                 );
             } else if (batchIdx !== null && findBatchVideo(vidRef)) {
                 var bvid = findBatchVideo(vidRef);
-                var poster = bvid.dataUrl;
+                var poster = bvid.dataUrl || bvid.video_url || bvid.url || bvid.thumb_url || '';
                 result.push(
                     '<div class="inline-attach-wrap" style="margin:8px 0;text-align:center;position:relative;display:inline-block;max-width:100%;">' +
-                    '<video src="' + escHtml(poster) + '" preload="metadata" muted playsinline style="max-width:100%;max-height:220px;border-radius:8px;display:block;background:#000;" onclick="event.stopPropagation();this.paused?this.play():this.pause();"></video>' +
+                    '<video src="' + escHtml(poster) + '"' + (bvid.thumb_url ? ' poster="' + escHtml(bvid.thumb_url) + '"' : '') + ' preload="metadata" muted playsinline style="max-width:100%;max-height:220px;border-radius:8px;display:block;background:#000;" onclick="event.stopPropagation();this.paused?this.play():this.pause();"></video>' +
                     '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;background:rgba(0,0,0,0.55);border-radius:50%;display:flex;align-items:center;justify-content:center;pointer-events:none;">' +
                     '<span style="width:0;height:0;border-style:solid;border-width:10px 0 10px 18px;border-color:transparent transparent transparent #fff;margin-left:3px;display:inline-block;"></span>' +
                     '</span>' +
@@ -5827,27 +5842,15 @@ function _renderBatchAttachMenu(btn, idx, view) {
         var img = (window.prepBatchImages || {})[idx];
         var vids = (window.prepBatchVideos || {})[idx] || [];
         var lks = (window.prepBatchLinks || {})[idx] || [];
-        var _r = (prepBatchResults || [])[idx] || {};
-        var _fid = _r.feature_id || '';
-        var featLink = (_fid && typeof getPersistedFeatureLink === 'function') ? getPersistedFeatureLink(_fid) : null;
-        var hasAny = (img && img.dataUrl) || vids.length > 0 || lks.length > 0 || !!featLink;
+        var hasAny = (img && img.dataUrl) || vids.length > 0 || lks.length > 0;
         if (hasAny) {
             var rowStyle = 'padding:8px 16px;display:flex;align-items:center;gap:10px;font-size:12px;color:#e0e0e0;';
             var nameStyle = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
             var badgeImg = '<span style="background:#1f6f4a;color:#7ee5b4;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">IMAGE</span>';
             var badgeVid = '<span style="background:#3a2a5e;color:#c4a8ff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">VIDEO</span>';
             var badgeLnk = '<span style="background:#1e3a5e;color:#7ec1ff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">LINK</span>';
-            var badgeFurl = '<span style="background:#5e3a1e;color:#ffc17e;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">URL</span>';
             var rmStyle = 'background:none;border:1px solid #444;color:#888;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;';
             attachedHtml += '<div style="' + headerStyle + '">Attached to this feature</div>';
-            if (featLink) {
-                attachedHtml +=
-                    '<div style="' + rowStyle + '">' +
-                        badgeFurl +
-                        '<span style="' + nameStyle + '" title="' + escAttr(featLink) + '">' + escHtml(featLink) + '</span>' +
-                        '<button class="batch-attach-remove" data-rm-kind="furl" style="' + rmStyle + '">Remove</button>' +
-                    '</div>';
-            }
             if (img && img.dataUrl) {
                 attachedHtml +=
                     '<div style="' + rowStyle + '">' +
@@ -6142,9 +6145,6 @@ function getBatchMediaCount(idx) {
     if (vids && vids.length) n += vids.length;
     var lks = (window.prepBatchLinks || {})[idx];
     if (lks && lks.length) n += lks.length;
-    var r = (prepBatchResults || [])[idx] || {};
-    var fid = r.feature_id;
-    if (fid && typeof getPersistedFeatureLink === 'function' && getPersistedFeatureLink(fid)) n++;
     return n;
 }
 
@@ -9031,6 +9031,31 @@ function startBatchGeneration() {
         if (totalRestored > 0) {
             showToast('Restored ' + totalRestored + ' attachment' + (totalRestored === 1 ? '' : 's'), 'success');
         }
+        for (var vi2 = 0; vi2 < prepBatchResults.length; vi2++) {
+            (function(_idx, _fid) {
+                if (!_fid) return;
+                if (window.prepBatchVideos[_idx] && window.prepBatchVideos[_idx].length) return;
+                fetch('/api/features/' + encodeURIComponent(_fid) + '/videos')
+                    .then(function(rr) { return rr.ok ? rr.json() : []; })
+                    .then(function(vlist) {
+                        if (!Array.isArray(vlist) || vlist.length === 0) return;
+                        var arr = (window.prepBatchVideos[_idx] || []);
+                        var seen = {};
+                        arr.forEach(function(v) { if (v && v.name) seen[v.name] = 1; });
+                        vlist.forEach(function(v) {
+                            if (!v || !v.filename || seen[v.filename]) return;
+                            arr.push({ name: v.filename, url: v.video_url, thumb_url: v.thumb_url });
+                            seen[v.filename] = 1;
+                        });
+                        if (arr.length) {
+                            window.prepBatchVideos[_idx] = arr;
+                            if (typeof refreshBatchMediaButton === 'function') refreshBatchMediaButton(_idx);
+                            if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
+                        }
+                    })
+                    .catch(function() {});
+            })(vi2, prepBatchResults[vi2] && prepBatchResults[vi2].feature_id);
+        }
         var list = document.getElementById('batch-results-list');
         list.innerHTML = '';
 
@@ -9736,6 +9761,11 @@ function renderCombinedEmailComposer(items) {
         }
         bodyParts.push('');
         bodyParts.push(sectionContent);
+        var ctaUrl = (typeof getPersistedFeatureLink === 'function' && it.feature_id) ? getPersistedFeatureLink(it.feature_id) : '';
+        if (ctaUrl) {
+            bodyParts.push('');
+            bodyParts.push('[cta: text=Open in Chartmetric \u2192 | url=' + ctaUrl + ']');
+        }
         if (i < items.length - 1) {
             bodyParts.push('');
             bodyParts.push('---');
