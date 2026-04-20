@@ -465,25 +465,17 @@ def clear_cache():
 
 def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
     feature_id = feature_data.get("id", "")
+    title = feature_data.get("title", "")
+    description = feature_data.get("description", "")
 
     if not force_claude:
         cached = get_cached_classification(feature_id)
         if cached is not None:
             return cached
 
-        qc = quick_classify(feature_data)
-        if qc is not None:
-            qc["feature_id"] = feature_id
-            qc["title"] = feature_data.get("title", "")
-            if feature_id:
-                CLASSIFICATION_CACHE[feature_id] = qc
-                _mark_dirty()
-            return qc
-
-    title = feature_data.get("title", "")
-    description = feature_data.get("description", "")
-
-    # Pre-flight guardrail: don't burn a Claude call on garbage input.
+    # Pre-flight guardrail runs BEFORE quick_classify so a low-signal title
+    # can't sneak through as a quick_keyword score-1 hit. Low-signal input
+    # is always deterministically marked importance 0 / insufficient_input.
     if not has_sufficient_signal(title, description):
         logger.info(
             f"[guardrail] Short-circuiting classification for {feature_id!r} "
@@ -494,6 +486,16 @@ def classify_feature(feature_data: dict, force_claude: bool = False) -> dict:
             CLASSIFICATION_CACHE[feature_id] = result
             _mark_dirty()
         return result
+
+    if not force_claude:
+        qc = quick_classify(feature_data)
+        if qc is not None:
+            qc["feature_id"] = feature_id
+            qc["title"] = title
+            if feature_id:
+                CLASSIFICATION_CACHE[feature_id] = qc
+                _mark_dirty()
+            return qc
 
     release_status = "Released" if feature_data.get("release_status") else "In Progress"
     urgency_score = feature_data.get("urgency_score", "N/A")

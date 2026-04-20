@@ -1105,6 +1105,28 @@ def classifications_status():
     })
 
 
+def _check_admin_auth():
+    """Gate admin endpoints behind an AMPLIFY_ADMIN_TOKEN env var.
+    Returns None if authorized, or a (response, status) tuple to return.
+    Token may be provided via X-Admin-Token header or ?admin_token= query.
+    If AMPLIFY_ADMIN_TOKEN is unset, the endpoint is locked (returns 503).
+    """
+    expected = os.environ.get("AMPLIFY_ADMIN_TOKEN", "")
+    if not expected:
+        return jsonify({
+            "error": "admin_disabled",
+            "message": "Admin endpoints are disabled. Set AMPLIFY_ADMIN_TOKEN to enable.",
+        }), 503
+    provided = (
+        request.headers.get("X-Admin-Token", "")
+        or request.args.get("admin_token", "")
+        or (request.get_json(silent=True) or {}).get("admin_token", "")
+    )
+    if not provided or provided != expected:
+        return jsonify({"error": "unauthorized"}), 401
+    return None
+
+
 @app.route("/api/admin/backfill-low-signal-classifications", methods=["POST"])
 def backfill_low_signal_classifications():
     """Walk the classification cache and rewrite any entry whose title+description
@@ -1118,6 +1140,10 @@ def backfill_low_signal_classifications():
 
     Response: {"scanned": N, "downgraded": N, "samples": [{feature_id, old_score, title}, ...]}
     """
+    auth_err = _check_admin_auth()
+    if auth_err is not None:
+        return auth_err
+
     def _parse_bool(v):
         if isinstance(v, bool):
             return v

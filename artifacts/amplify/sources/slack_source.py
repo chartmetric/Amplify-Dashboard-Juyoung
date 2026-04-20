@@ -121,13 +121,21 @@ def is_low_quality_title(title: str) -> bool:
     """
     if not title:
         return True
-    stripped = re.sub(r"^" + _LEADING_TRAILING_PUNCT, "", title)
-    stripped = re.sub(_LEADING_TRAILING_PUNCT + r"$", "", stripped)
-    if len(stripped) < 10:
+    cleaned = title.strip()
+    if not cleaned:
         return True
-    if not re.match(r"^[A-Za-z0-9]", stripped):
+    # Leading-character rule: evaluate on the cleaned (whitespace-trimmed)
+    # title — NOT a punctuation-stripped surrogate — so that titles like
+    # ',etc.' or '→ TBD' are correctly rejected.
+    if not re.match(r"^[A-Za-z0-9]", cleaned):
         return True
-    alpha_tokens = [t for t in re.findall(r"[A-Za-z]+", stripped) if len(t) >= 2]
+    # Length and token checks may still operate on the punct-trimmed body so
+    # legitimate titles wrapped in trailing punctuation aren't penalized.
+    body = re.sub(r"^" + _LEADING_TRAILING_PUNCT, "", cleaned)
+    body = re.sub(_LEADING_TRAILING_PUNCT + r"$", "", body)
+    if len(body) < 10:
+        return True
+    alpha_tokens = [t for t in re.findall(r"[A-Za-z]+", body) if len(t) >= 2]
     if len(alpha_tokens) < 2:
         return True
     junk_singletons = {"tbd", "na", "etc", "wip", "todo", "fixme"}
