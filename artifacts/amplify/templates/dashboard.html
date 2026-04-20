@@ -1196,6 +1196,15 @@
         }
         .batch-item-drag { color: var(--text-faint); font-size: 16px; cursor: grab; user-select: none; }
         .batch-item-title { font-size: 14px; font-weight: 600; color: var(--text-body); flex: 1; }
+        .batch-item-cats {
+            position: relative; display: inline-flex; align-items: center; gap: 4px;
+            cursor: pointer; padding: 2px 4px; border-radius: 6px;
+            transition: background-color 0.15s;
+        }
+        .batch-item-cats:hover { background: var(--bg-input, rgba(0,0,0,0.05)); }
+        .batch-item-cats.disabled { cursor: not-allowed; opacity: 0.65; }
+        .batch-item-cats.disabled:hover { background: transparent; }
+        .batch-item-cats .cat-popover { top: 100%; left: 0; margin-top: 6px; }
         .batch-item-body { padding: 12px 16px; }
         .batch-microsyntax-toolbar {
             display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
@@ -1930,6 +1939,89 @@ function getCategories(f) {
     return ['unknown'];
 }
 
+function findFeatureById(fid) {
+    if (!fid) return null;
+    for (var i = 0; i < allFeatures.length; i++) {
+        if ((allFeatures[i].id || '') === fid) return allFeatures[i];
+    }
+    return null;
+}
+
+function renderBatchCatBadges(fid, batchRow) {
+    var cats;
+    var f = findFeatureById(fid);
+    if (f) {
+        cats = getCategories(f);
+    } else {
+        var rc = (batchRow && batchRow.classification) || {};
+        if (rc.categories && rc.categories.length > 0) cats = rc.categories.slice();
+        else if (rc.category) cats = [rc.category];
+        else cats = ['unknown'];
+    }
+    return cats.map(function(c) {
+        return '<span class="cat-badge cat-' + c + '" style="font-size:10px;padding:1px 8px;">' + (CAT_LABELS[c] || c) + '</span>';
+    }).join('');
+}
+
+function refreshBatchItemCats(idx, fid) {
+    var el = document.getElementById('batch-cats-' + idx);
+    if (!el) return;
+    el.innerHTML = renderBatchCatBadges(fid, null);
+}
+
+function refreshBatchCatsForFeature(fid) {
+    if (!fid) return;
+    var els = document.querySelectorAll('.batch-item-cats[data-fid="' + fid + '"]');
+    for (var i = 0; i < els.length; i++) {
+        els[i].innerHTML = renderBatchCatBadges(fid, null);
+    }
+}
+
+function showBatchCatPopover(fid, anchorEl, idx) {
+    closeActivePopover();
+    var f = findFeatureById(fid);
+    if (!f) return;
+    var currentCats = getCategories(f);
+
+    var pop = document.createElement('div');
+    pop.className = 'cat-popover';
+
+    function refreshCatButtons() {
+        pop.innerHTML = '';
+        ALL_CATS.forEach(function(cat) {
+            var isSelected = currentCats.indexOf(cat) !== -1;
+            var btn = document.createElement('button');
+            btn.className = 'cat-toggle' + (isSelected ? ' selected sel-' + cat : '');
+            btn.innerHTML = (isSelected ? '<span class="cat-check">&#10003;</span> ' : '') + (CAT_LABELS[cat] || cat);
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var i = currentCats.indexOf(cat);
+                if (i !== -1) {
+                    if (currentCats.length <= 1) { showToast('At least one category required', 'warning'); return; }
+                    currentCats.splice(i, 1);
+                } else {
+                    currentCats.push(cat);
+                }
+                refreshCatButtons();
+            });
+            pop.appendChild(btn);
+        });
+    }
+    refreshCatButtons();
+
+    pop._commitOnClose = function() {
+        var origCats = getCategories(f);
+        var changed = origCats.length !== currentCats.length || origCats.some(function(c) { return currentCats.indexOf(c) === -1; });
+        if (changed) {
+            applyOverride(fid, null, currentCats.slice());
+            refreshBatchCatsForFeature(fid);
+        }
+    };
+
+    anchorEl.appendChild(pop);
+    activePopover = pop;
+}
+
 function featureMatchesCategory(f, cat) {
     if (cat === 'all') return true;
     return getCategories(f).indexOf(cat) !== -1;
@@ -1946,7 +2038,7 @@ function closeActivePopover() {
 document.addEventListener('click', function(e) {
     if (!e.target.closest('.score-popover') && !e.target.closest('.score-badge') &&
         !e.target.closest('.cat-popover') && !e.target.closest('.category-pill') &&
-        !e.target.closest('.card-meta')) {
+        !e.target.closest('.card-meta') && !e.target.closest('.batch-item-cats')) {
         closeActivePopover();
     }
 });
@@ -7708,10 +7800,16 @@ function buildBatchItem(r, idx) {
     var content = r.content || '';
     var charClass = content.length <= maxChars ? 'ok' : 'over';
 
+    var batchFid = r.feature_id || '';
+    var batchCatsHtml = renderBatchCatBadges(batchFid, r);
+    var batchCatsDisabled = !batchFid || !findFeatureById(batchFid);
+    var batchCatsTitle = batchCatsDisabled ? 'title="Category cannot be edited \u2014 feature id not available"' : 'title="Click to change category"';
+
     item.innerHTML =
         '<div class="batch-item-header">' +
             '<span class="batch-item-drag">\u2261</span>' +
             '<span class="batch-item-title">' + escHtml(r.feature_title || '') + '</span>' +
+            '<span class="batch-item-cats' + (batchCatsDisabled ? ' disabled' : '') + '" id="batch-cats-' + idx + '" data-fid="' + escAttr(batchFid) + '" ' + batchCatsTitle + '>' + batchCatsHtml + '</span>' +
             '<span class="char-count-badge ' + charClass + '" id="batch-char-' + idx + '">' + content.length + '/' + maxChars + '</span>' +
             '<span class="status-badge draft" id="batch-status-' + idx + '">Draft</span>' +
             (r.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
@@ -7750,6 +7848,20 @@ function buildBatchItem(r, idx) {
     setTimeout(function() { autoResizeTextarea(ta); }, 0);
     setupCardDragDrop(item, null, true, idx);
     ta.addEventListener('input', function() { autoResizeTextarea(this); });
+
+    var catsEl = item.querySelector('.batch-item-cats');
+    if (catsEl && !batchCatsDisabled) {
+        catsEl.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+        catsEl.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            showBatchCatPopover(batchFid, catsEl, idx);
+        });
+        catsEl.setAttribute('draggable', 'false');
+    } else if (catsEl) {
+        catsEl.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+        catsEl.addEventListener('click', function(e) { e.stopPropagation(); });
+    }
 
     var batchPreview = item.querySelector('.md-preview');
     if (batchPreview) {
