@@ -502,6 +502,8 @@
         }
         .btn-save-reason:hover { background: var(--accent-hover); }
         .override-confirm { font-size: 11px; color: var(--accent); margin-top: 6px; animation: fadeOut 2s ease-out forwards; }
+        .batch-item .override-reason-row { margin: 8px 12px; }
+        .batch-item .override-confirm { margin: 6px 12px 8px; }
         @keyframes fadeOut { 0%,60% { opacity: 1; } 100% { opacity: 0; } }
         .tooltip {
             position: absolute; background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-muted);
@@ -2009,7 +2011,7 @@ function refreshBatchScoreForFeature(fid) {
     }
 }
 
-function showBatchScorePopover(fid, anchorEl) {
+function showBatchScorePopover(fid, anchorEl, idx) {
     closeActivePopover();
     var f = findFeatureById(fid);
     if (!f) return;
@@ -2025,7 +2027,7 @@ function showBatchScorePopover(fid, anchorEl) {
         opt.addEventListener('click', function(e) {
             e.stopPropagation();
             if (s === currentScore) { closeActivePopover(); return; }
-            applyOverride(fid, s, null);
+            applyOverride(fid, s, null, { batchIdx: idx });
             refreshBatchScoreForFeature(fid);
             closeActivePopover();
         });
@@ -2072,7 +2074,7 @@ function showBatchCatPopover(fid, anchorEl, idx) {
         var origCats = getCategories(f);
         var changed = origCats.length !== currentCats.length || origCats.some(function(c) { return currentCats.indexOf(c) === -1; });
         if (changed) {
-            applyOverride(fid, null, currentCats.slice());
+            applyOverride(fid, null, currentCats.slice(), { batchIdx: idx });
             refreshBatchCatsForFeature(fid);
         }
     };
@@ -3472,7 +3474,7 @@ function showCatPopover(fid, metaEl) {
     activePopover = pop;
 }
 
-function applyOverride(fid, newScore, newCats) {
+function applyOverride(fid, newScore, newCats, opts) {
     var f = null;
     for (var i = 0; i < allFeatures.length; i++) {
         if ((allFeatures[i].id || '') === fid) { f = allFeatures[i]; break; }
@@ -3490,15 +3492,37 @@ function applyOverride(fid, newScore, newCats) {
     c.manual_override = true;
     f.classification = c;
 
-    expandedId = fid;
-    renderAll();
-    showReasonInput(fid, f, c);
+    var batchIdx = opts && (opts.batchIdx === 0 || opts.batchIdx) ? opts.batchIdx : null;
+    if (batchIdx === null) {
+        expandedId = fid;
+        renderAll();
+    }
+    showReasonInput(fid, f, c, batchIdx);
 }
 
-function showReasonInput(fid, f, c) {
-    var card = document.querySelector('.feature-card[data-fid="' + fid + '"]');
-    if (!card) return;
-    var existing = card.querySelector('.override-reason-row');
+function showReasonInput(fid, f, c, batchIdx) {
+    var host = null;
+    var insertTarget = null;
+    if (batchIdx === 0 || batchIdx) {
+        var batchItem = document.getElementById('batch-item-' + batchIdx);
+        if (!batchItem) return;
+        host = batchItem;
+        insertTarget = function(node) {
+            var header = batchItem.querySelector('.batch-item-header');
+            if (header && header.nextSibling) {
+                batchItem.insertBefore(node, header.nextSibling);
+            } else {
+                batchItem.appendChild(node);
+            }
+        };
+    } else {
+        var card = document.querySelector('.feature-card[data-fid="' + fid + '"]');
+        if (!card) return;
+        var cardBody = card.querySelector('.card-body');
+        host = cardBody;
+        insertTarget = function(node) { cardBody.appendChild(node); };
+    }
+    var existing = host.querySelector('.override-reason-row');
     if (existing) {
         if (existing._outsideClickHandler) {
             document.removeEventListener('click', existing._outsideClickHandler);
@@ -3512,8 +3536,7 @@ function showReasonInput(fid, f, c) {
         '<input type="text" class="override-reason-input" placeholder="Why this change? (optional, helps AI learn)">' +
         '<button class="btn-save-reason">Save</button>';
 
-    var cardBody = card.querySelector('.card-body');
-    cardBody.appendChild(row);
+    insertTarget(row);
 
     var input = row.querySelector('.override-reason-input');
     var saveBtn = row.querySelector('.btn-save-reason');
@@ -3528,7 +3551,7 @@ function showReasonInput(fid, f, c) {
             var confirm = document.createElement('div');
             confirm.className = 'override-confirm';
             confirm.textContent = '\u2713 AI will learn from this';
-            cardBody.appendChild(confirm);
+            insertTarget(confirm);
         });
     }
 
@@ -3543,7 +3566,7 @@ function showReasonInput(fid, f, c) {
             var confirm = document.createElement('div');
             confirm.className = 'override-confirm';
             confirm.textContent = '\u2713 AI will learn from this';
-            cardBody.appendChild(confirm);
+            insertTarget(confirm);
         });
     }
 
@@ -8038,7 +8061,7 @@ function buildBatchItem(r, idx) {
         scoreEl.addEventListener('click', function(e) {
             e.stopPropagation();
             e.preventDefault();
-            showBatchScorePopover(batchFid, scoreEl);
+            showBatchScorePopover(batchFid, scoreEl, idx);
         });
         scoreEl.setAttribute('draggable', 'false');
     } else if (scoreEl) {
