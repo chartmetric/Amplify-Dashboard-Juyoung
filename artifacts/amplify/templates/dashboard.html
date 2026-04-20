@@ -5354,6 +5354,12 @@ function triggerBatchVideoPicker(idx) {
     input.click();
 }
 
+function _getBatchFeatureId(idx) {
+    var el = document.getElementById('batch-score-' + idx)
+          || document.getElementById('batch-cats-' + idx);
+    return (el && el.getAttribute('data-fid')) || '';
+}
+
 function handleBatchVideoFile(file, idx) {
     if (!file || !file.type.startsWith('video/')) {
         showToast('Please select a valid video file', 'warning');
@@ -5363,12 +5369,24 @@ function handleBatchVideoFile(file, idx) {
         showToast('Video file too large (max 50MB)', 'warning');
         return;
     }
+    var fid = _getBatchFeatureId(idx);
+    if (!fid) {
+        // Without a feature_id we cannot register the video on the server,
+        // which means the email preview / send would render '[Video: name]'
+        // as literal text. Fail loudly instead of silently breaking the email.
+        showToast('Cannot attach video: this batch item has no feature id.', 'error');
+        return;
+    }
+    showToast('Uploading video...', 'info');
     var reader = new FileReader();
     reader.onload = function(e) {
+        var dataUrl = e.target.result;
+        // Store local copy first so the in-page preview can render immediately
+        // via <video src=dataUrl> regardless of upload latency.
         if (!window.prepBatchVideos) window.prepBatchVideos = {};
         if (!window.prepBatchVideos[idx]) window.prepBatchVideos[idx] = [];
         window.prepBatchVideos[idx].push({
-            dataUrl: e.target.result, name: file.name, size: file.size
+            dataUrl: dataUrl, name: file.name, size: file.size
         });
         if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
         var ta = document.getElementById('batch-ta-' + idx);
@@ -5377,7 +5395,38 @@ function handleBatchVideoFile(file, idx) {
             ta.dispatchEvent(new Event('input'));
             switchToBatchPreview(idx);
         }
-        showToast('Video attached', 'success');
+
+        // Upload to the server so the email preview / send can resolve
+        // [video: filename] -> a real <video>/thumbnail block (otherwise
+        // sendgrid_client.render_email_html falls back to '[Video: name]').
+        fetch('/api/publish/video', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ feature_id: fid, dataUrl: dataUrl, name: file.name })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data || !data.success) {
+                showToast('Video upload failed (will not appear in email): ' + ((data && data.error) || 'unknown'), 'error');
+                return;
+            }
+            // Annotate the local entry with server-side identifiers so we
+            // can re-use them later (e.g. removal, copy-to-other-card).
+            var arr = (window.prepBatchVideos[idx] || []);
+            for (var i = arr.length - 1; i >= 0; i--) {
+                if (arr[i].name === file.name && !arr[i].video_id) {
+                    arr[i].video_id = data.video_id;
+                    arr[i].video_url = data.video_url;
+                    arr[i].thumb_url = data.thumb_url;
+                    break;
+                }
+            }
+            if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
+            showToast('Video attached', 'success');
+        })
+        .catch(function(err) {
+            showToast('Video upload failed (will not appear in email): ' + err.message, 'error');
+        });
     };
     reader.readAsDataURL(file);
 }
