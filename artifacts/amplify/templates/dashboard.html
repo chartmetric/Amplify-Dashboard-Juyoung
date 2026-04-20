@@ -4776,10 +4776,12 @@ function enterContentView(feature) {
         loadingChannelsEl.textContent = loadedChannels.join(' \u2192 ');
     }
 
+    var _genFeature = Object.assign({}, feature);
+    if (contentViewFeatureLink) _genFeature.feature_url = contentViewFeatureLink;
     fetch('/api/generate', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ feature: feature, channels: apiChannels })
+        body: JSON.stringify({ feature: _genFeature, channels: apiChannels })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -9082,10 +9084,13 @@ function batchRegenItem(idx) {
 
     var regenMode = window.prepBatchMode || 'default';
     var regenChannel = window.prepBatchApiChannel || getApiChannelKey(prepChannel);
+    var _regenFeature = Object.assign({}, feature);
+    var _persistedLink = (typeof getPersistedFeatureLink === 'function' && feature && feature.id) ? getPersistedFeatureLink(feature.id) : null;
+    if (_persistedLink) _regenFeature.feature_url = _persistedLink;
     fetch('/api/generate/single', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ feature: feature, channel: regenChannel, feedback: feedback, mode: regenMode })
+        body: JSON.stringify({ feature: _regenFeature, channel: regenChannel, feedback: feedback, mode: regenMode })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
