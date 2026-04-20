@@ -563,7 +563,7 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
                     _resp_body = repr(_v)[:600]
                     break
             logger.exception(
-                f"[resend] Send failed: type={type(e).__name__} str={e!s!r} repr={e!r} "
+                f"[resend] Send failed: type={type(e).__name__} str={e!s} repr={e!r} "
                 f"attr_body={_resp_body} batch_size={len(email_list)} attempt={attempt + 1}/{max_retries} "
                 f"to={to_emails} from={sender!r} template_id={email_list[0].get('template') if email_list else None} "
                 f"has_attachments={bool(attachments)} attachment_count={len(attachments) if attachments else 0}"
