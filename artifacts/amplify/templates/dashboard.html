@@ -1745,6 +1745,16 @@
                         </div>
                     </div>
                     <input type="hidden" id="importance-filter" value="3">
+                    <span class="filter-label">Owner</span>
+                    <div class="custom-dropdown" id="owner-filter-dropdown">
+                        <div class="custom-dropdown-toggle" onclick="toggleCustomDropdown('owner-filter-dropdown')">
+                            <span class="dd-label">Anyone</span><span class="dd-arrow">&#9662;</span>
+                        </div>
+                        <div class="custom-dropdown-menu">
+                            <div class="custom-dropdown-item active" data-value="" onclick="selectDropdownItem('owner-filter-dropdown', this)">Anyone</div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="owner-filter" value="">
                     <span id="btn-generate-all-top" style="display:none;"></span>
                 </div>
                 <span id="dyk-toggle" style="display:none;"></span>
@@ -3170,6 +3180,53 @@ function updateFunnelAfterFilter() {
 
 function applyFilters() { currentPage = 1; renderAll(); updateTierStats(); updateFunnelAfterFilter(); }
 
+function getFeatureOwner(f) {
+    var name = (f && (f.assignee || f.engineer)) || '';
+    return (typeof name === 'string') ? name.trim() : '';
+}
+
+var _ownerOptionsKey = '';
+function populateOwnerFilter() {
+    var menu = document.querySelector('#owner-filter-dropdown .custom-dropdown-menu');
+    if (!menu) return;
+    var counts = {};
+    var unassignedCount = 0;
+    for (var i = 0; i < allFeatures.length; i++) {
+        var n = getFeatureOwner(allFeatures[i]);
+        if (n) { counts[n] = (counts[n] || 0) + 1; }
+        else { unassignedCount++; }
+    }
+    var names = Object.keys(counts).sort(function(a, b) { return a.toLowerCase().localeCompare(b.toLowerCase()); });
+    var key = names.join('|') + '#' + unassignedCount;
+    if (key === _ownerOptionsKey) return;
+    _ownerOptionsKey = key;
+    var current = (document.getElementById('owner-filter') || {}).value || '';
+    var html = '<div class="custom-dropdown-item' + (current === '' ? ' active' : '') + '" data-value="" onclick="selectDropdownItem(\'owner-filter-dropdown\', this)">Anyone</div>';
+    if (unassignedCount > 0) {
+        html += '<div class="custom-dropdown-item' + (current === '__unassigned__' ? ' active' : '') + '" data-value="__unassigned__" onclick="selectDropdownItem(\'owner-filter-dropdown\', this)">Unassigned (' + unassignedCount + ')</div>';
+    }
+    for (var j = 0; j < names.length; j++) {
+        var nm = names[j];
+        var safe = nm.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        html += '<div class="custom-dropdown-item' + (current === nm ? ' active' : '') + '" data-value="' + safe + '" onclick="selectDropdownItem(\'owner-filter-dropdown\', this)">' + safe + ' (' + counts[nm] + ')</div>';
+    }
+    menu.innerHTML = html;
+    var stillValid = current === '' || current === '__unassigned__' || counts[current];
+    if (!stillValid) {
+        var hidden = document.getElementById('owner-filter');
+        if (hidden) hidden.value = '';
+        var label = document.querySelector('#owner-filter-dropdown .dd-label');
+        if (label) label.textContent = 'Anyone';
+    } else {
+        var label2 = document.querySelector('#owner-filter-dropdown .dd-label');
+        if (label2) {
+            if (current === '') label2.textContent = 'Anyone';
+            else if (current === '__unassigned__') label2.textContent = 'Unassigned';
+            else label2.textContent = current;
+        }
+    }
+}
+
 var _searchDebounce = null;
 function onFeatureSearch() {
     var input = document.getElementById('feature-search-input');
@@ -3204,6 +3261,7 @@ function featureMatchesSearch(f, query) {
 
 function getFilteredFeatures() {
     var minImp = parseInt(document.getElementById('importance-filter').value);
+    var ownerFilter = ((document.getElementById('owner-filter') || {}).value || '').trim();
     var catFilters = activeCategoryFilters;
     var srcFilters = activeSourceFilters;
     var isAllCats = catFilters.indexOf('all') !== -1;
@@ -3229,6 +3287,15 @@ function getFilteredFeatures() {
 
         if (isAsanaOnly && !showNotAnnounced) continue;
         if (!isAsanaOnly && !showAnnounced) continue;
+
+        if (ownerFilter) {
+            var _owner = getFeatureOwner(f);
+            if (ownerFilter === '__unassigned__') {
+                if (_owner) continue;
+            } else if (_owner !== ownerFilter) {
+                continue;
+            }
+        }
 
         if (activePublishFilter) {
             var fid = f.feature_id || f.id || '';
@@ -3304,6 +3371,7 @@ function renderAll() {
             document.removeEventListener('click', row._outsideClickHandler);
         }
     });
+    populateOwnerFilter();
     var result = getFilteredFeatures();
     var classified = result.classified;
     var autoSkipped = result.autoSkipped;
