@@ -2221,6 +2221,19 @@
         document.body.classList.add('light');
     }
 })();
+
+// Mirror of generator._clean_for_length: strip attachment markup so char
+// counts displayed in the UI reflect actual prose, matching the backend.
+var _ATTACHMENT_LINE_RE = /^[ \t]*\[(?:banner|badge|cta|image|video|hosted_image|attachment)\s*:.*?\][ \t]*$/gim;
+var _MARKDOWN_IMAGE_RE = /!\[[^\]]*\]\([^)]*\)/g;
+var _MARKDOWN_LINK_RE = /\[([^\]]+)\]\([^)]*\)/g;
+function proseLen(content) {
+    if (!content) return 0;
+    var cleaned = content.replace(_ATTACHMENT_LINE_RE, '');
+    cleaned = cleaned.replace(_MARKDOWN_IMAGE_RE, '');
+    cleaned = cleaned.replace(_MARKDOWN_LINK_RE, function (m, txt) { return txt; });
+    return cleaned.trim().length;
+}
 function toggleTheme() {
     var isLight = document.body.classList.toggle('light');
     localStorage.setItem('ampTheme', isLight ? 'light' : 'dark');
@@ -4389,13 +4402,13 @@ function changeEmailLength(variantKey) {
     var ta = document.getElementById('ta-email_standalone');
     if (ta) ta.setAttribute('data-max', maxChars);
     var badge = document.getElementById('char-email_standalone');
+    var __plESLive = ta ? proseLen(ta.value) : 0;
     if (badge) {
-        var len = ta ? ta.value.length : 0;
-        badge.textContent = len + '/' + maxChars;
-        badge.className = 'char-count-badge ' + (len <= maxChars ? 'ok' : 'over');
+        badge.textContent = __plESLive + '/' + maxChars;
+        badge.className = 'char-count-badge ' + (__plESLive <= maxChars ? 'ok' : 'over');
     }
     var warn = document.getElementById('char-warn-email_standalone');
-    if (ta && ta.value.length > maxChars && maxChars < 9999) {
+    if (ta && __plESLive > maxChars && maxChars < 9999) {
         if (!warn && badge) {
             warn = document.createElement('span');
             warn.id = 'char-warn-email_standalone';
@@ -5026,7 +5039,8 @@ function buildChannelCard(chKey, ch) {
     var icon = CHANNEL_ICONS[chKey] || '\uD83D\uDCE2';
     var content = ch.content || '';
     var maxChars = ch.max_chars || 9999;
-    var charClass = content.length <= maxChars ? 'ok' : 'over';
+    var __pl = proseLen(content);
+    var charClass = __pl <= maxChars ? 'ok' : 'over';
     var isArticle = chKey === 'article_hmc';
     var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
     var isStandaloneEmail = (chKey === 'email_standalone');
@@ -5076,7 +5090,7 @@ function buildChannelCard(chKey, ch) {
         (isStandaloneEmail ? '<div class="email-audience-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">Send To</label><div style="display:flex;gap:6px;align-items:center;"><select id="audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onAudienceChange(\'' + chKey + '\')"><option value="">Test recipients only</option><option value="__custom__">Custom emails...</option></select><span id="audience-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div><input type="text" id="custom-emails-' + chKey + '" placeholder="Comma-separated emails (e.g. a@example.com, b@example.com)" style="display:none;width:100%;margin-top:6px;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;background:#1a1d23;color:#e0e0e0;"></div>' : '') +
         (isStandaloneEmail ? '<div class="email-bcc-row" style="padding:6px 16px 0 16px;"><label style="font-size:12px;color:#888;font-weight:600;display:block;margin-bottom:3px;">BCC (optional)</label><div style="display:flex;gap:6px;align-items:center;"><select id="bcc-audience-' + chKey + '" style="flex:1;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;background:#1a1d23;color:#e0e0e0;" onchange="onBccAudienceChange(\'' + chKey + '\')"><option value="">+ Add segment to BCC...</option></select><span id="bcc-count-' + chKey + '" style="font-size:11px;color:#888;white-space:nowrap;"></span></div><input type="text" id="bcc-emails-' + chKey + '" placeholder="Comma-separated BCC emails (or pick segment above)" style="width:100%;margin-top:6px;padding:6px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;box-sizing:border-box;background:#1a1d23;color:#e0e0e0;" oninput="onBccInputChange(\'' + chKey + '\')"></div>' : '') +
         '<div class="channel-editor-meta" style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:8px 16px 0 16px;">' +
-            '<span class="char-count-badge ' + charClass + '" id="char-' + chKey + '">' + content.length + '/' + maxChars + '</span>' +
+            '<span class="char-count-badge ' + charClass + '" id="char-' + chKey + '">' + __pl + '/' + maxChars + '</span>' +
             (charClass === 'over' && maxChars < 9999 ? '<span class="char-over-warning" id="char-warn-' + chKey + '">(over limit)</span>' : '') +
         '</div>' +
         '<div class="channel-card-body">' +
@@ -5092,7 +5106,7 @@ function buildChannelCard(chKey, ch) {
 
     var ta = card.querySelector('textarea');
     ta.addEventListener('input', function() {
-        var len = this.value.length;
+        var len = proseLen(this.value);
         var max = parseInt(this.getAttribute('data-max'));
         var badge = document.getElementById('char-' + chKey);
         if (badge) {
@@ -9499,7 +9513,8 @@ function buildBatchItem(r, idx) {
 
     var maxChars = r.max_chars || 9999;
     var content = r.content || '';
-    var charClass = content.length <= maxChars ? 'ok' : 'over';
+    var __pl = proseLen(content);
+    var charClass = __pl <= maxChars ? 'ok' : 'over';
 
     var batchFid = r.feature_id || '';
     var batchCatsHtml = renderBatchCatBadges(batchFid, r);
@@ -9519,7 +9534,7 @@ function buildBatchItem(r, idx) {
             batchTitleHtml +
             '<span class="batch-item-score' + (batchScoreDisabled ? ' disabled' : '') + '" id="batch-score-' + idx + '" data-fid="' + escAttr(batchFid) + '" ' + batchScoreTitle + '>' + batchScoreHtml + '</span>' +
             '<span class="batch-item-cats' + (batchCatsDisabled ? ' disabled' : '') + '" id="batch-cats-' + idx + '" data-fid="' + escAttr(batchFid) + '" ' + batchCatsTitle + '>' + batchCatsHtml + '</span>' +
-            '<span class="char-count-badge ' + charClass + '" id="batch-char-' + idx + '">' + content.length + '/' + maxChars + '</span>' +
+            '<span class="char-count-badge ' + charClass + '" id="batch-char-' + idx + '">' + __pl + '/' + maxChars + '</span>' +
             '<span class="status-badge draft" id="batch-status-' + idx + '">Draft</span>' +
             (r.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
         '</div>' +
@@ -11153,13 +11168,14 @@ function showGenerateAllReview() {
             var icon = CHANNEL_ICONS[chKey] || '\uD83D\uDCE2';
             var content = ch.content || '';
             var maxChars = ch.max_chars || 9999;
-            var charClass = content.length <= maxChars ? 'ok' : 'over';
+            var __pl = proseLen(content);
+    var charClass = __pl <= maxChars ? 'ok' : 'over';
 
             card.innerHTML =
                 '<div class="channel-card-header">' +
                     '<span class="channel-icon">' + icon + '</span>' +
                     '<span class="channel-name">' + escHtml(GENALL_CHANNEL_NAMES[chKey] || ch.channel_display_name || chKey) + '</span>' +
-                    '<span class="char-count-badge ' + charClass + '" id="genall-char-' + cardKey + '">' + content.length + '/' + maxChars + '</span>' +
+                    '<span class="char-count-badge ' + charClass + '" id="genall-char-' + cardKey + '">' + __pl + '/' + maxChars + '</span>' +
                     '<span class="status-badge draft" id="genall-status-' + cardKey + '">Draft</span>' +
                     (ch.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
                 '</div>' +

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -83,12 +84,12 @@ def get_content_cache_index():
 _load_content_cache()
 
 
-_ATTACHMENT_LINE_RE = __import__("re").compile(
+_ATTACHMENT_LINE_RE = re.compile(
     r"^\s*\[(?:banner|badge|cta|image|video|hosted_image|attachment)\s*:.*?\]\s*$",
-    __import__("re").IGNORECASE | __import__("re").MULTILINE,
+    re.IGNORECASE | re.MULTILINE,
 )
-_MARKDOWN_IMAGE_RE = __import__("re").compile(r"!\[[^\]]*\]\([^)]*\)")
-_MARKDOWN_LINK_RE = __import__("re").compile(r"\[([^\]]+)\]\([^)]*\)")
+_MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 
 
 def _clean_for_length(text: str) -> str:
@@ -498,14 +499,9 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
             )
             expand_result = generate_content(SYSTEM_PROMPT, expand_prompt, max_tokens=max_tokens)
             if expand_result["success"] and expand_result.get("content"):
-                expanded = expand_result["content"]
-                expanded_measured = _measured_len(expanded)
-                if expanded_measured <= char_limit:
-                    content = expanded
-                    measured = expanded_measured
-                    logger.info(f"[{channel_key}] Expanded to {measured} prose chars.")
-                else:
-                    logger.warning(f"[{channel_key}] Expand retry overshot ceiling ({expanded_measured} > {char_limit}); keeping original short draft.")
+                content = expand_result["content"]
+                measured = _measured_len(content)
+                logger.info(f"[{channel_key}] Expanded to {measured} prose chars.")
             else:
                 logger.warning(f"[{channel_key}] Expand retry failed; keeping original short draft.")
 
