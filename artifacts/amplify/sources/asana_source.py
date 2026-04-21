@@ -6,6 +6,7 @@ import asana
 import config
 from sources.base import SourceAdapter, FeatureContext
 from sources.slack_source import is_low_quality_title
+from sources.chartmetric_sitemap import infer_chartmetric_url
 
 logger = logging.getLogger("amplify.asana")
 
@@ -98,14 +99,18 @@ class AsanaSource(SourceAdapter):
             assignee_name = assignee_obj.get("name")
 
         notes = t.get("notes", "")
+        title = t.get("name", "")
+        cm_url = extract_chartmetric_url(notes)
+        if not cm_url:
+            cm_url = infer_chartmetric_url(title, notes)
         return {
             "id": t.get("gid", ""),
-            "title": t.get("name", ""),
+            "title": title,
             "description": notes,
             "date": t.get("modified_at") or t.get("created_at", ""),
             "section": source_label,
             "assignee": assignee_name,
-            "chartmetric_url": extract_chartmetric_url(notes),
+            "chartmetric_url": cm_url,
             **parsed_custom,
         }
 
@@ -345,6 +350,8 @@ class AsanaSource(SourceAdapter):
                 chartmetric_url = extract_chartmetric_url(c)
                 if chartmetric_url:
                     break
+        if not chartmetric_url:
+            chartmetric_url = infer_chartmetric_url(t.get("name", ""), notes)
 
         return {
             "gid": t.get("gid", ""),

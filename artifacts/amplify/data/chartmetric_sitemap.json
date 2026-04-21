@@ -1,0 +1,3842 @@
+[
+  {
+    "entity_type": "admin",
+    "url_pattern": "/admin/api",
+    "feature_name": "API Registry",
+    "feature_description": "Browse all API endpoints with search, filters, and feature linkage."
+  },
+  {
+    "entity_type": "admin",
+    "url_pattern": "/admin/api",
+    "feature_name": "Betting Data Monitor",
+    "feature_description": "Monitor and manage sports betting market data including odds snapshots and backfill."
+  },
+  {
+    "entity_type": "admin",
+    "url_pattern": "/admin/api",
+    "feature_name": "Data Pipeline Monitor",
+    "feature_description": "Monitor ingestion pipeline health with job history and 7-day heatmaps."
+  },
+  {
+    "entity_type": "admin",
+    "url_pattern": "/admin/api",
+    "feature_name": "Data Quality Dashboard",
+    "feature_description": "Assess data quality with field completeness scores, duplicate detection, and coverage metrics."
+  },
+  {
+    "entity_type": "admin",
+    "url_pattern": "/admin/api",
+    "feature_name": "Dome Markets & Events",
+    "feature_description": "Browse Dome prediction market data and events."
+  },
+  {
+    "entity_type": "admin",
+    "url_pattern": "/admin/api",
+    "feature_name": "Links Management",
+    "feature_description": "Manage, deduplicate, and edit platform links across profiles."
+  },
+  {
+    "entity_type": "admin",
+    "url_pattern": "/admin/api",
+    "feature_name": "Profile Management",
+    "feature_description": "Create, view, and manage profiles for athletes, musicians, and creators."
+  },
+  {
+    "entity_type": "admin",
+    "url_pattern": "/admin/api",
+    "feature_name": "Profile Mappings",
+    "feature_description": "Map social media handles and hashtags to internal profiles."
+  },
+  {
+    "entity_type": "admin",
+    "url_pattern": "/admin/api",
+    "feature_name": "Schema Diagram",
+    "feature_description": "Visual representation of the ClickHouse database schema."
+  },
+  {
+    "entity_type": "admin",
+    "url_pattern": "/admin/ingest",
+    "feature_name": "Data Ingestion Pipeline",
+    "feature_description": "Manage and monitor data ingestion pipelines with status tracking and registry."
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/about",
+    "feature_name": "Album About",
+    "feature_description": "Album information panel"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/about",
+    "feature_name": "Playlist Count",
+    "feature_description": "Playlist count overview by platform"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/about",
+    "feature_name": "Tracks",
+    "feature_description": "Album tracks listing"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/airplay/radio",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/airplay/siriusxm",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/charts",
+    "feature_name": "Chart Insights",
+    "feature_description": "Chart performance insights"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/charts",
+    "feature_name": "Platform & Chart",
+    "feature_description": "All charts table with history"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/charts",
+    "feature_name": "Top Chart Positions",
+    "feature_description": "Chart performance insights"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/playlists/amazon",
+    "feature_name": "Amazon Playlist",
+    "feature_description": "Amazon Music playlist evolution chart"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/playlists/apple-music",
+    "feature_name": "Apple Music Playlist Evolution",
+    "feature_description": "Apple Music playlist evolution chart"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/playlists/apple-music",
+    "feature_name": "Apple Music Playlists",
+    "feature_description": "Apple Music playlists table"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/playlists/deezer",
+    "feature_name": "Deezer Playlist Evolution",
+    "feature_description": "Deezer playlist evolution chart"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/playlists/deezer",
+    "feature_name": "Deezer Playlists",
+    "feature_description": "Deezer playlists table"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/playlists/soundcloud",
+    "feature_name": "SoundCloud Playlist Evolution",
+    "feature_description": "SoundCloud playlist evolution chart"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/playlists/spotify",
+    "feature_name": "Spotify Playlist Evolution",
+    "feature_description": "Spotify playlist evolution chart"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/playlists/spotify",
+    "feature_name": "Spotify Playlists",
+    "feature_description": "Spotify playlists table"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/playlists/youtube",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/social-stats",
+    "feature_name": "Stats & Trends",
+    "feature_description": "Spotify popularity historical chart"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/tiktok",
+    "feature_name": "Popular TikTok Sounds",
+    "feature_description": "Popular TikTok sounds table"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/tunefind",
+    "feature_name": "Tunefind - TV, Movie and Game Sync",
+    "feature_description": "TV, film, and video game sync placements"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/youtube",
+    "feature_name": "Top Videos",
+    "feature_description": "Top YouTube videos"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/youtube",
+    "feature_name": "YouTube Sentiment",
+    "feature_description": "YouTube sentiment analysis"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/album/{album_id}/youtube",
+    "feature_name": "YouTube Videos",
+    "feature_description": "YouTube videos table with metrics"
+  },
+  {
+    "entity_type": "album",
+    "url_pattern": "/albums",
+    "feature_name": "Albums",
+    "feature_description": "Album list"
+  },
+  {
+    "entity_type": "A&R Rising",
+    "url_pattern": "/talent-search",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/anr-rising",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Albums",
+    "feature_description": "Album information"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Artist Bio Banner",
+    "feature_description": "The artist banner displays the profile picture, name, global ranking, country, gender/pronouns, and whether they\u2019re a solo artist or part of a group. It also shows a row of tags covering genres, moods, and themes (such as pop styles, emotional tones, or activities). Additional options like playing music, comparing artists, and setting custom alerts are also available.\n\nWhen you click \u201cRead More,\u201d the modal expands to show a larger set of genre and mood tags (including subgenres, emotions, and themes) and a full written biography. The bio provides details on the artist\u2019s career achievements, chart positions, albums, notable performances, and collaborations, as well as recent releases or highlights."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Associated Labels by (Duration / Data Confidence / Start Date / End Date)",
+    "feature_description": "Labels associated with the artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Audience Summary",
+    "feature_description": "Audience demographics and engagement metrics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Career Snapshot",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Chartmetric Artist Rankings",
+    "feature_description": "Artist's Rankings by Categories"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Fanbase Compare",
+    "feature_description": "Distribution of fanbase across different platforms"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "In The News",
+    "feature_description": "News articles and features about the artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Latest Release",
+    "feature_description": "Latest release information"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Navigation Bar Links",
+    "feature_description": "See and Add Social Links to The Artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Navigation Bar Profile",
+    "feature_description": "Follow Artist or Add the Artist to User's Shortlist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Playlist Count",
+    "feature_description": "Number of playlists artist appears in among different platforms"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Related artists",
+    "feature_description": "Artists related to the main artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "RIAA Awards",
+    "feature_description": "RIAA awards won by the artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Summary Statistics",
+    "feature_description": "Summary stats"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Top Metric Movement by (Percent Change / Change) for (1 Week / 1 Month / 2 Months)",
+    "feature_description": "Metrics change"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Top Recent Milestones",
+    "feature_description": "Artist's recent achievements or chart position movements"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Top Statistics",
+    "feature_description": "Top stats"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "Top Tracks",
+    "feature_description": "Top tracks"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "(Weekly / Daily) Noteworthy Insights",
+    "feature_description": "Platform follower growth"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}",
+    "feature_name": "YouTube's Top Recommended Conversations",
+    "feature_description": "YouTube's top recommended conversations about the artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/airplay/radio",
+    "feature_name": "Summary Stats",
+    "feature_description": "Radio and streaming platform airplay data"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/airplay/radio",
+    "feature_name": "Top Tracks by Plays",
+    "feature_description": "Ranking of most-played tracks on radio"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/airplay/radio",
+    "feature_name": "Total Plays by Track",
+    "feature_description": "Cumulative radio spins across all tracks"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/airplay/siriusxm",
+    "feature_name": "SiriusXM Summary Stats",
+    "feature_description": "Overall SiriusXM airplay summary for artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/airplay/siriusxm",
+    "feature_name": "Top Tracks by Plays",
+    "feature_description": "top tracks by plays on siriusxm"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/airplay/siriusxm",
+    "feature_name": "Total Plays by Track",
+    "feature_description": "total plays by track on siriusxm"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/amazon",
+    "feature_name": "Amazon Music Playlist Evolution",
+    "feature_description": "Time-series chart showing evolution of Amazon Music playlist placements over time with event overlays for releases and editorial adds"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/amazon",
+    "feature_name": "Amazon Music Playlists",
+    "feature_description": "Filterable table of all Amazon Music playlists featuring the artist with current/past status, sorting, pagination, and CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/amazon",
+    "feature_name": "Amazon Music Top Tracks",
+    "feature_description": "Shows top 6 tracks on Amazon Music sorted by playlist count with release dates and playlist statistics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/amazon",
+    "feature_name": "Chart Entries & Positions\n",
+    "feature_description": "Shows chart entry statistics for Top 5, 10, 25, 50, and 100 positions with unique track counts and weekly changes"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/amazon",
+    "feature_name": "Milestones",
+    "feature_description": "Achievement milestones on Amazon Music with star ratings, sortable by date or importance, with CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/amazon",
+    "feature_name": "(Most Charted/Trending) (Track/Location)",
+    "feature_description": "Displays most charted track, trending track, most charted location, and trending location on Amazon Music with peak positions and unique chart counts"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/amazon",
+    "feature_name": "Platform & Chart",
+    "feature_description": "Detailed table of all Amazon Music chart positions with filtering by chart type, country, genre, and date range plus CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/amazon",
+    "feature_name": "Summary Statistics",
+    "feature_description": "Displays key Amazon Music metrics including playlist counts and performance statistics with time range filters"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/applemusic",
+    "feature_name": "Apple Music Playlist Evolution",
+    "feature_description": "Time-series chart showing evolution of Apple Music playlist placements over time with event overlays for releases and editorial adds"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/applemusic",
+    "feature_name": "Apple Music Playlists",
+    "feature_description": "Filterable table of all Apple Music playlists featuring the artist with playlist type categorization, sorting, and CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/applemusic",
+    "feature_name": "Apple Music Top Tracks",
+    "feature_description": "Shows top 6 tracks on Apple Music sorted by playlist count with release dates and playlist statistics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/applemusic",
+    "feature_name": "Chart Entries & Positions",
+    "feature_description": "Shows chart entry statistics for Top 5, 10, 25, 50, and 100 positions with unique track counts and weekly changes"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/applemusic",
+    "feature_name": "Milestones",
+    "feature_description": "Achievement milestones on Apple Music with star ratings, sortable by date or importance, with CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/applemusic",
+    "feature_name": "(Most Charted/Trending) (Track/Location)",
+    "feature_description": "Displays most charted track, trending track, most charted location, and trending location on Apple Music with peak positions and unique chart counts"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/applemusic",
+    "feature_name": "Platform & Chart",
+    "feature_description": "Detailed table of all Apple Music chart positions with filtering by chart type, country, genre, and date range plus CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/applemusic",
+    "feature_name": "Summary Statistics",
+    "feature_description": "Displays key Apple Music metrics including playlist counts and performance statistics with time range filters"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/instagram",
+    "feature_name": "Instagram Audience Demographics",
+    "feature_description": "Breakdown of gender, ethnicity, and language among Instagram audience"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/instagram",
+    "feature_name": "Top Cities",
+    "feature_description": "List of top cities by percentage of Instagram followers and likes"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/instagram",
+    "feature_name": "Top Countries",
+    "feature_description": "List of top countries by percentage of Instagram followers and likes"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/overall",
+    "feature_name": "Artists with Similar Instagram Audience",
+    "feature_description": "List of artists with similar Instagram audience"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/overall",
+    "feature_name": "Audience Demographics",
+    "feature_description": "Breakdown of gender, ethnicity, and language among overall audience"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/overall",
+    "feature_name": "Audience Summary",
+    "feature_description": "Summary of audience demographics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/overall",
+    "feature_name": "Notable Followers",
+    "feature_description": "List of notable / celebrity followers"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/overall",
+    "feature_name": "Stats & Trends",
+    "feature_description": "Monthly Changes in followers across different platforms"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/overall",
+    "feature_name": "Top Cities",
+    "feature_description": "List of top cities by overall audience"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/overall",
+    "feature_name": "Top Countries",
+    "feature_description": "Percentage of audience in top countries"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/snapchat",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/spotify",
+    "feature_name": "City Monthly Listeners Evolution",
+    "feature_description": "Graph of selected cities showing Spotify audience growth over time"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/spotify",
+    "feature_name": "Top Countries",
+    "feature_description": "List of top countries by percentage of Spotify audience"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/tiktok",
+    "feature_name": "TikTok Audience Demographic",
+    "feature_description": "Breakdown of gender and language among TikTok audience"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/tiktok",
+    "feature_name": "Top Countries",
+    "feature_description": "List of top countries by percentage of TikTok audience"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/youtube",
+    "feature_name": "Top Cities",
+    "feature_description": "List of top cities by percentage of YouTube views"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/youtube",
+    "feature_name": "Top Countries",
+    "feature_description": "List of top countries by percentage of YouTube views, commenters, and subscribers"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/audience/youtube",
+    "feature_name": "YouTube Audience Demographics",
+    "feature_description": "Breakdown of gender and language among YouTube audience"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/brand/{metric}",
+    "feature_name": "Audience Brand Affinity",
+    "feature_description": "Audience\u2019s top brand preferences"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/brand/{metric}",
+    "feature_name": "Audience Sector Affinity",
+    "feature_description": "Audience\u2019s strongest industry/sector alignment"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/brand/{metric}",
+    "feature_name": "Top Audience Brand Affinities",
+    "feature_description": "Brand partnerships and commercial metrics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/brand/{metric}",
+    "feature_name": "Top Audience Sector Affinities",
+    "feature_description": "Audience alignment with business sectors"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/charts",
+    "feature_name": "Chart Insights",
+    "feature_description": "Highlights and analysis of the artist's chart movements"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/charts",
+    "feature_name": "Platform & Chart",
+    "feature_description": "Breakdown of chart performance by platform"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/charts",
+    "feature_name": "Top Chart Positions",
+    "feature_description": "Chart positions and performance history"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/collaborations",
+    "feature_name": "Artist Collaborations",
+    "feature_description": "List of artists the main artist has collaborated with across platforms"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/comparables",
+    "feature_name": "In-Depth Artist Comparison",
+    "feature_description": "Direct comparison between main artist and selected secondary artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/comparables",
+    "feature_name": "Neighboring Artists",
+    "feature_description": "Comparison between main artist and other artists"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/comparables",
+    "feature_name": "Similar Artist Clusters by (Overall / Genre / Audience on Instagram / Audience on YouTube / Audience on TikTok)",
+    "feature_description": "Graph of similar artists to main artist clustered by overlap of genre and audience demographics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/comparables",
+    "feature_name": "Similar Artists Segmented by (Career Stage / Recent Momentum)",
+    "feature_description": "Chart of similar artists to main artist grouped by different metrics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/deezer",
+    "feature_name": "Chart Entries & Positions",
+    "feature_description": "Shows chart entry statistics for Top 5, 10, 25, 50, and 100 positions with unique track counts and weekly changes"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/deezer",
+    "feature_name": "(Deezer Fans/Deezer Playlist Count/Deezer Editorial Playlist Count) Trends",
+    "feature_description": "Time-series chart showing trends for Deezer fans, playlist counts, and editorial playlist counts with date range selection and event overlays"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/deezer",
+    "feature_name": "Deezer Playlist Evolution",
+    "feature_description": "Time-series chart showing evolution of Deezer playlist placements over time with event overlays for releases and editorial adds"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/deezer",
+    "feature_name": "Deezer Playlists",
+    "feature_description": "Filterable table of all Deezer playlists featuring the artist with playlist type categorization, current/past status, sorting, and CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/deezer",
+    "feature_name": "Deezer Top Tracks",
+    "feature_description": "Shows top 6 tracks on Deezer sorted by playlist count with release dates and playlist statistics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/deezer",
+    "feature_name": "Milestones",
+    "feature_description": "Achievement milestones on Deezer with star ratings, sortable by date or importance, with CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/deezer",
+    "feature_name": "(Most Charted/Trending) (Track/Location)",
+    "feature_description": "Displays most charted track, trending track, most charted location, and trending location on Deezer with peak positions and unique chart counts"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/deezer",
+    "feature_name": "Platform & Chart",
+    "feature_description": "Detailed table of all Deezer chart positions with filtering by chart type, country, genre, and date range plus CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/deezer",
+    "feature_name": "Summary Statistics",
+    "feature_description": "Displays key Deezer metrics including fans and playlist counts with time range filters and comparison groups"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/edit",
+    "feature_name": "Artist Bio",
+    "feature_description": "Edit Artist's Metadata(bio, name, pronoun, country, city, booking agent, press contact, general manager, record label and genres)"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/edit",
+    "feature_name": "Social and Streaming Links",
+    "feature_description": "Edit Artist's Social and Streaming Links"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/instagram",
+    "feature_name": "Artist's Popular (Mentions/Hashtags)",
+    "feature_description": "Displays the most frequently used mentions (@accounts) and hashtags (#tags) in the artist Instagram posts with clickable links"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/instagram",
+    "feature_name": "Artists with Similar Instagram Audience",
+    "feature_description": "Table of artists with similar audience demographics based on audience clustering analysis, showing follower counts and similarity metrics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/instagram",
+    "feature_name": "Instagram Audience Demographics\n",
+    "feature_description": "Displays audience breakdown by age and gender with bar charts, primary audience clustering description, and changes over time modal"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/instagram",
+    "feature_name": "(Instagram Followers/Instagram Likes / Video/Average Comments / Video/Engagement Rate) Trends",
+    "feature_description": "Time-series chart showing trends for Instagram followers, likes per video, average comments per video, and engagement rate with event overlays"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/instagram",
+    "feature_name": "Instagram Top posts",
+    "feature_description": "Displays top 10 Instagram posts by engagement with thumbnails, captions, likes, comments, and post dates"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/instagram",
+    "feature_name": "Instagram Top reels",
+    "feature_description": "Displays top 10 Instagram reels by engagement with thumbnails, captions, likes, comments, views, and post dates"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/instagram",
+    "feature_name": "Milestones",
+    "feature_description": "Achievement milestones on Instagram with star ratings, sortable by date or importance, with CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/instagram",
+    "feature_name": "Notable Followers",
+    "feature_description": "Table showing notable/verified accounts that follow the artist on Instagram with follower counts, sorted by influence"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/instagram",
+    "feature_name": "Summary Statistics",
+    "feature_description": "Displays key Instagram metrics including followers, likes, video stats, and engagement rates with time range filters and comparison groups"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/instagram",
+    "feature_name": "Top Cities",
+    "feature_description": "Shows top cities by followers or likes with continent filtering, affinity scores, interactive highlighting, and CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/instagram",
+    "feature_name": "Top Countries",
+    "feature_description": "Displays top countries by followers with interactive map visualization, continent filtering, and CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/live-events",
+    "feature_name": "Live Events",
+    "feature_description": "Concert and tour information"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/live-events",
+    "feature_name": "Live Events Trends for Artist",
+    "feature_description": "Touring activity and event trends over time"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/live-events",
+    "feature_name": "Most Played Venues",
+    "feature_description": "Venues where the artist performs most frequently"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/pandora",
+    "feature_name": "Milestones",
+    "feature_description": "Achievement milestones on Pandora with star ratings, sortable by date or importance, with CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/pandora",
+    "feature_name": "(Pandora Monthly Listeners/Pandora Streams/Pandora Artist Stations) Trends",
+    "feature_description": "Time-series chart showing trends for Pandora monthly listeners, streams, and artist stations with date range selection and event overlays"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/pandora",
+    "feature_name": "Pandora Top Tracks",
+    "feature_description": "Shows top 6 tracks on Pandora sorted by playlist count with release dates and playlist statistics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/pandora",
+    "feature_name": "Summary Statistics",
+    "feature_description": "Displays key Pandora metrics including monthly listeners, streams, and artist stations with time range filters and comparison groups"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/amazon",
+    "feature_name": "Amazon Music Playlist Evolution",
+    "feature_description": "growth of artist amazon music playlists over time"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/amazon",
+    "feature_name": "Amazon Music Playlists",
+    "feature_description": "Playlist placements and performance in amazon music"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/amazon",
+    "feature_name": "Recently Added Tracks",
+    "feature_description": "Latest songs added to amazon music playlists"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/amazon",
+    "feature_name": "Recently Removed Tracks",
+    "feature_description": "Songs recently taken off amazon music playlists"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/apple-music",
+    "feature_name": "Apple Music Playlist Evolution",
+    "feature_description": "growth of artist apple music playlists over time"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/apple-music",
+    "feature_name": "Apple Music Playlists",
+    "feature_description": "Playlist placements and performance in apple music"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/apple-music",
+    "feature_name": "Recently Added Tracks",
+    "feature_description": "Latest songs added to apple music playlists"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/apple-music",
+    "feature_name": "Recently Removed Tracks",
+    "feature_description": "Songs recently taken off apple music playlists"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/deezer",
+    "feature_name": "Deezer Playlist Evolution",
+    "feature_description": "growth of artist deezer playlists over time"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/deezer",
+    "feature_name": "Deezer Playlists",
+    "feature_description": "Playlist placements and performance in deezer"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/deezer",
+    "feature_name": "Recently Added Tracks",
+    "feature_description": "Latest songs added to deezer playlists"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/deezer",
+    "feature_name": "Recently Removed Tracks",
+    "feature_description": "Songs recently taken off deezer playlists"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/soundcloud",
+    "feature_name": "SoundCloud Playlist Evolution",
+    "feature_description": "growth of artist soundcloud playlists over time"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/soundcloud",
+    "feature_name": "SoundCloud Playlists",
+    "feature_description": "Playlist placements and performance in soundcloud"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/spotify",
+    "feature_name": "Playlist Overlap Analysis",
+    "feature_description": "Shared playlists and overlaps among tracks"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/spotify",
+    "feature_name": "Spotify Discovered On: Top Playlists for Artist",
+    "feature_description": "Key playlists where listeners first discover the artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/spotify",
+    "feature_name": "Spotify Playlist Recommendation",
+    "feature_description": "Suggested playlists related to the artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/youtube",
+    "feature_name": "Recently Added Tracks",
+    "feature_description": "Latest songs added to youtube playlists"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/youtube",
+    "feature_name": "Recently Removed Tracks",
+    "feature_description": "Songs recently taken off youtube playlists"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/playlists/youtube",
+    "feature_name": "YouTube Playlists",
+    "feature_description": "Playlist placements and performance in youtube"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/riaa-awards",
+    "feature_name": "Certifications",
+    "feature_description": "Recording industry certifications and awards"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/snapchat",
+    "feature_name": "Snapchat Audience Demographics",
+    "feature_description": "Displays audience breakdown by age and gender with bar charts, primary audience clustering description, and changes over time modal"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/snapchat",
+    "feature_name": "Top Countries",
+    "feature_description": "Displays top countries by followers with interactive map visualization, continent filtering, and CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/social-stats",
+    "feature_name": "Engagement Trends",
+    "feature_description": "Streaming platform metrics and growth trends"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/social-stats",
+    "feature_name": "Fan Base Trends",
+    "feature_description": "Streaming platform metrics and growth trends"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/social-stats",
+    "feature_name": "Overrall Trends",
+    "feature_description": "Streaming platform metrics and growth trends"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Chart Entries & Positions",
+    "feature_description": "Chart entries from the last 7 days"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "City Monthly Listeners Evolution",
+    "feature_description": "Selected cities and their monthly listeners over time"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Fans Also Like",
+    "feature_description": "Similar artists and their metrics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Latest Release",
+    "feature_description": "Information about the artist's latest release"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Milestones",
+    "feature_description": "Artist achievements and milestones tracking"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "(Most Charted/Trending) (Track/Location)",
+    "feature_description": "Displays most charted track, trending track, most charted location, and trending location on Spotify with peak positions and unique chart counts"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Platform & Chart",
+    "feature_description": "List of chart entries for top tracks by artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "(Spotify Followers/Spotify Monthly Listeners/Spotify Playlist Reach/Spotify Playlist Count/Spotify Editorial Playlist Count/Spotify Fan Conversion Rate/Spotify Popularity Index) Trends",
+    "feature_description": "Timeline graph for artist's Spotify metrics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Spotify Playlist Evolution",
+    "feature_description": "Changes in playlist placements over time"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Spotify Playlist Recommendation",
+    "feature_description": "Recommended playlists for the artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Spotify Playlists",
+    "feature_description": "List of playlists featuring the artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Spotify Top Albums",
+    "feature_description": "List of top albums by Spotify streams"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Spotify Top Tracks",
+    "feature_description": "List of top tracks by Spotify streams"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Summary Statistics",
+    "feature_description": "Spotify-specific metrics and performance"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Top Cities",
+    "feature_description": "List of top cities by Spotify monthly listeners"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/spotify",
+    "feature_name": "Top Countries",
+    "feature_description": "List of top countries by Spotify monthly listeners"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/syncs",
+    "feature_name": "TV, Movie, and Game Sync",
+    "feature_description": "Synchronization in media and entertainment"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/syncs",
+    "feature_name": "TV Show Appearances",
+    "feature_description": "Shows where the artist has appeared or performed"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/syncs ",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "Artists with Similar TikTok Audience",
+    "feature_description": "List of artists with similar TikTok audience"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "Chart Entries and Positions",
+    "feature_description": "Chart entries from the last 7 days"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "Influencers Audience Demographics",
+    "feature_description": "Breakdown of gender and language among audiences of influencers using artist's music"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "Milestones",
+    "feature_description": "TikTok related achievements and milestones tracking"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "Notable Followers",
+    "feature_description": "List of notable / celebrity followers"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "Platform & Chart",
+    "feature_description": "List of chart entries for top tracks by artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "Popular TikTok Sounds",
+    "feature_description": "List of most popular TikTok sounds containing songs by artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "Summary Statistics",
+    "feature_description": "Tiktok-specific metrics and performance"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "TikTok Audience Demographics",
+    "feature_description": "Breakdown of gender and language of TikTok audience"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "(TikTok Followers/TikTok Likes/ TikTok Average Likes Per Video/TikTok Average Comments Per Video/TikTok Engagement Rate)Trend",
+    "feature_description": "Timeline graph for artist's Tiktok metrics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "TikTok Posts with Artist Sounds",
+    "feature_description": "Total user generated videos posted wtih tracks by artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "TikTok Top Posts",
+    "feature_description": "Top tiktok posts by artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "Top Countries",
+    "feature_description": "List of top countries by TikTok followers"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "Top Influencers Using Artist's Sounds",
+    "feature_description": "List of top influencers using the artist's sounds"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tiktok",
+    "feature_name": "Top User Generated Videos",
+    "feature_description": "List of top user generated videos featuring the artist's tracks"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tracks-and-albums",
+    "feature_name": "Album Discography",
+    "feature_description": "List of all albums by artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tracks-and-albums",
+    "feature_name": "Compare Albums (Spotify Popularity / Spotify Playlist Count / Spotify Playlist Reach / Apple Playlist Count / Amazon Music Playlist Count / Deezer Playlist Count / Deezer Playlist Reach / YouTube Playlist Count / YouTube Playlist Reach / Boomplay Plays / Boomplay Favorites / Boomplay Shares / Boomplay Comments)",
+    "feature_description": "Compare performance of albums either from their release or their current values across different stats"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tracks-and-albums",
+    "feature_name": "Compare Tracks (Track Score / Spotify Streams / Spotify Popularity / Spotify Playlist Count / Spotify Playlist Reach / YouTube Video Views / Apple Music Playlist Count / Deezer Playlist Count / Amazon Music Playlist Count / Pandora Streams / SoundCloud Streams / Shazam Counts / Genius Views)",
+    "feature_description": "Compare performance of artist's tracks either from their release or their current values across different stats"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tracks-and-albums",
+    "feature_name": "Latest Release",
+    "feature_description": "Latest release information"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tracks-and-albums",
+    "feature_name": "Top Albums",
+    "feature_description": "Top albums"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tracks-and-albums",
+    "feature_name": "Top Tracks",
+    "feature_description": "Top tracks"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/tracks-and-albums",
+    "feature_name": "Tracks List",
+    "feature_description": "List of all tracks by artist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/ugc",
+    "feature_name": "Influencers Audience Demographics (TikTok)",
+    "feature_description": "Breakdown of gender and language among audiences of influencers using artist's music"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/ugc",
+    "feature_name": "Popular TikTok Sounds (TikTok)",
+    "feature_description": "List of most popular TikTok sounds containing songs by artist. Includes: top videos' views / number of post / first post date"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/ugc",
+    "feature_name": "Summary Stats",
+    "feature_description": "Percentage of average likes / followers for each platform (Instagram / YouTube / TikTok / Spotify)"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/ugc",
+    "feature_name": "Top Comment Themes and Sentiment (Youtube)",
+    "feature_description": "List of most common themes and sentiments expressed in comments on YouTube videos featuring artist's music."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/ugc",
+    "feature_name": "Top Influencers Using Artist's Sounds (TikTok)",
+    "feature_description": "List of top TikTok influencers using sounds by artist. Includes: follower count / engagement metrics / description / etc."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/ugc",
+    "feature_name": "UGC Statistics Comparison",
+    "feature_description": "Compare contents count using artist's sound"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/ugc",
+    "feature_name": "User Generated Playlists\n",
+    "feature_description": "User Generated Playlists Chart for Artist over time"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Chart Entries & Positions",
+    "feature_description": "Shows chart entry statistics for Top 5, 10, 25, 50, and 100 positions with unique track counts and weekly changes"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Compare Videos",
+    "feature_description": "Interactive chart comparing up to 5 top videos with metric selection (views, likes, comments), date range options, and CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Milestones",
+    "feature_description": "Achievement milestones on YouTube with star ratings, sortable by date or importance, with CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Notable Subscribers",
+    "feature_description": "Table showing notable/verified YouTube channels that subscribe to the artist with subscriber counts, sorted by influence"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Noteworthy Comments",
+    "feature_description": "Scrollable section showing notable YouTube comments on the artist videos with commenter channel information"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Platform & Chart",
+    "feature_description": "Detailed table of all YouTube chart positions with filtering by chart type, country, genre, and date range plus CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Popular Youtube Shorts Sounds",
+    "feature_description": "Table of the artist most popular sounds used in YouTube Shorts with post counts, views, and trend data"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Summary Statistics",
+    "feature_description": "Displays key YouTube metrics including subscribers, channel views, video views, likes, comments, and engagement rate with time range filters"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Top Cities",
+    "feature_description": "Shows top cities by subscribers or views with continent filtering, affinity scores, interactive map highlighting, and CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Top Comment Themes",
+    "feature_description": "Displays AI-analyzed comment themes with sentiment classification showing positive, negative, and neutral comment categories"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Top Countries",
+    "feature_description": "Displays top countries by subscribers with interactive map visualization, continent filtering, and CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Top Countries Estimates",
+    "feature_description": "Shows estimated country-level audience data with historical evolution charts and period selection"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Top Influencers Using Artist's Sounds",
+    "feature_description": "Table of top YouTube influencers using the artist sounds with subscriber counts and video links"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Top User Generated Shorts",
+    "feature_description": "Grid preview of top user-generated YouTube Shorts featuring the artist sounds with engagement metrics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Top Videos",
+    "feature_description": "Paginated table of all YouTube videos with sorting, view counts, likes, comments, and click-through to video details modal"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "Trending Videos",
+    "feature_description": "Horizontally scrollable cards showing trending YouTube videos with view counts, likes, comments, and change metrics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "YouTube Audience Demographics",
+    "feature_description": "Displays audience breakdown by age and gender with bar charts, primary audience clustering description, and changes over time modal"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "YouTube Playlists",
+    "feature_description": "Filterable table of all YouTube playlists featuring the artist with editorial/indie curator categorization, current/past status, and CSV export"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "YouTube Shorts Videos with this Track's Sounds",
+    "feature_description": "Grid preview of YouTube Shorts videos using the artist sounds with view counts and engagement metrics"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artist/{artist_id}/youtube",
+    "feature_name": "(YouTube Subscribers/YouTube Channel Views/Average Daily Video Views/Average Likes / Video/Average Comments / Video/Engagement Rate) Trends",
+    "feature_description": "Time-series chart showing trends for YouTube subscribers, channel views, video views, likes, comments, and engagement rate with event overlays"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artists",
+    "feature_name": "Add a Shortlist",
+    "feature_description": "Create an Artist Shortlist"
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/artists",
+    "feature_name": "Full Page",
+    "feature_description": "The Artist List feature on Chartmetric is a powerful discovery and filtering engine designed to help users discover artists across 12.5 million profiles using a combination of artist metadata, performance metrics, growth indicators, and audience demographics. It provides a highly customizable interface where users can apply filters based on attributes such as genre, language, debut date, or label affiliation; platform-specific metrics from Spotify, TikTok, YouTube, and social media; as well as detailed audience insights like gender, age group, and geographic reach. Users can choose to highlight either current values, absolute growth, or percentage change over selectable time periods (7, 28, or 60 days), and sort artists accordingly to identify fast-rising talent, emerging trends, or established stars.\nThis feature enables deep discovery by allowing users to stack multiple filters to build hyper-targeted artist segments\u2014for example, finding independent Hispanic artists trending on TikTok, or identifying female-led pop artists with fast-growing Spotify monthly listeners in Europe. Every column in the table is sortable, and users can customize which metrics to display, making it easy to surface artists who match specific strategic, marketing, or A&R objectives. By combining real-time data visibility with dynamic filtering and sorting capabilities, the Artist List (Discovery) feature becomes a central hub for talent scouting, market analysis, and opportunity identification across the global music landscape."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/actions",
+    "feature_name": "Ads Targeting",
+    "feature_description": "Get audience segment recommendations for targeted advertising campaigns."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/actions",
+    "feature_name": "Artist Audience Profile",
+    "feature_description": "Detailed audience profile breakdown for an artist including demographics, geography, gender, and age distribution."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/actions",
+    "feature_name": "Collaboration Finder",
+    "feature_description": "AI-powered artist collaboration recommendations based on genre fit, audience similarity, and recommendation scoring."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/actions",
+    "feature_name": "Data Analysis Actions",
+    "feature_description": "Analytical tools for Streaming Surges, Viral Moments, Audience Demographics, and more."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/actions",
+    "feature_name": "Growth Strategy Actions",
+    "feature_description": "Pre-configured growth strategy actions including Touring, Content Creation, Brand Partnerships, and more."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/actions",
+    "feature_name": "Playlist Pitching",
+    "feature_description": "AI-powered playlist recommendations with fit scores, estimated reach, and stream increase projections."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/actions",
+    "feature_name": "Tactical Actions",
+    "feature_description": "Tactical workflow templates including Campaign Reporting, Editorial Pitches, and Weekly Reports."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/actions",
+    "feature_name": "Trending Topics",
+    "feature_description": "Discover trending topics relevant to an artist for content strategy."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/audience",
+    "feature_name": "Audience Demographics",
+    "feature_description": "Aggregated demographic breakdown (gender, age groups, ethnicity) across all followed artists."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/audience",
+    "feature_name": "Audience Geography",
+    "feature_description": "Geographic distribution showing top cities where followed artists' listeners are concentrated."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/insights",
+    "feature_name": "AI Voiceover",
+    "feature_description": "Generate AI narration audio for video content."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/insights",
+    "feature_name": "Artist Benchmarking",
+    "feature_description": "Compare a selected artist's metrics against the roster average or specific peers."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/insights",
+    "feature_name": "Artist Comparison",
+    "feature_description": "Side-by-side comparison of two or more artists across all platform metrics with visual overlays."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/insights",
+    "feature_name": "Artist Detail View",
+    "feature_description": "Deep-dive view for a single artist showing all available platform metrics, streaming history, and interactive metric pills."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/insights",
+    "feature_name": "Artist Sparklines",
+    "feature_description": "Mini inline trend charts showing quick metric trajectories for each artist in the roster list."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/insights",
+    "feature_name": "Custom Chart Generator",
+    "feature_description": "Generate custom AI-powered charts with natural language prompts, creating bespoke visualizations from roster data."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/insights",
+    "feature_name": "Custom Formulas",
+    "feature_description": "Create and evaluate custom metric formulas from available data sources."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/insights",
+    "feature_name": "Roster Stats View",
+    "feature_description": "Tabular view of all followed artists with key platform metrics including Spotify listeners, Instagram followers, TikTok followers, and weekly changes."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/insights",
+    "feature_name": "Roster Visual View",
+    "feature_description": "Visual comparison of followed artists using interactive charts and sparkline mini-graphs for quick trend identification."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/insights",
+    "feature_name": "Tracks, Albums, Playlists & Curators",
+    "feature_description": "Browse and manage followed tracks, albums, Spotify playlists, and curators with associated metadata."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/timeline",
+    "feature_name": "Event Impact Analyzer",
+    "feature_description": "Analyze the streaming impact of live events, showing metric changes before, during, and after concerts or festivals."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/timeline",
+    "feature_name": "Score Explainability",
+    "feature_description": "Popover explaining how timeline event impact scores are calculated."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/timeline",
+    "feature_name": "Timeline Feed",
+    "feature_description": "Chronological feed of noteworthy insights, milestones, live events, and event analysis for followed artists."
+  },
+  {
+    "entity_type": "artist",
+    "url_pattern": "/shortlist/:id/artists/timeline",
+    "feature_name": "Timeline Filters & Sorting",
+    "feature_description": "Filter timeline events by type and sort by date, artist, or platform."
+  },
+  {
+    "entity_type": "brand",
+    "url_pattern": "/brand/{brand_id}",
+    "feature_name": "Brand Affiliation Table",
+    "feature_description": "Table listing artists affiliated with the brand. Columns include artist name, Spotify followers, Spotify monthly listeners, Instagram followers, and YouTube subscribers. Supports sorting, searching, and CSV export."
+  },
+  {
+    "entity_type": "brand",
+    "url_pattern": "/brand/{brand_id}",
+    "feature_name": "Brand Header",
+    "feature_description": "Displays the brand logo and name at the top of the profile page. Includes a back button to return to the brand list."
+  },
+  {
+    "entity_type": "brand",
+    "url_pattern": "/brand/{brand_id}",
+    "feature_name": "Country Filter",
+    "feature_description": "Dropdown filter that allows users to filter the affiliated artists table by one or more countries associated with the brand."
+  },
+  {
+    "entity_type": "brand",
+    "url_pattern": "/brand/{brand_id}",
+    "feature_name": "Genre Filter",
+    "feature_description": "Dropdown filter that allows users to filter the affiliated artists table by one or more music genres associated with the brand."
+  },
+  {
+    "entity_type": "brand",
+    "url_pattern": "/brands",
+    "feature_name": "Brand Category Cards",
+    "feature_description": "Grid of brand cards organized by category. Each card shows the brand logo and name, and clicking a card navigates to the brand profile page."
+  },
+  {
+    "entity_type": "brand",
+    "url_pattern": "/brands",
+    "feature_name": "Brand Category Selector",
+    "feature_description": "Filter that lets users select which brand categories to display (e.g., Activewear, Beauty & Cosmetics, Technology). Supports select-all and select-none options."
+  },
+  {
+    "entity_type": "brand",
+    "url_pattern": "/brands",
+    "feature_name": "Brand Search",
+    "feature_description": "Search bar that allows users to search for brands by name. Displays autocomplete results as the user types."
+  },
+  {
+    "entity_type": "brand",
+    "url_pattern": "/brands",
+    "feature_name": "Most Popular Brands",
+    "feature_description": "Dropdown panel showing a curated list of popular brands. Displayed when the search bar is focused, showing random top brands from different categories."
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/acr/artists",
+    "feature_name": "Airplay Artists - Summary",
+    "feature_description": "Radio top artists summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/acr/artists",
+    "feature_name": "Airplay (Daily / Weekly) Artists - (Country)",
+    "feature_description": "Radio top artists"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/acr/sirius-tracks",
+    "feature_name": "SiriusXM Weekly Tracks",
+    "feature_description": "SiriusXM top tracks"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/acr/sirius-tracks",
+    "feature_name": "SiriusXM Weekly Tracks - Summary",
+    "feature_description": "SiriusXM top tracks summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/acr/tracks",
+    "feature_name": "Airplay Daily Tracks - (Country)",
+    "feature_description": "Radio top tracks"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/acr/tracks",
+    "feature_name": "Airplay Tracks - Summary",
+    "feature_description": "Radio top tracks summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/amazon/new-albums",
+    "feature_name": "Amazon Music New Albums - (Country) (Genre)",
+    "feature_description": "New albums on Amazon Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/amazon/new-albums",
+    "feature_name": "Amazon Music New Tracks - Summary",
+    "feature_description": "New albums on Amazon Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/amazon/new-tracks",
+    "feature_name": "Amazon Music New Tracks - (Country) (Genre)",
+    "feature_description": "New tracks on Amazon Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/amazon/new-tracks",
+    "feature_name": "Amazon Music New Tracks - Summary",
+    "feature_description": "New tracks on Amazon Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/amazon/top-albums",
+    "feature_name": "Amazon Music Top Albums - (Country) (Genre)",
+    "feature_description": "Top albums on Amazon Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/amazon/top-albums",
+    "feature_name": "Amazon Music Top Tracks - Summary",
+    "feature_description": "Top albums on Amazon Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/amazon/top-tracks",
+    "feature_name": "Amazon Music Top Tracks - (Country) (Genre)",
+    "feature_description": "Top tracks on Amazon Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/amazon/top-tracks",
+    "feature_name": "Amazon Music Top Tracks - Summary",
+    "feature_description": "Top tracks on Amazon Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/anghami/top-country-tracks",
+    "feature_name": "Anghami Top Songs by Country - Summary",
+    "feature_description": "Top songs by country on Anghami"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/anghami/top-country-tracks",
+    "feature_name": "Anghami Top Songs by Country - Top Music",
+    "feature_description": "Top songs by country on Anghami"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/anghami/top-genre-tracks",
+    "feature_name": "Anghami Top Songs by Genre - Summary",
+    "feature_description": "Top songs by genre on Anghami"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/anghami/top-genre-tracks",
+    "feature_name": "Anghami Top Songs by Genre - Top (Genre)",
+    "feature_description": "Top songs by genre on Anghami"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/anghami/top-liked-tracks",
+    "feature_name": "Anghami Most Liked Songs - Summary \n",
+    "feature_description": "Most liked songs on Anghami"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/anghami/top-liked-tracks",
+    "feature_name": "Anghami Most Liked Songs - (Top Liked / Top Liked Arabic / Top Liked International / Top Liked in Egypt / Top Liked in Saudi / Top Liked in UAE)",
+    "feature_description": "Most liked songs on Anghami"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/albums-by-genres",
+    "feature_name": "Apple Music Albums in (Genre) - (Country)",
+    "feature_description": "Top albums by genres on Apple Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/albums-by-genres",
+    "feature_name": "Apple Music Albums - Summary",
+    "feature_description": "Top albums by genres on Apple Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/daily-top",
+    "feature_name": "Apple Music Daily Tracks",
+    "feature_description": "Daily Top 100 tracks on Apple Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/daily-top",
+    "feature_name": "Apple Music Daily Tracks - Summary",
+    "feature_description": "Daily Top 100 tracks on Apple Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/shazam-discovery",
+    "feature_name": "Apple Music Shazam Discovery",
+    "feature_description": "Shazam Discovery tracks on Apple Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/shazam-discovery",
+    "feature_name": "Apple Music Shazam Discovery - Summary",
+    "feature_description": "Shazam Discovery tracks on Apple Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/top-playlists",
+    "feature_name": "Apple Music Top Playlists - (Country)",
+    "feature_description": "Top playlists on Apple Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/tracks-by-city",
+    "feature_name": "Apple Music City - (Country)",
+    "feature_description": "Top tracks by city on Apple Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/tracks-by-city",
+    "feature_name": "Apple Music City - Summary",
+    "feature_description": "Top tracks by city on Apple Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/tracks-by-genres",
+    "feature_name": "Apple Music Top Tracks in (Genre) - (Country)",
+    "feature_description": "Top tracks by country and genre on Apple Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/tracks-by-genres",
+    "feature_name": "Apple Music Top Tracks - Summary",
+    "feature_description": "Top tracks by country and genre on Apple Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/trending-on-playlists",
+    "feature_name": "Trending on Apple Music Playlists",
+    "feature_description": "Trending tracks on Apple Music playlists"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/trending-on-playlists",
+    "feature_name": "Trending on Apple Music Playlists - Summary",
+    "feature_description": "Trending tracks on Apple Music playlists summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/videos",
+    "feature_name": "Apple Music Videos in (Genre) - (Country)",
+    "feature_description": "Top videos on Apple Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/apple-music/videos",
+    "feature_name": "Apple Music Video Top Tracks - Summary",
+    "feature_description": "Top videos on Apple Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/beatport/daily-tracks",
+    "feature_name": "Beatport Daily Tracks in (Genre)",
+    "feature_description": "Tracks by genres on Beatport"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/beatport/daily-tracks",
+    "feature_name": "Beatport Daily Tracks - Summary",
+    "feature_description": "Tracks by genres on Beatport summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/chartmetric/artists",
+    "feature_name": "Chartmetric - Most Followed Artists",
+    "feature_description": "Most followed artists on Chartmetric"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/chartmetric/playlists",
+    "feature_name": "Chartmetric - Most Followed Playlists",
+    "feature_description": "Most followed playlists on Chartmetric"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/chartmetric/tracks",
+    "feature_name": "Chartmetric - Most Followed Tracks",
+    "feature_description": "Most followed tracks on Chartmetric"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/circle/global-k-pop",
+    "feature_name": "Circle Chart Tracks",
+    "feature_description": "Global K-Pop on Circle Chart"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/circle/global-k-pop",
+    "feature_name": "Circle Chart Tracks - Summary",
+    "feature_description": "Global K-Pop on Circle Chart summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/circle/top-albums",
+    "feature_name": "Circle Chart Top Albums",
+    "feature_description": "Top albums on Circle Chart"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/circle/top-albums",
+    "feature_name": "Circle Chart Top Albums - Summary",
+    "feature_description": "Top albums on Circle Chart summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/deezer/top-tracks",
+    "feature_name": "Deezer Top Tracks - (Country)",
+    "feature_description": "Top tracks on Deezer"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/deezer/top-tracks",
+    "feature_name": "Deezer Top Tracks - Summary",
+    "feature_description": "Top tracks on Deezer summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/hanteo/digital-tracks",
+    "feature_name": "Digital Chart",
+    "feature_description": "Digital tracks on Hanteo Chart"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/hanteo/digital-tracks",
+    "feature_name": "Hanteo Digital Chart - Summary",
+    "feature_description": "Digital tracks on Hanteo Chart summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/hanteo/music-albums",
+    "feature_name": "Hanteo Music Chart - Summary",
+    "feature_description": "Music albums on Hanteo Chart summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/hanteo/music-albums",
+    "feature_name": "Music Chart",
+    "feature_description": "Music albums on Hanteo Chart"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/hanteo/top-albums",
+    "feature_name": "Physical Album Chart",
+    "feature_description": "Top physical albums on Hanteo Chart"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/hanteo/top-albums",
+    "feature_name": "Physical Album Chart - Summary",
+    "feature_description": "Top physical albums on Hanteo Chart summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/hanteo/world-albums",
+    "feature_name": "Hanteo World Chart - Summary",
+    "feature_description": "World albums on Hanteo Chart summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/hanteo/world-albums",
+    "feature_name": "World Chart",
+    "feature_description": "World albums on Hanteo Chart"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/hanteo/world-artists",
+    "feature_name": "World Artists",
+    "feature_description": "World artists on Hanteo Chart"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/itunes/albums",
+    "feature_name": "iTunes Daily Albums in (Genre) - (Country)",
+    "feature_description": "Top albums on iTunes"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/itunes/albums",
+    "feature_name": "iTunes Daily Albums - Summary",
+    "feature_description": "Top albums on iTunes summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/itunes/tracks",
+    "feature_name": "iTunes Daily Tracks in (Genre) - (Country)",
+    "feature_description": "Top tracks on iTunes"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/itunes/tracks",
+    "feature_name": "iTunes Daily Tracks - Summary",
+    "feature_description": "Top tracks on iTunes summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/itunes/videos",
+    "feature_name": "iTunes Daily Videos - (Country)",
+    "feature_description": "Top videos on iTunes"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/itunes/videos",
+    "feature_name": "iTunes Daily Videos - Summary",
+    "feature_description": "Top videos on iTunes summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/line/albums",
+    "feature_name": "Line Music (Daily / Weekly) Top Albums",
+    "feature_description": "Line Music albums"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/line/albums",
+    "feature_name": "Line Music Top Albums - Summar",
+    "feature_description": "Line Music albums summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/line/music-videos",
+    "feature_name": "Line Music (Daily / Weekly) Top Music Videos",
+    "feature_description": "Line Music videos"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/line/music-videos",
+    "feature_name": "Line Music Top Videos - Summary",
+    "feature_description": "Line Music videos summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/line/tracks",
+    "feature_name": "Line Music (Daily / Weekly) Top Tracks",
+    "feature_description": "Line Music tracks"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/line/tracks",
+    "feature_name": "Line Music Top Tracks - Summary",
+    "feature_description": "Line Music tracks summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/hot-100",
+    "feature_name": "Melon Hot 100 - Summary",
+    "feature_description": "Melon Hot 100 summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/hot-100",
+    "feature_name": "Melon Top Hot",
+    "feature_description": "Melon Hot 100"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/top-100",
+    "feature_name": "Melon Top 100",
+    "feature_description": "Melon Top 100"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/top-100",
+    "feature_name": "Melon Top 100 - Summary",
+    "feature_description": "Melon Top 100 summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/top-albums",
+    "feature_name": "Melon Music Top Albums - Summary",
+    "feature_description": "Melon albums summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/top-albums",
+    "feature_name": "Melon Top Albums",
+    "feature_description": "Melon albums"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/top-artists",
+    "feature_name": "Melon Top Artists All",
+    "feature_description": "Melon artists"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/top-artists",
+    "feature_name": "Melon Top Artists - Summary",
+    "feature_description": "Melon artists summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/top-videos",
+    "feature_name": "Melon Music Top Videos - Summary",
+    "feature_description": "Melon videos summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/top-videos",
+    "feature_name": "Melon Top Videos",
+    "feature_description": "Melon videos"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/tracks",
+    "feature_name": "Melon Daily Top Tracks",
+    "feature_description": "Melon tracks"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/melon/tracks",
+    "feature_name": "Melon Music Top Tracks - Summary",
+    "feature_description": "Melon tracks summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/daily-tracks-hot",
+    "feature_name": "NetEase Daily Hot Tracks - Summary",
+    "feature_description": "Daily hot tracks on NetEase summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/daily-tracks-hot",
+    "feature_name": "NetEase Music Daily Hot Tracks",
+    "feature_description": "Daily hot tracks on NetEase"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/daily-tracks-international-new",
+    "feature_name": "NetEase Daily International New Tracks - Summary",
+    "feature_description": "Daily international new tracks on NetEase summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/daily-tracks-international-new",
+    "feature_name": "NetEase Music Daily International New Tracks",
+    "feature_description": "Daily international new tracks on NetEase"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/daily-tracks-new",
+    "feature_name": "NetEase Daily New Tracks - Summary",
+    "feature_description": "Daily new tracks on NetEase summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/daily-tracks-new",
+    "feature_name": "NetEase Music Daily New Tracks",
+    "feature_description": "Daily new tracks on NetEase"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/daily-tracks-trending",
+    "feature_name": "NetEase Daily Trending - Summary",
+    "feature_description": "Daily trending tracks on NetEase summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/daily-tracks-trending",
+    "feature_name": "NetEase Music Daily Trending Tracks",
+    "feature_description": "Daily trending tracks on NetEase"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/weekly-tracks",
+    "feature_name": "NetEase Music Weekly Original Tracks",
+    "feature_description": "Weekly original tracks on NetEase"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/weekly-tracks",
+    "feature_name": "NetEase Weekly Tracks - Summary",
+    "feature_description": "Weekly original tracks on NetEase summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/weekly-tracks-china-trending",
+    "feature_name": "NetEase Music Weekly China Trending Tracks",
+    "feature_description": "Weekly China trending tracks on NetEase"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/weekly-tracks-china-trending",
+    "feature_name": "NetEase Weekly China Trending Tracks - Summary",
+    "feature_description": "Weekly China trending tracks on NetEase summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/weekly-tracks-international-trending",
+    "feature_name": "NetEase Music Weekly International Trending Tracks",
+    "feature_description": "Weekly international trending tracks on NetEase"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/netease/weekly-tracks-international-trending",
+    "feature_name": "NetEase Weekly International Trending Tracks - Summary",
+    "feature_description": "Weekly international trending tracks on NetEase summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/pandora/top-spins",
+    "feature_name": "Pandora Top Spins",
+    "feature_description": "Top Spins on Pandora"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/pandora/top-spins",
+    "feature_name": "Pandora Weekly Top Spins 100 - Summary",
+    "feature_description": "Top Spins on Pandora summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/pandora/top-thumbs",
+    "feature_name": "Pandora Top Thumbs Hundred",
+    "feature_description": "Top Thumb Hundred on Pandora"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/pandora/top-thumbs",
+    "feature_name": "Pandora Weekly Top Thumbs 100 - Summary",
+    "feature_description": "Top Thumb Hundred on Pandora summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/pandora/trendsetters",
+    "feature_name": "Pandora Weekly Trendsetters 20 - Summary",
+    "feature_description": "Trendsetters on Pandora"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/pandora/trendsetters",
+    "feature_name": "Pandora Weekly Trendsetters 20 - Summary",
+    "feature_description": "Trendsetters on Pandora summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/qq/weekly-tracks",
+    "feature_name": "QQ Music Weekly Tracks - Summary",
+    "feature_description": "Weekly top tracks on QQ Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/qq/weekly-tracks",
+    "feature_name": "QQ Music Weekly Tracks - Western Music Chart",
+    "feature_description": "Weekly top tracks on QQ Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/shazam/daily-tracks",
+    "feature_name": "Shazam Daily Tracks - (Country)",
+    "feature_description": "Daily tracks by country/city/genre on Shazam"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/shazam/daily-tracks",
+    "feature_name": "Shazam Daily Tracks - Summary",
+    "feature_description": "Daily tracks by country/city/genre on Shazam summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/soundcloud/new-tracks",
+    "feature_name": "SoundCloud New & Hot Tracks In (Genre)",
+    "feature_description": "New tracks on SoundCloud"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/soundcloud/new-tracks",
+    "feature_name": "SoundCloud New & Hot Tracks - Summary",
+    "feature_description": "New tracks on SoundCloud summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/soundcloud/top-tracks",
+    "feature_name": "SoundCloud Top Tracks In (Genre)",
+    "feature_description": "Top tracks on SoundCloud"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/soundcloud/top-tracks",
+    "feature_name": "SoundCloud Top Tracks - Summary",
+    "feature_description": "Top tracks on SoundCloud summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/soundcloud/top-tracks-new",
+    "feature_name": "SoundCloud Top Tracks In (Genre) - (Country)",
+    "feature_description": "Top tracks on SoundCloud"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/soundcloud/top-tracks-new",
+    "feature_name": "SoundCloud Top Tracks - Summary",
+    "feature_description": "Top tracks on SoundCloud summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/soundcloud/trending-tracks",
+    "feature_name": "SoundCloud New & Hot Tracks In all-music",
+    "feature_description": "Trending tracks on SoundCloud"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/soundcloud/trending-tracks",
+    "feature_name": "SoundCloud Trending Tracks - Summary",
+    "feature_description": "Trending tracks on SoundCloud summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/fresh-finds",
+    "feature_name": "Spotify Fresh Finds",
+    "feature_description": "Fresh Finds tracks from Spotify"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/fresh-finds",
+    "feature_name": "Spotify Fresh Finds - Summary",
+    "feature_description": "Fresh Finds tracks from Spotify summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/legacy",
+    "feature_name": "Spotify (Daily / Weekly) Global Chart - (Top 50 / Viral 50)",
+    "feature_description": "Top 50/Viral 50 charts from Spotify"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/legacy",
+    "feature_name": "Spotify Weekly Top 50 - Summary",
+    "feature_description": "Top 50/Viral 50 charts from Spotify summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/new-music-friday-playlists",
+    "feature_name": "Spotify New Music Friday",
+    "feature_description": "New Music Friday playlists summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/new-music-friday-playlists",
+    "feature_name": "Spotify New Music Friday - Summary",
+    "feature_description": "New Music Friday playlists summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/top-artists",
+    "feature_name": "Spotify Music Top Artists - Summary",
+    "feature_description": "Top Artists on Spotify summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/top-artists",
+    "feature_name": "Spotify (Weekly / Monthly) Top Artists by Change in (Monthly Listeners / Followers / Popularity / Playlist Reach / Playlist Count)",
+    "feature_description": "Top Artists on Spotify Summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/top-tracks",
+    "feature_name": "Spotify All Top Tracks by (Popularity / Playlist Reach / Playlist Count / Weekly Top Tracks / Monthly Top Tracks)",
+    "feature_description": "Top Tracks on Spotify"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/top-tracks",
+    "feature_name": "Spotify Music Top Tracks - Summary",
+    "feature_description": "Top Tracks on Spotify summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/trending-on-playlists",
+    "feature_name": "Spotify Trending On Playlists",
+    "feature_description": "Trending tracks on Spotify playlists summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/spotify/trending-on-playlists",
+    "feature_name": "Spotify Trending On Playlists - Summary",
+    "feature_description": "Trending tracks on Spotify playlists summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tencent/monthly-tracks",
+    "feature_name": "Monthly Top Tracks by TME Uni Chart - Summary",
+    "feature_description": "Monthly tracks on Tencent Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tencent/monthly-tracks",
+    "feature_name": "Monthly Top Tracks by TME Wave Chart",
+    "feature_description": "Monthly tracks on Tencent Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tencent/weekly-tracks",
+    "feature_name": "Weekly Top Tracks by TME Uni Chart",
+    "feature_description": "Weekly tracks on Tencent Music"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tencent/weekly-tracks",
+    "feature_name": "Weekly Top Tracks by TME Uni Chart - Summary",
+    "feature_description": "Weekly tracks on Tencent Music summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tiktok/top-tracks-by-breakout",
+    "feature_name": "TikTok Top Tracks - Summary",
+    "feature_description": "Top tracks by breakout on TikTok summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tiktok/top-tracks-by-breakout",
+    "feature_name": "TikTok Weekly Top Tracks - (Country)",
+    "feature_description": "Top tracks by breakout on TikTok"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tiktok/top-tracks-by-country",
+    "feature_name": "TikTok Top Tracks - Summary",
+    "feature_description": "Top tracks by country on TikTok summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tiktok/top-tracks-by-country",
+    "feature_name": "TikTok Weekly Top Tracks - (Country)",
+    "feature_description": "Top tracks by country on TikTok"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tiktok/top-tracks-by-popularity",
+    "feature_name": "TikTok Top Tracks - Summary",
+    "feature_description": "Top tracks by popularity on TikTok summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tiktok/top-tracks-by-popularity",
+    "feature_name": "TikTok Weekly Top Tracks by Popularity - (Country)",
+    "feature_description": "Top tracks by popularity on TikTok"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tiktok/top-users",
+    "feature_name": "TikTok (Daily / Weekly / All Time) Top Users",
+    "feature_description": "Top users on TikTok"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tiktok/videos",
+    "feature_name": "TikTok Trending Video",
+    "feature_description": "Trending videos on TikTok"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/tiktok/videos",
+    "feature_name": "TikTok Trending Video - Summary",
+    "feature_description": "Trending videos on TikTok summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/youtube/artists",
+    "feature_name": "YouTube Artists - (Country)",
+    "feature_description": "Top artists on YouTube"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/youtube/music-videos",
+    "feature_name": "YouTube Top Music Videos - Summary",
+    "feature_description": "Top music videos on YouTube summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/youtube/music-videos",
+    "feature_name": "YouTube Weekly Top Music Videos - (Country)",
+    "feature_description": "Top music videos on YouTube"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/youtube/shorts",
+    "feature_name": "YouTube Music Shorts Tracks - (Country)",
+    "feature_description": "Top YouTube Shorts"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/youtube/shorts",
+    "feature_name": "YouTube Music Top Shorts Tracks - Summary",
+    "feature_description": "Top YouTube Shorts"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/youtube/tracks",
+    "feature_name": "YouTube Music Top Tracks - Summary",
+    "feature_description": "Top tracks on YouTube summary"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/youtube/tracks",
+    "feature_name": "YouTube Tracks - (Country)",
+    "feature_description": "Top tracks on YouTube"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/youtube/trending-videos",
+    "feature_name": "YouTube Trending Music Videos - (Country)",
+    "feature_description": "Trending music videos on YouTube"
+  },
+  {
+    "entity_type": "charts",
+    "url_pattern": "/charts/youtube/trending-videos",
+    "feature_name": "YouTube Trending Music Videos - Summary",
+    "feature_description": "Trending music videos on YouTube"
+  },
+  {
+    "entity_type": "city",
+    "url_pattern": "/cities/list",
+    "feature_name": "Full Page",
+    "feature_description": "Browse and search all cities"
+  },
+  {
+    "entity_type": "city",
+    "url_pattern": "/city/{city_id}",
+    "feature_name": "Artists in the City",
+    "feature_description": "List of artists based in this city"
+  },
+  {
+    "entity_type": "city",
+    "url_pattern": "/city/{city_id}",
+    "feature_name": "Artists with the most AirPlay in City",
+    "feature_description": "List of artists with the most AirPlay in this city"
+  },
+  {
+    "entity_type": "city",
+    "url_pattern": "/city/{city_id}",
+    "feature_name": "Artists with the most Shazams in City",
+    "feature_description": "List of artists with the most Shazams in this city"
+  },
+  {
+    "entity_type": "city",
+    "url_pattern": "/city/{city_id}",
+    "feature_name": "Artists with the most YouTube Views in City",
+    "feature_description": "List of artists with the most YouTube views in this city"
+  },
+  {
+    "entity_type": "city",
+    "url_pattern": "/city/{city_id}",
+    "feature_name": "Events in City",
+    "feature_description": "List of events happening in this city"
+  },
+  {
+    "entity_type": "city",
+    "url_pattern": "/city/{city_id}",
+    "feature_name": "Genres in City",
+    "feature_description": "List of genres popular in this city"
+  },
+  {
+    "entity_type": "city",
+    "url_pattern": "/city/{city_id}",
+    "feature_name": "Summary Stats",
+    "feature_description": "Displays city metadata including metro-area population, artists tracked, radio stations tracked, venues tracked, and events tracked"
+  },
+  {
+    "entity_type": "city",
+    "url_pattern": "/city/{city_id}",
+    "feature_name": "Top AirPlay Stations",
+    "feature_description": "List of top AirPlay stations in this city"
+  },
+  {
+    "entity_type": "city",
+    "url_pattern": "/city/{city_id}",
+    "feature_name": "Top Tracks in City",
+    "feature_description": "List of top tracks in this city"
+  },
+  {
+    "entity_type": "city",
+    "url_pattern": "/city/{city_id}",
+    "feature_name": "Tours in City",
+    "feature_description": "List of upcoming / past tours in this city"
+  },
+  {
+    "entity_type": "common",
+    "url_pattern": "/",
+    "feature_name": "Add Data",
+    "feature_description": "Submit Spotify, Apple Music, Deezer, Amazon, or YouTube URIs/URLs or ISRC codes to add new artists, tracks, albums, or playlists to the database"
+  },
+  {
+    "entity_type": "common",
+    "url_pattern": "/",
+    "feature_name": "Search",
+    "feature_description": "Global search bar to find artists, tracks, albums, playlists, and other entities with category filtering and recent search history"
+  },
+  {
+    "entity_type": "compare_pro",
+    "url_pattern": "/compare",
+    "feature_name": "Album Comparison",
+    "feature_description": "Side-by-side album performance comparison"
+  },
+  {
+    "entity_type": "compare_pro",
+    "url_pattern": "/compare",
+    "feature_name": "Album Introspection",
+    "feature_description": "Deep dive analysis of selected albums"
+  },
+  {
+    "entity_type": "compare_pro",
+    "url_pattern": "/compare",
+    "feature_name": "Artist Comparison",
+    "feature_description": "Side-by-side artist performance comparison"
+  },
+  {
+    "entity_type": "compare_pro",
+    "url_pattern": "/compare",
+    "feature_name": "Artist Introspection",
+    "feature_description": "Deep dive analysis of selected artists"
+  },
+  {
+    "entity_type": "compare_pro",
+    "url_pattern": "/compare",
+    "feature_name": "Track Comparison",
+    "feature_description": "Side-by-side track performance comparison"
+  },
+  {
+    "entity_type": "compare_pro",
+    "url_pattern": "/compare",
+    "feature_name": "Track Introspection",
+    "feature_description": "Deep dive analysis of selected tracks"
+  },
+  {
+    "entity_type": "compare_pro",
+    "url_pattern": "/compare",
+    "feature_name": "Track Playlist Overlap",
+    "feature_description": "Playlist placement overlap analysis between tracks"
+  },
+  {
+    "entity_type": "conversation",
+    "url_pattern": "/conversations",
+    "feature_name": "AI Data Assistant",
+    "feature_description": "Conversational AI assistant that answers questions about music data using Chartmetric data."
+  },
+  {
+    "entity_type": "conversation",
+    "url_pattern": "/conversations",
+    "feature_name": "AI-Generated Insights",
+    "feature_description": "Automated AI-generated summary insights organized by category."
+  },
+  {
+    "entity_type": "conversation",
+    "url_pattern": "/conversations",
+    "feature_name": "Conversation Sharing",
+    "feature_description": "Invite collaborators to conversations and share AI assistant threads."
+  },
+  {
+    "entity_type": "conversation",
+    "url_pattern": "/conversations",
+    "feature_name": "Message Feedback",
+    "feature_description": "Submit thumbs-up or thumbs-down feedback on AI assistant responses."
+  },
+  {
+    "entity_type": "country",
+    "url_pattern": "/countries/cards",
+    "feature_name": "Full Page",
+    "feature_description": "Browse and search all countries"
+  },
+  {
+    "entity_type": "country",
+    "url_pattern": "/country/{country_id}",
+    "feature_name": "AirPlay Stations",
+    "feature_description": "List of AirPlay stations in this country"
+  },
+  {
+    "entity_type": "country",
+    "url_pattern": "/country/{country_id}",
+    "feature_name": "Artist Rank by Audience",
+    "feature_description": "Ranking of artists by total audience size in this country - foreign & local artists growing locally and globally"
+  },
+  {
+    "entity_type": "country",
+    "url_pattern": "/country/{country_id}",
+    "feature_name": "Artist Rank by Charts",
+    "feature_description": "Ranking of artists by chart performance in this country - foreign & local artists growing locally and globally"
+  },
+  {
+    "entity_type": "country",
+    "url_pattern": "/country/{country_id}",
+    "feature_name": "Artist Rank by Fastest Growing Audience",
+    "feature_description": "Ranking of artists by fastest growing audience in this country - foreign & local artists growing locally and globally"
+  },
+  {
+    "entity_type": "country",
+    "url_pattern": "/country/{country_id}",
+    "feature_name": "Charts - Tracks",
+    "feature_description": "List of top tracks in this country for various lists"
+  },
+  {
+    "entity_type": "country",
+    "url_pattern": "/country/{country_id}",
+    "feature_name": "Summary Stats",
+    "feature_description": "Displays country metadata including population, radio stations tracked, artists monitored, and music import/export ratio"
+  },
+  {
+    "entity_type": "country",
+    "url_pattern": "/country/{country_id}",
+    "feature_name": "Tours",
+    "feature_description": "List of upcoming tours in this country"
+  },
+  {
+    "entity_type": "country",
+    "url_pattern": "/country/{country_id}",
+    "feature_name": "Trending Tracks",
+    "feature_description": "List of recent trending tracks in this country"
+  },
+  {
+    "entity_type": "dashboard",
+    "url_pattern": "/dashboard",
+    "feature_name": "Articles from How Music Charts",
+    "feature_description": "Displays curated blog articles from How Music Charts with read more links"
+  },
+  {
+    "entity_type": "dashboard",
+    "url_pattern": "/dashboard",
+    "feature_name": "Contribute Data",
+    "feature_description": "Allows users to submit corrections or additions to artist metadata and links"
+  },
+  {
+    "entity_type": "dashboard",
+    "url_pattern": "/dashboard",
+    "feature_name": "My Insights",
+    "feature_description": "Displays a feed of notable changes and updates for followed/subscribed artists with filtering by platform themes"
+  },
+  {
+    "entity_type": "dashboard",
+    "url_pattern": "/dashboard",
+    "feature_name": "My Shortlists",
+    "feature_description": "User's followed artists/tracks/albums/playlists/curators and shortlists"
+  },
+  {
+    "entity_type": "dashboard",
+    "url_pattern": "/dashboard",
+    "feature_name": "Recently Viewed",
+    "feature_description": "Shows a horizontally scrollable list of recently visited artists, tracks, playlists, curators, albums, stations, and cities (or trending artists if no history exists)"
+  },
+  {
+    "entity_type": "dashboard",
+    "url_pattern": "/dashboard",
+    "feature_name": "Recommended Features",
+    "feature_description": "Suggests Chartmetric features filtered by user goals (Market Research, Talent Discovery, Benchmark & Compare, Monitoring & Reporting) with links to relevant pages"
+  },
+  {
+    "entity_type": "discovery",
+    "url_pattern": "/discovery-assistant",
+    "feature_name": "Discovery Assistant",
+    "feature_description": "Assisted discovery workflow for finding new artists using parsed links and data."
+  },
+  {
+    "entity_type": "export",
+    "url_pattern": "/exports",
+    "feature_name": "CSV Exports",
+    "feature_description": "Export roster data, stats, and analytics to CSV files for offline analysis."
+  },
+  {
+    "entity_type": "festival",
+    "url_pattern": "/festival/{festival_id}",
+    "feature_name": "Artist Country Distribution",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "festival",
+    "url_pattern": "/festival/{festival_id}",
+    "feature_name": "Artist Genre Distribution",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "festival",
+    "url_pattern": "/festival/{festival_id}",
+    "feature_name": "Audience Demographics",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "festival",
+    "url_pattern": "/festival/{festival_id}",
+    "feature_name": "Compare Festival Artists",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "festival",
+    "url_pattern": "/festival/{festival_id}",
+    "feature_name": "Key Information",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "festival",
+    "url_pattern": "/festival/{festival_id}",
+    "feature_name": "Lineup Overview by Year",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "festival",
+    "url_pattern": "/festival/{festival_id}",
+    "feature_name": "Similar Ranked Festivals",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "festival",
+    "url_pattern": "/festivals",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "genre",
+    "url_pattern": "/genre/{genre_id}",
+    "feature_name": "{Genre} Artists",
+    "feature_description": "Shows artists in this genre ranked by trending or top CM score with country flags, genres, and expandable full table view"
+  },
+  {
+    "entity_type": "genre",
+    "url_pattern": "/genre/{genre_id}",
+    "feature_name": "{Genre} Playlists",
+    "feature_description": "Lists playlists containing tracks from this genre with search, playlist type filter, time range selector, and follower metrics"
+  },
+  {
+    "entity_type": "genre",
+    "url_pattern": "/genre/{genre_id}",
+    "feature_name": "{Genre} Tracks",
+    "feature_description": "Shows tracks in this genre ranked by trending Spotify popularity or top CM score with artist links and expandable full table view"
+  },
+  {
+    "entity_type": "genre",
+    "url_pattern": "/genre/{genre_id}",
+    "feature_name": "Related Genres",
+    "feature_description": "Related genres are children, parent or adjacent genre groups in the Chartmetric Genres system"
+  },
+  {
+    "entity_type": "genre",
+    "url_pattern": "/genre/{genre_id}",
+    "feature_name": "(Top / Trending) Countries",
+    "feature_description": "Displays countries ranked by top or trending genre popularity with chart appearances and listener metrics"
+  },
+  {
+    "entity_type": "genre",
+    "url_pattern": "/genre/{genre_id}",
+    "feature_name": "(Top / Upcoming) Festivals",
+    "feature_description": "Shows festivals featuring this genre with top/upcoming toggle, search, country filter, and table/card view options"
+  },
+  {
+    "entity_type": "genre",
+    "url_pattern": "/genre/{genre_id}",
+    "feature_name": "Tours",
+    "feature_description": "Displays artists currently touring in this genre with upcoming/past events toggle and career stage filter (Legendary to Developing)"
+  },
+  {
+    "entity_type": "genre",
+    "url_pattern": "/genre/{genre_id}",
+    "feature_name": "Trending Venues",
+    "feature_description": "Shows venues ranked by genre relevance with search, country filter, table/card view toggle, and upcoming concerts per venue"
+  },
+  {
+    "entity_type": "genre",
+    "url_pattern": "/genres",
+    "feature_name": "Top Genres",
+    "feature_description": "Lists music genres ranked by artist count, track count, and playlist count with related genres and top artists"
+  },
+  {
+    "entity_type": "industry",
+    "url_pattern": "/industry/:genre",
+    "feature_name": "Industry Browser",
+    "feature_description": "Browse and filter artists by genre, region, mood, and industry metrics."
+  },
+  {
+    "entity_type": "industry",
+    "url_pattern": "/s/industry/athletes",
+    "feature_name": "Sports Industry Browser",
+    "feature_description": "Browse and filter athletes by sport, tags, and industry metrics."
+  },
+  {
+    "entity_type": "influencer",
+    "url_pattern": "/influencers",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "monitor",
+    "url_pattern": "/alerts",
+    "feature_name": "Alert Monitors",
+    "feature_description": "Create and manage alert monitors that trigger notifications when metrics cross thresholds."
+  },
+  {
+    "entity_type": "monitor",
+    "url_pattern": "/alerts",
+    "feature_name": "Alerts v2",
+    "feature_description": "Create and manage advanced alert rules with custom conditions, targets, and email notifications."
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/amazon/{playlist_id}/about",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/amazon/{playlist_id}/artists",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/amazon/{playlist_id}/tracks",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/applemusic/{playlist_id}/about",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/applemusic/{playlist_id}/artists",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/applemusic/{playlist_id}/tracks",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/deezer/{playlist_id}/about",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/deezer/{playlist_id}/artists",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/deezer/{playlist_id}/tracks",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlists/amazon",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlists/applemusic",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlists/deezer",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/soundcloud/{playlist_id}/about",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/soundcloud/{playlist_id}/artists",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/soundcloud/{playlist_id}/tracks",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/spotify/{playlist_id}/about",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/spotify/{playlist_id}/artists",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/spotify/{playlist_id}/tracks",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlists/soundcloud",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlists/spotify",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlists/{streaming_platform}",
+    "feature_name": "Full Page",
+    "feature_description": "Browse and search all playlists across platforms"
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/{streaming_platform}/{playlist_id}",
+    "feature_name": "About Playlist",
+    "feature_description": "Basic playlist information and metadata"
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/{streaming_platform}/{playlist_id}",
+    "feature_name": "Playlist Journeys",
+    "feature_description": "Track addition and removal history over time"
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/{streaming_platform}/{playlist_id}",
+    "feature_name": "Similar Playlists",
+    "feature_description": "Related playlists"
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/{streaming_platform}/{playlist_id}",
+    "feature_name": "Stats & Trends",
+    "feature_description": "Playlist performance metrics and growth trends"
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/{streaming_platform}/{playlist_id}",
+    "feature_name": "Tracks",
+    "feature_description": "Track listing and individual track performance"
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlists/youtube",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/youtube/{playlist_id}/about",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/youtube/{playlist_id}/artists",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "playlist",
+    "url_pattern": "/playlist/youtube/{playlist_id}/tracks",
+    "feature_name": null,
+    "feature_description": null
+  },
+  {
+    "entity_type": "pricing",
+    "url_pattern": "/pricing",
+    "feature_name": "Pricing & Subscription",
+    "feature_description": "View subscription plans and manage billing through Stripe."
+  },
+  {
+    "entity_type": "radio_stations",
+    "url_pattern": "/radio-station?id={radio_station_id}",
+    "feature_name": "Chart Summaries",
+    "feature_description": "Summary of chart performance for this station"
+  },
+  {
+    "entity_type": "radio_stations",
+    "url_pattern": "/radio-station?id={radio_station_id}",
+    "feature_name": "Top 100 Artists by Spins",
+    "feature_description": "List of top 100 artists by spins for this station"
+  },
+  {
+    "entity_type": "radio_stations",
+    "url_pattern": "/radio-station?id={radio_station_id}",
+    "feature_name": "Top 100 Tracks by Spins",
+    "feature_description": "List of top 100 tracks by spins for this station"
+  },
+  {
+    "entity_type": "radio_stations",
+    "url_pattern": "/radio-station?id={radio_station_id}",
+    "feature_name": "Tracks By Date",
+    "feature_description": "List of tracks by date for this station"
+  },
+  {
+    "entity_type": "radio_stations",
+    "url_pattern": "/radio-stations?view=terrestrial",
+    "feature_name": "Full Page",
+    "feature_description": "Browse and search all radio stations"
+  },
+  {
+    "entity_type": "reports_center",
+    "url_pattern": "/reports/custom-alerts",
+    "feature_name": "Add New Alert",
+    "feature_description": "Add a New Custom Alert"
+  },
+  {
+    "entity_type": "reports_center",
+    "url_pattern": "/reports/custom-alerts",
+    "feature_name": "Custom Alerts List",
+    "feature_description": "List User's all Custom Alerts"
+  },
+  {
+    "entity_type": "reports_center",
+    "url_pattern": "/reports/instant",
+    "feature_name": "Instant Reports",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "reports_center",
+    "url_pattern": "/reports/noteworthy-insights",
+    "feature_name": "Noteworthy Insights",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "reports_center",
+    "url_pattern": "/reports/overview",
+    "feature_name": "Full Page",
+    "feature_description": "Overview of available reports and analytics tools"
+  },
+  {
+    "entity_type": "reports_center",
+    "url_pattern": "/reports/playlist",
+    "feature_name": "Full Page",
+    "feature_description": "Playlist monitoring and performance tracking"
+  },
+  {
+    "entity_type": "reports_center",
+    "url_pattern": "/reports/preset",
+    "feature_name": "Full Page",
+    "feature_description": "Monitoring of preset performance across platforms"
+  },
+  {
+    "entity_type": "search",
+    "url_pattern": "/search",
+    "feature_name": "Global Search (Cmd+K)",
+    "feature_description": "Universal search across artists, shortlists, and semantic tags."
+  },
+  {
+    "entity_type": "search",
+    "url_pattern": "/search",
+    "feature_name": "Search & Follow",
+    "feature_description": "Search for artists by name and follow/unfollow them."
+  },
+  {
+    "entity_type": "search",
+    "url_pattern": "/search",
+    "feature_name": "Semantic Tag Search",
+    "feature_description": "Search artist tags using natural language with vector-similarity matching."
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings",
+    "feature_name": "Organization Management",
+    "feature_description": "Create and manage organizations with team structures and member roles."
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings",
+    "feature_name": "User Settings",
+    "feature_description": "Manage personal settings including display and notification preferences."
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#account",
+    "feature_name": "2-Factor Authentication",
+    "feature_description": "Provides options to select 2FA delivery method (Email or SMS) for identity verification"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#account",
+    "feature_name": "Account Information",
+    "feature_description": "Displays and allows editing of user name, profile photo, and role information"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#account",
+    "feature_name": "Company Logo",
+    "feature_description": "Enables users to upload and display their organization's logo"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#account",
+    "feature_name": "Login Email",
+    "feature_description": "Displays and allows editing of the user's account login email address"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#account",
+    "feature_name": "Password",
+    "feature_description": "Allows users to reset their password via email (disabled for SSO users)"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#account",
+    "feature_name": "Phone Number",
+    "feature_description": "Enables users to add or edit their phone number with SMS verification for account recovery"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#api",
+    "feature_name": "API Documentation",
+    "feature_description": "Provides links to API reference documentation and integration guides"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#api",
+    "feature_name": "API Usage Over Time",
+    "feature_description": "Visualizes API call volume trends over time with monthly/yearly toggle and success/error breakdown"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#api",
+    "feature_name": "Current Plan",
+    "feature_description": "Shows the active API subscription tier, refresh token, and rate limits (RPS/RPM)"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#api",
+    "feature_name": "Pricing Plan",
+    "feature_description": "Displays API pricing information including fixed-fee or usage-based billing options with spend totals"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#api",
+    "feature_name": "Recent API Requests",
+    "feature_description": "Displays recent API requests with endpoint, status code, datetime, and success/error filter"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#api",
+    "feature_name": "Top Endpoints",
+    "feature_description": "Lists the top 5 most frequently called API endpoints with call counts and percentage of total usage"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#api",
+    "feature_name": "Total API Calls",
+    "feature_description": "Displays cumulative API request counts with success/failure breakdown for current, previous, or all-time periods"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#billing",
+    "feature_name": "Group Members Allowed",
+    "feature_description": "Shows the number of team member seats included in the subscription plan with link to manage group"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#billing",
+    "feature_name": "Payment Info",
+    "feature_description": "Displays saved payment card details and allows updating the payment method"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#billing",
+    "feature_name": "Payments & Invoices",
+    "feature_description": "Provides access to invoice history with downloadable receipts and payment records"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#billing",
+    "feature_name": "Subscription Period",
+    "feature_description": "Shows the billing frequency (monthly or yearly) with option to switch billing cycles"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#billing",
+    "feature_name": "Trial Coupon",
+    "feature_description": "Enables users to apply promotional coupon codes for subscription discounts"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#billing",
+    "feature_name": "Update Billing Name, Address and Tax ID",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#billing",
+    "feature_name": "Usage Activity",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#billing",
+    "feature_name": "Your Billing Group Members",
+    "feature_description": ""
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#billing",
+    "feature_name": "Your details",
+    "feature_description": "Shows billing organization details stored in Stripe including name and address"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#billing",
+    "feature_name": "Your Subscription Plan",
+    "feature_description": "Displays the user's current subscription tier (Free, Artist, Manager, Premium) and allows users to change their subscription plan tier through the pricing modal"
+  },
+  {
+    "entity_type": "settings",
+    "url_pattern": "/settings#claims",
+    "feature_name": "Claim Requests",
+    "feature_description": "Shows user's artist claim requests with target name, status, and request details"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/:id",
+    "feature_name": "Shortlist Management",
+    "feature_description": "Create and manage custom curated lists of artists and tracks."
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/:id",
+    "feature_name": "Shortlists v2",
+    "feature_description": "Enhanced shortlist management with collaborators, batch items, and cross-vertical support."
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlists",
+    "feature_name": "Full Page",
+    "feature_description": "List User's All Shortlists"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Artist Country Distribution",
+    "feature_description": "Displays pie chart showing distribution of countries across artists in the shortlist"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Artist Genre Distribution",
+    "feature_description": "Displays pie chart showing distribution of genres across artists in the shortlist"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Combined Artist Audience By Location",
+    "feature_description": "Total audience metrics by location across 10 selected artists"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Compare Shortlist Artists",
+    "feature_description": "Compares up to 3 shortlist artists side-by-side with radar chart visualization across customizable metrics"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Instagram Performance",
+    "feature_description": "Shows aggregated Instagram metrics for shortlist artists including followers and engagement rate with total/weekly change toggle"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Instagram/TikTok/YouTube/Chartmetric Audience Demographics",
+    "feature_description": "The age and gender breakdown of the biggest audiences overall and broken out by platform"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Recommended Artists",
+    "feature_description": "Suggests similar artists based on genre and country of artists in the shortlist"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Shortlist Artists",
+    "feature_description": "List of artists in the shortlist"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Shortlist Banner",
+    "feature_description": "Displays the shortlist header with name, description, entity count, and quick action buttons for editing, sharing, and downloading"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Shortlist Management",
+    "feature_description": "Displays shortlist info, quick actions, edit button, and share options for managing the shortlist"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Spotify Performance",
+    "feature_description": "Shows aggregated Spotify metrics for shortlist artists including monthly listeners, followers, popularity, and playlist reach with total/weekly change toggle"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "Top Metric Movements",
+    "feature_description": "Top metric movements of artists in the shortlist"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/shortlist/{shortlist_id}",
+    "feature_name": "YouTube Performance",
+    "feature_description": "Shows aggregated YouTube metrics for shortlist artists including subscribers, views, and playlist count with total/weekly change toggle"
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/s/shortlist/:id",
+    "feature_name": "Sports Athlete Insights",
+    "feature_description": "View social metrics and insights for athletes including cross-platform performance."
+  },
+  {
+    "entity_type": "shortlist",
+    "url_pattern": "/s/shortlist/:id",
+    "feature_name": "Sports Shortlists",
+    "feature_description": "Create and manage curated lists of athletes and sports profiles with enriched stats."
+  },
+  {
+    "entity_type": "siriusxm_stations",
+    "url_pattern": "/radio-stations?view=siriusxm",
+    "feature_name": "Full Page",
+    "feature_description": "Browse and search all SiriusXM stations"
+  },
+  {
+    "entity_type": "siriusxm_stations",
+    "url_pattern": "/siriusxm-station?id={siriusxm_station_id}",
+    "feature_name": "Chart Summaries",
+    "feature_description": "Summary of chart performance for this station"
+  },
+  {
+    "entity_type": "siriusxm_stations",
+    "url_pattern": "/siriusxm-station?id={siriusxm_station_id}",
+    "feature_name": "Top 100 Artists by Spins",
+    "feature_description": "List of top 100 artists by spins for this station"
+  },
+  {
+    "entity_type": "siriusxm_stations",
+    "url_pattern": "/siriusxm-station?id={siriusxm_station_id}",
+    "feature_name": "Top 100 Tracks by Spins",
+    "feature_description": "List of top 100 tracks by spins for this station"
+  },
+  {
+    "entity_type": "siriusxm_stations",
+    "url_pattern": "/siriusxm-station?id={siriusxm_station_id}",
+    "feature_name": "Tracks By Date",
+    "feature_description": "List of tracks by date for this station"
+  },
+  {
+    "entity_type": "social",
+    "url_pattern": "/socials",
+    "feature_name": "Socials",
+    "feature_description": "View and analyze social media presence across platforms."
+  },
+  {
+    "entity_type": "songwriter",
+    "url_pattern": "/songwriters",
+    "feature_name": "Filter by Genre",
+    "feature_description": "Filters songwriter list by selected music genres"
+  },
+  {
+    "entity_type": "songwriter",
+    "url_pattern": "/songwriters",
+    "feature_name": "Filter by Publisher",
+    "feature_description": "Filters songwriter list by selected US music publishers"
+  },
+  {
+    "entity_type": "songwriter",
+    "url_pattern": "/songwriters",
+    "feature_name": "Filter by Sub Genre",
+    "feature_description": "Filters songwriter list by selected sub-genres"
+  },
+  {
+    "entity_type": "songwriter",
+    "url_pattern": "/songwriters",
+    "feature_name": "Full Page",
+    "feature_description": "Browse and search all songwriters"
+  },
+  {
+    "entity_type": "songwriter",
+    "url_pattern": "/songwriter/{songwriter_id}",
+    "feature_name": "Catalog Navigator",
+    "feature_description": "Songwriter's catalog overview and navigation"
+  },
+  {
+    "entity_type": "songwriter",
+    "url_pattern": "/songwriter/{songwriter_id}",
+    "feature_name": "Industry Network Connections",
+    "feature_description": "Songwriter's top connections in the industry"
+  },
+  {
+    "entity_type": "songwriter",
+    "url_pattern": "/songwriter/{songwriter_id}",
+    "feature_name": "Platform & Chart",
+    "feature_description": "Displays chart appearances for songwriter's tracks across multiple platforms with platform filter"
+  },
+  {
+    "entity_type": "songwriter",
+    "url_pattern": "/songwriter/{songwriter_id}",
+    "feature_name": "Songwriter Performance Indicators",
+    "feature_description": "Overview of songwriter's performance indicators"
+  },
+  {
+    "entity_type": "songwriter",
+    "url_pattern": "/songwriter/{songwriter_id}",
+    "feature_name": "Spotify Playlist Tracks",
+    "feature_description": "Shows Spotify playlists containing songwriter's tracks with follower count bucket and country filters"
+  },
+  {
+    "entity_type": "songwriter",
+    "url_pattern": "/songwriter/{songwriter_id}",
+    "feature_name": "YouTube Videos",
+    "feature_description": "Displays paginated table of YouTube videos featuring songwriter's tracks with views, likes, and video details"
+  },
+  {
+    "entity_type": "sound",
+    "url_pattern": "/trendingsounds",
+    "feature_name": "Trending Sounds Browser",
+    "feature_description": "Browse trending TikTok sounds with usage stats and trend trajectories."
+  },
+  {
+    "entity_type": "sound",
+    "url_pattern": "/trendingsounds",
+    "feature_name": "Trending Sounds Pipeline",
+    "feature_description": "Monitor and trigger the trending sounds data ingestion pipeline."
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/tracks",
+    "feature_name": "Full Page",
+    "feature_description": "Browse and search all tracks by Chartmetric score over last 7 or 28 days"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/about",
+    "feature_name": "About Track",
+    "feature_description": "Displays track metadata including artists, genres, release date, duration, ISRC, BPM, record label, and related ISRCs"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/about",
+    "feature_name": "Current Spotify Playlist Positions",
+    "feature_description": "Visualizes track positions across Spotify playlists in position buckets (1-5, 6-10, etc.) with clickable bars to view playlists in each range"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/about",
+    "feature_name": "Playlist Count",
+    "feature_description": "Shows editorial and total playlist counts across Spotify, Apple Music, Deezer, Amazon, and YouTube platforms"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/about",
+    "feature_name": "Summary Statistics",
+    "feature_description": "Shows current stats across platforms including Chartmetric score, Spotify streams/popularity, TikTok posts/views, YouTube views/likes, Shazam counts, and more"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/about",
+    "feature_name": "Track Banner",
+    "feature_description": "Displays track name, explicit tag, play preview button, and follow button with artist links and genre/mood tags"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/about",
+    "feature_name": "Track Snapshot",
+    "feature_description": "Shows two career metrics: Track Stage (Developing to Legendary) and Recent Momentum (Decline to Explosive Growth) with clickable modals for detailed breakdowns"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/airplay/radio",
+    "feature_name": "Summary Stats",
+    "feature_description": "Radio and streaming platform airplay data"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/airplay/radio",
+    "feature_name": "Top Countries by Plays",
+    "feature_description": "Ranking of most-played countries on radio"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/airplay/radio",
+    "feature_name": "Total Plays by (Station/Countries/Cities)",
+    "feature_description": "Cumulative radio spins across all stations"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/airplay/siriusxm",
+    "feature_name": "SiriusXM Summary Stats",
+    "feature_description": "Overall SiriusXM airplay summary for artist"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/airplay/siriusxm",
+    "feature_name": "Top Tracks by Plays",
+    "feature_description": "top tracks by plays on siriusxm"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/airplay/siriusxm",
+    "feature_name": "Total Plays by Station",
+    "feature_description": "total plays by station on siriusxm"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/albums",
+    "feature_name": "Albums",
+    "feature_description": "Lists all albums containing this track with release date, record label, UPC, and popularity sortable columns"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/charts",
+    "feature_name": "Chart Insights",
+    "feature_description": "Shows chart performance insights with peak positions, chart entries, and historical chart data across multiple platforms"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/charts",
+    "feature_name": "Platform & Chart",
+    "feature_description": "Displays filterable table of all chart appearances with platform toggle, position history, and chart details"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/charts",
+    "feature_name": "Top Chart Positions",
+    "feature_description": "Displays chart highlights showing top positions achieved across Spotify, TikTok, Apple Music, Deezer, YouTube, Amazon, Beatport, Shazam, and iTunes charts"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/comparables",
+    "feature_name": "In-Depth Track Comparison",
+    "feature_description": "Compares two tracks side-by-side with radar chart visualization across customizable metrics like Spotify streams, TikTok posts, YouTube views"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/comparables",
+    "feature_name": "Similar Track Clusters",
+    "feature_description": "Visualizes similar tracks in a cluster diagram based on genre overlap and audience demographics (age, gender, race, language)"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/comparables",
+    "feature_name": "Similar Tracks Segmented by (Career Stage/Recent Momentum)",
+    "feature_description": "Shows similar tracks grouped by Career Stage (Developing to Legendary) or Recent Momentum (Decline to Explosive Growth) with genre and country filters"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/milestones",
+    "feature_name": "All Milestones",
+    "feature_description": "Displays all track milestones including chart entries, playlist adds, streaming thresholds reached, and TikTok video features with date filters"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/playlists/amazon",
+    "feature_name": "Amazon Music Playlist Evolution",
+    "feature_description": "Shows playlist count and reach trends over time for Amazon Music with date range selector and event flags overlay"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/playlists/amazon",
+    "feature_name": "Amazon Music Playlists",
+    "feature_description": "Displays Amazon Music playlists containing this track with position, followers, date added, days in list, and curator information"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/playlists/apple-music",
+    "feature_name": "Apple Music Playlist Evolution",
+    "feature_description": "Shows playlist count and reach trends over time for Apple Music with date range selector and event flags overlay"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/playlists/apple-music",
+    "feature_name": "Apple Music Playlists",
+    "feature_description": "Displays Apple Music playlists containing this track with position, followers, date added, days in list, and curator information"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/playlists/deezer",
+    "feature_name": "Deezer Playlist Evolution",
+    "feature_description": "Shows playlist count and reach trends over time for Deezer with date range selector and event flags overlay"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/playlists/deezer",
+    "feature_name": "Deezer Playlists",
+    "feature_description": "Displays Deezer playlists containing this track with position, followers, date added, days in list, and curator information"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/playlists/soundcloud",
+    "feature_name": "SoundCloud Playlist Evolution",
+    "feature_description": "Shows playlist count and reach trends over time for SoundCloud with date range selector"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/playlists/soundcloud",
+    "feature_name": "SoundCloud Playlists",
+    "feature_description": "Displays SoundCloud playlists containing this track with position, followers, date added, days in list, and curator information"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/playlists/spotify",
+    "feature_name": "Spotify Playlist Evolution",
+    "feature_description": "Shows playlist count and reach trends over time for Spotify with date range selector, event flags overlay, and clickable data points for playlist details"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/playlists/spotify",
+    "feature_name": "Spotify Playlists",
+    "feature_description": "Displays Spotify playlists containing this track with position, followers, date added, days in list, playlist type filter, and curator information"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/playlists/youtube",
+    "feature_name": "YouTube Music Playlists",
+    "feature_description": "Displays YouTube Music playlists containing this track with position, views, date added, and days in list"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/social-stats",
+    "feature_name": "Overall Trends",
+    "feature_description": "Chartmetric trends for track"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/social-stats",
+    "feature_name": "Trends",
+    "feature_description": "Trends across various platforms for track"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/social-stats",
+    "feature_name": "Versions",
+    "feature_description": "Track clusters across various platforms for track"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/syncs",
+    "feature_name": "Tunefind",
+    "feature_description": "Shows TV shows, movies, and video games where this track has been featured with air date, season, episode, and media type filter from Tunefind data"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/tiktok",
+    "feature_name": "Summary Stats - All TikTok Sounds",
+    "feature_description": "Shows total video count, average views, average likes, average comments, and average engagement rate across all TikTok sounds for this track"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/tiktok",
+    "feature_name": "TikTok Videos with this Track's Sounds",
+    "feature_description": "Shows stacked area chart of TikTok video posts over time with date range selector and CSV export"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/tiktok",
+    "feature_name": "Top Influencer's Countries",
+    "feature_description": "Shows top countries where TikTok influencers are posting videos featuring this track based on the most recent 100,000 videos"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/tiktok",
+    "feature_name": "Top Sounds",
+    "feature_description": "Lists all TikTok sound IDs associated with this track with video counts, top video views, first post date, and video trend sparklines"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/tiktok",
+    "feature_name": "Top User Generated Videos",
+    "feature_description": "Displays top 10 TikTok videos featuring this track sortable by most liked, most viewed, most commented, trending, or first posted"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/tiktok",
+    "feature_name": "Top Videos",
+    "feature_description": "Displays paginated table of top TikTok videos with influencer, views, likes, comments, posted date, and 7/28-day change metrics"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/ugc",
+    "feature_name": "Summary Stats - All TikTok Sounds",
+    "feature_description": "Overview stats of user-generated content featuring this track on TikTok"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/ugc",
+    "feature_name": "Summary Stats - All YouTube Shorts Sounds",
+    "feature_description": "Shows total video count, average views, average likes, average comments, and average engagement rate across all YouTube Shorts sounds for this track"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/ugc",
+    "feature_name": "TikTok Videos with this Track's Sounds",
+    "feature_description": "Number of TikTok videos using this track's sounds"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/ugc",
+    "feature_name": "Top Influencer's Countries",
+    "feature_description": "List of top countries for influencers using this track on TikTok"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/ugc",
+    "feature_name": "Top Sounds",
+    "feature_description": "List of top sounds used in user-generated content featuring this track on TikTok"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/ugc",
+    "feature_name": "Top User Generated Shorts",
+    "feature_description": "Displays top YouTube Shorts videos featuring this track sortable by most liked, most viewed, most commented, trending, or first posted"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/ugc",
+    "feature_name": "Top User Generated Videos",
+    "feature_description": "List of top user-generated videos featuring this track on TikTok"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/ugc",
+    "feature_name": "Top Videos",
+    "feature_description": "List of top videos featuring this track on TikTok"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/ugc",
+    "feature_name": "Top Videos",
+    "feature_description": "Displays paginated table of top YouTube Shorts videos with views, likes, comments, posted date, and change metrics"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/ugc",
+    "feature_name": "YouTube Shorts Videos with this Track's Sounds",
+    "feature_description": "Shows stacked area chart of YouTube Shorts video posts over time with date range selector and CSV export"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/youtube",
+    "feature_name": "Summary Stats - All YouTube Shorts Sounds",
+    "feature_description": "Shows total video count, average views, average likes, average comments, and average engagement rate across all YouTube Shorts sounds for this track"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/youtube",
+    "feature_name": "Top Comments",
+    "feature_description": "Shows YouTube comment sentiment analysis with positive/neutral/negative breakdown, keyword occurrences, and top comments with likes and sentiment scores"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/youtube",
+    "feature_name": "Top User Generated Shorts",
+    "feature_description": "Displays top YouTube Shorts videos featuring this track sortable by most liked, most viewed, most commented, trending, or first posted"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/youtube",
+    "feature_name": "Top Videos",
+    "feature_description": "Displays paginated table of top YouTube Shorts videos with views, likes, comments, posted date, and change metrics"
+  },
+  {
+    "entity_type": "track",
+    "url_pattern": "/track/{track_id}/youtube",
+    "feature_name": "YouTube Shorts Videos with this Track's Sounds",
+    "feature_description": "Shows stacked area chart of YouTube Shorts video posts over time with date range selector and CSV export"
+  },
+  {
+    "entity_type": "video",
+    "url_pattern": "/video",
+    "feature_name": null,
+    "feature_description": null
+  }
+]
