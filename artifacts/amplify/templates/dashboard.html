@@ -1348,6 +1348,9 @@
             padding: 20px; cursor: pointer; transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s, background-color 0.2s;
         }
         .use-case-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 20px var(--shadow); }
+        .use-case-card { position: relative; }
+        .use-case-card.is-recommended { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+        .use-case-card-badge { position: absolute; top: 10px; right: 10px; background: var(--accent); color: #062017; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
         .use-case-card-icon { font-size: 28px; margin-bottom: 8px; }
         .use-case-card-name { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
         .use-case-card-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.4; }
@@ -8496,9 +8499,9 @@ function exitContentView() {
 }
 
 var USE_CASES = [
+    { key: 'email_standalone', icon: '\uD83D\uDCE8', name: 'Standalone Email', desc: 'Dedicated product update email (Short / Medium / Long)', recommended: true },
     { key: 'notion_monthly', icon: '\uD83D\uDCCB', name: 'All Hands / Monthly Meeting', desc: 'Feature summaries for your monthly product meeting notes' },
     { key: 'email_newsletter', icon: '\uD83D\uDCE7', name: 'Newsletter', desc: 'Product update blocks for the Chartmetric newsletter' },
-    { key: 'email_standalone', icon: '\uD83D\uDCE8', name: 'Standalone Email', desc: 'Dedicated product update email (Short / Medium / Long)' },
     { key: 'twitter', icon: '\uD83D\uDC26', name: 'Twitter / X Thread', desc: 'Short-form social posts for X' },
     { key: 'linkedin', icon: '\uD83D\uDCBC', name: 'LinkedIn Post', desc: 'Professional thought-leadership posts for LinkedIn' },
     { key: 'inapp', icon: '\uD83D\uDCF1', name: 'In-App Announcements', desc: 'Product announcements inside Chartmetric' },
@@ -8827,7 +8830,9 @@ function renderUseCaseGrid() {
         return f.classification && f.classification.importance_score >= 3;
     }).length;
     grid.innerHTML = USE_CASES.map(function(uc) {
-        return '<div class="use-case-card" onclick="selectUseCase(\'' + uc.key + '\')">' +
+        var badge = uc.recommended ? '<span class="use-case-card-badge">Recommended</span>' : '';
+        return '<div class="use-case-card' + (uc.recommended ? ' is-recommended' : '') + '" onclick="selectUseCase(\'' + uc.key + '\')">' +
+            badge +
             '<div class="use-case-card-icon">' + uc.icon + '</div>' +
             '<div class="use-case-card-name">' + escHtml(uc.name) + '</div>' +
             '<div class="use-case-card-desc">' + escHtml(uc.desc) + '</div>' +
