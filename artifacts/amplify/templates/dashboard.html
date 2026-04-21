@@ -1440,6 +1440,8 @@
         }
         .batch-item-drag { color: var(--text-faint); font-size: 16px; cursor: grab; user-select: none; }
         .batch-item-title { font-size: 14px; font-weight: 600; color: var(--text-body); flex: 1; }
+        .batch-item-title-link { color: var(--accent); text-decoration: none; }
+        .batch-item-title-link:hover { text-decoration: underline; }
         .batch-item-cats {
             position: relative; display: inline-flex; align-items: center; gap: 4px;
             cursor: pointer; padding: 2px 4px; border-radius: 6px;
@@ -9358,10 +9360,14 @@ function buildBatchItem(r, idx) {
     var batchScoreTitle = batchScoreDisabled ? 'title="Score cannot be edited \u2014 feature id not available"' : 'title="Click to change importance score"';
     var batchScoreHtml = renderBatchScoreBadge(batchFid, r);
 
+    var batchTitleLink = (typeof getPersistedFeatureLink === 'function') ? getPersistedFeatureLink(batchFid) : '';
+    var batchTitleHtml = batchTitleLink
+        ? '<a class="batch-item-title batch-item-title-link" href="' + escAttr(batchTitleLink) + '" target="_blank" rel="noopener noreferrer" title="Open feature URL" onclick="event.stopPropagation();">' + escHtml(r.feature_title || '') + ' \u2197</a>'
+        : '<span class="batch-item-title">' + escHtml(r.feature_title || '') + '</span>';
     item.innerHTML =
         '<div class="batch-item-header">' +
             '<span class="batch-item-drag">\u2261</span>' +
-            '<span class="batch-item-title">' + escHtml(r.feature_title || '') + '</span>' +
+            batchTitleHtml +
             '<span class="batch-item-score' + (batchScoreDisabled ? ' disabled' : '') + '" id="batch-score-' + idx + '" data-fid="' + escAttr(batchFid) + '" ' + batchScoreTitle + '>' + batchScoreHtml + '</span>' +
             '<span class="batch-item-cats' + (batchCatsDisabled ? ' disabled' : '') + '" id="batch-cats-' + idx + '" data-fid="' + escAttr(batchFid) + '" ' + batchCatsTitle + '>' + batchCatsHtml + '</span>' +
             '<span class="char-count-badge ' + charClass + '" id="batch-char-' + idx + '">' + content.length + '/' + maxChars + '</span>' +
