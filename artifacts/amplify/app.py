@@ -2128,6 +2128,69 @@ def publish_inapp():
     return jsonify(result), status_code
 
 
+@app.route("/api/publish/notion", methods=["POST"])
+def publish_notion_endpoint():
+    """Publish content to Notion (Marketing Newsletter or All Hands page).
+
+    Request body:
+        {
+            "channel": "email_newsletter" | "notion_monthly",
+            "content": "...",
+            "feature_id": "...",
+            "feature_title": "...",
+            "feature_url": "https://app.chartmetric.com/..."  // optional
+        }
+    """
+    from integrations.notion_client import publish_to_notion
+    import time as _time
+    _t0 = _time.time()
+
+    data = request.get_json() or {}
+    channel = (data.get("channel") or "").strip()
+    content = (data.get("content") or "").strip()
+    feature_id = data.get("feature_id", "")
+    feature_title = data.get("feature_title", "")
+    feature_url = data.get("feature_url") or None
+
+    logger.info(
+        f"[publish/notion] REQ channel={channel!r} feature_id={feature_id!r} "
+        f"feature_title_len={len(feature_title or '')} content_len={len(content)}"
+    )
+    if not channel or channel not in ("email_newsletter", "notion_monthly"):
+        return jsonify({"success": False, "error": f"Unsupported channel: {channel!r}"}), 400
+    if not content:
+        logger.warning("[publish/notion] REJECT empty content")
+        return jsonify({"success": False, "error": "content is required"}), 400
+
+    try:
+        result = publish_to_notion(
+            content=content,
+            channel=channel,
+            feature_title=feature_title,
+            feature_url=feature_url,
+        )
+    except Exception as _e:
+        logger.exception(f"[publish/notion] UNCAUGHT exception: type={type(_e).__name__} repr={_e!r}")
+        return jsonify({"success": False, "error": f"Server error: {type(_e).__name__}: {_e}"}), 500
+
+    if result.get("success") and feature_id:
+        mark_published(feature_id, channel, page_url=result.get("page_url"))
+
+    status_code = 200 if result.get("success") else 500
+    _dt = (_time.time() - _t0) * 1000
+    if result.get("success"):
+        logger.info(
+            f"[publish/notion] OK channel={channel!r} dest={result.get('destination')!r} "
+            f"page_id={result.get('page_id')!r} blocks={result.get('block_count')} dt={_dt:.0f}ms"
+        )
+    else:
+        logger.error(
+            f"[publish/notion] FAIL channel={channel!r} status={status_code} "
+            f"error={result.get('error')!r} dt={_dt:.0f}ms"
+        )
+    return jsonify(result), status_code
+
+
 @app.route("/api/announcements", methods=["GET"])
 def get_announcements_endpoint():
     from integrations.inapp_client import get_announcements

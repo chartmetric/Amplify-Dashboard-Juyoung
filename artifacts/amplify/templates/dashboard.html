@@ -7716,8 +7716,11 @@ function removeBatchImage(idx) {
 var PUBLISHABLE_CHANNELS = {
     twitter: '/api/publish/twitter',
     email_standalone: '/api/publish/email',
-    inapp: '/api/publish/inapp'
+    inapp: '/api/publish/inapp',
+    email_newsletter: '/api/publish/notion',
+    notion_monthly: '/api/publish/notion'
 };
+var NOTION_CHANNELS = { email_newsletter: true, notion_monthly: true };
 var publishingInFlight = {};
 
 function updateChannelStatus(chKey) {
@@ -7758,7 +7761,9 @@ function updateChannelStatus(chKey) {
                 var ddWrapper = document.createElement('div');
                 ddWrapper.className = 'custom-dropdown publish-dropdown publish-post-preview-dd';
                 ddWrapper.id = ddId;
-                if (isEmailCh) {
+                if (NOTION_CHANNELS[chKey]) {
+                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="publishToChannel(\'' + chKey + '\')" type="button"><span class="dd-label">Republish to Notion &#x1F4DD;</span></button>';
+                } else if (isEmailCh) {
                     ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">Resend or Preview</span><span class="dd-arrow">&#9650;</span></button>' +
                         '<div class="custom-dropdown-menu">' +
                         '<div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Resend Email &#x1F4E7;</div>' +
@@ -7834,8 +7839,12 @@ function updateChannelStatus(chKey) {
                 var ddWrapper = document.createElement('div');
                 ddWrapper.className = 'custom-dropdown publish-dropdown publish-post-preview-dd';
                 ddWrapper.id = ddId;
-                var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
-                if (isEmail) {
+                var isEmail = (chKey === 'email_standalone');
+                if (NOTION_CHANNELS[chKey]) {
+                    var prevPubbed = contentViewPublished[chKey];
+                    var notionLabel = prevPubbed ? 'Republish to Notion' : 'Publish to Notion';
+                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="publishToChannel(\'' + chKey + '\')" type="button"><span class="dd-label">' + notionLabel + ' &#x1F4DD;</span></button>';
+                } else if (isEmail) {
                     var prevPubbed = contentViewPublished[chKey];
                     var toggleLabel = prevPubbed ? 'Resend or Preview' : 'Send or Preview';
                     ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">' + toggleLabel + '</span><span class="dd-arrow">&#9650;</span></button>' +
@@ -8164,11 +8173,19 @@ function doPublishToChannel(chKey) {
     }
 
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
-    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+    var isEmail = (chKey === 'email_standalone');
     var isInapp = (chKey === 'inapp');
+    var isNotionCh = !!NOTION_CHANNELS[chKey];
     var payload = { content: content, feature_id: fid };
 
-    if (isEmail) {
+    if (isNotionCh) {
+        payload.channel = chKey;
+        payload.feature_title = contentViewFeature ? (contentViewFeature.title || '') : '';
+        var _featLink = (typeof contentViewFeatureLink !== 'undefined' && contentViewFeatureLink)
+            ? contentViewFeatureLink
+            : ((typeof getPersistedFeatureLink === 'function' && fid) ? getPersistedFeatureLink(fid) : '');
+        if (_featLink) payload.feature_url = _featLink;
+    } else if (isEmail) {
         payload.channel = chKey;
         var subjectInput = document.getElementById('subject-' + chKey);
         var subjectVal = subjectInput ? subjectInput.value.trim() : '';
@@ -8438,10 +8455,16 @@ function publishToChannel(chKey, skipConfirm) {
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to publish', 'error'); return; }
 
-    var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+    var isEmail = (chKey === 'email_standalone');
+    var isNotionCh = !!NOTION_CHANNELS[chKey];
 
     if (skipConfirm) {
         doPublishToChannel(chKey);
+    } else if (isNotionCh) {
+        var destLabel = (chKey === 'email_newsletter') ? 'the current month\'s Marketing Newsletter page' : 'the All Hands page';
+        showPublishConfirm('Publish this draft to ' + destLabel + ' in Notion? It will be appended as new blocks.', function() {
+            doPublishToChannel(chKey);
+        }, { title: 'Publish to Notion', icon: '\uD83D\uDCDD', confirmText: 'Yes, publish it' });
     } else if (isEmail) {
         var audSel = document.getElementById('audience-' + chKey);
         var audId = audSel ? audSel.value : '';
@@ -8486,12 +8509,14 @@ function publishAllApproved() {
     if (allKeys.length === 0) { showToast('No unpublished approved channels', 'warning'); return; }
 
     var twitterKeys = publishableKeys.filter(function(k) { return k === 'twitter'; });
-    var emailKeys = publishableKeys.filter(function(k) { return k === 'email_newsletter' || k === 'email_standalone'; });
+    var emailKeys = publishableKeys.filter(function(k) { return k === 'email_standalone'; });
     var inappKeys = publishableKeys.filter(function(k) { return k === 'inapp'; });
+    var notionKeys = publishableKeys.filter(function(k) { return !!NOTION_CHANNELS[k]; });
     var parts = [];
     if (twitterKeys.length > 0) parts.push('post ' + twitterKeys.length + ' to X');
     if (emailKeys.length > 0) parts.push('send ' + emailKeys.length + ' email(s)');
     if (inappKeys.length > 0) parts.push('publish ' + inappKeys.length + ' in-app');
+    if (notionKeys.length > 0) parts.push('publish ' + notionKeys.length + ' to Notion');
     if (nonPublishable.length > 0) parts.push('copy ' + nonPublishable.length + ' to clipboard');
     var msg = 'Publish all ' + allKeys.length + ' approved channel(s)? This will ' + parts.join(', ') + '.';
 
@@ -8541,10 +8566,19 @@ function publishAllApproved() {
                 var content = ta ? ta.value : '';
                 if (!content) { results[chKey] = { status: 'failed', error: 'No content' }; pending--; if (pending <= 0) showPublishSummary(results); return; }
 
-                var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+                var isEmail = (chKey === 'email_standalone');
                 var isInapp = (chKey === 'inapp');
+                var isNotionCh = !!NOTION_CHANNELS[chKey];
                 var payload = { content: content, feature_id: fid };
-                if (isEmail) { payload.channel = chKey; payload.is_test = true; var si = document.getElementById('subject-' + chKey); var sv = si ? si.value.trim() : ''; if (sv) payload.subject = sv; var imgMap = contentViewImageMap[chKey]; if (imgMap && Object.keys(imgMap).length > 0) payload.images = imgMap; }
+                if (isNotionCh) {
+                    payload.channel = chKey;
+                    payload.feature_title = contentViewFeature ? (contentViewFeature.title || '') : '';
+                    var _featLink = (typeof contentViewFeatureLink !== 'undefined' && contentViewFeatureLink)
+                        ? contentViewFeatureLink
+                        : ((typeof getPersistedFeatureLink === 'function' && fid) ? getPersistedFeatureLink(fid) : '');
+                    if (_featLink) payload.feature_url = _featLink;
+                }
+                else if (isEmail) { payload.channel = chKey; payload.is_test = true; var si = document.getElementById('subject-' + chKey); var sv = si ? si.value.trim() : ''; if (sv) payload.subject = sv; var imgMap = contentViewImageMap[chKey]; if (imgMap && Object.keys(imgMap).length > 0) payload.images = imgMap; }
                 else if (isInapp) { payload.feature_title = contentViewFeature ? (contentViewFeature.title || '') : ''; payload.category = contentViewFeature ? (contentViewFeature.category || '') : ''; }
                 else { if (contentViewFeatureImage && contentViewImageInclude[chKey] && contentViewFeatureImage.dataUrl) payload.image = contentViewFeatureImage.dataUrl.split(',')[1]; }
 
