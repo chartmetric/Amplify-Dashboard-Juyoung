@@ -24,7 +24,7 @@ run = "bash run.sh"
 args = ["echo", "no-build"]
 
 [services.production.run]
-args = ["python", "-u", "bootstrap.py"]
+args = ["python", "-u", "artifacts/amplify/bootstrap.py"]
 
 [services.production.run.env]
 PORT = "5000"
