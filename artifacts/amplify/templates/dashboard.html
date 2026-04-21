@@ -7040,8 +7040,12 @@ function persistFeatureLink(fid, url) {
 
 function getPersistedFeatureLink(fid) {
     try {
-        return localStorage.getItem(_featureLinkKey(fid)) || null;
-    } catch(e) { return null; }
+        var saved = localStorage.getItem(_featureLinkKey(fid));
+        if (saved) return saved;
+    } catch(e) {}
+    var feat = findFeatureById(fid);
+    if (feat && feat.chartmetric_url) return feat.chartmetric_url;
+    return null;
 }
 
 function getEffectiveFeatureLink(fid) {

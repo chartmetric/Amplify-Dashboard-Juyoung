@@ -26,6 +26,24 @@ PROJECTS = {
 
 WORKSPACE_GID = "1198197264916217"
 
+CHARTMETRIC_URL_RE = re.compile(
+    r"https?://(?:app\.|www\.)?chartmetric\.com/[^\s)>\"'\]]+",
+    re.IGNORECASE,
+)
+
+
+def extract_chartmetric_url(text: str) -> str | None:
+    """Return the first https://app.chartmetric.com/... (or chartmetric.com) URL
+    found in the given text, or None. Strips trailing punctuation that often
+    sticks to URLs in prose (commas, periods, parentheses)."""
+    if not text:
+        return None
+    m = CHARTMETRIC_URL_RE.search(text)
+    if not m:
+        return None
+    url = m.group(0).rstrip(".,);:!?")
+    return url
+
 
 class AsanaSource(SourceAdapter):
     def __init__(self, project_gid: str):
@@ -79,13 +97,15 @@ class AsanaSource(SourceAdapter):
         if isinstance(assignee_obj, dict):
             assignee_name = assignee_obj.get("name")
 
+        notes = t.get("notes", "")
         return {
             "id": t.get("gid", ""),
             "title": t.get("name", ""),
-            "description": t.get("notes", ""),
+            "description": notes,
             "date": t.get("modified_at") or t.get("created_at", ""),
             "section": source_label,
             "assignee": assignee_name,
+            "chartmetric_url": extract_chartmetric_url(notes),
             **parsed_custom,
         }
 
@@ -192,6 +212,9 @@ class AsanaSource(SourceAdapter):
             feature["project_info"] = task_data["project_info"]
         if task_data.get("github_pr_urls"):
             feature["github_pr_urls"] = task_data["github_pr_urls"]
+
+        if task_data.get("chartmetric_url") and not feature.get("chartmetric_url"):
+            feature["chartmetric_url"] = task_data["chartmetric_url"]
 
         return feature
 
@@ -315,15 +338,24 @@ class AsanaSource(SourceAdapter):
         except Exception:
             pass
 
+        notes = t.get("notes", "")
+        chartmetric_url = extract_chartmetric_url(notes)
+        if not chartmetric_url:
+            for c in comments:
+                chartmetric_url = extract_chartmetric_url(c)
+                if chartmetric_url:
+                    break
+
         return {
             "gid": t.get("gid", ""),
-            "description": t.get("notes", ""),
+            "description": notes,
             "asana_url": t.get("permalink_url", ""),
             "assignee": assignee_name,
             "project_info": project_info,
             "subtasks": subtasks,
             "comments": comments,
             "github_pr_urls": github_pr_urls,
+            "chartmetric_url": chartmetric_url,
             **parsed_custom,
         }
 
