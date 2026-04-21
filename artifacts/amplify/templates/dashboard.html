@@ -5690,6 +5690,86 @@ function triggerFeatureImagePicker() {
     input.click();
 }
 
+function _normalizeImageUrl(raw) {
+    if (!raw) return '';
+    var url = String(raw).trim();
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    var m = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
+    if (m) return 'https://drive.google.com/uc?export=view&id=' + m[1];
+    var m2 = url.match(/drive\.google\.com\/open\?id=([A-Za-z0-9_-]+)/);
+    if (m2) return 'https://drive.google.com/uc?export=view&id=' + m2[1];
+    var m3 = url.match(/[?&]id=([A-Za-z0-9_-]+)/);
+    if (m3 && /drive\.google\.com/.test(url)) return 'https://drive.google.com/uc?export=view&id=' + m3[1];
+    if (/dropbox\.com\/.+\?dl=0/i.test(url)) return url.replace('?dl=0', '?raw=1');
+    return url;
+}
+
+function promptFeatureImageUrl() {
+    var raw = prompt('Paste a public image URL (Google Drive, Dropbox, or any direct image URL):', '');
+    if (raw === null) return;
+    var url = _normalizeImageUrl(raw);
+    if (!url) { showToast('No URL entered', 'warning'); return; }
+    var imgData = { name: url, dataUrl: url, url: url, isUrl: true, size: 0 };
+    contentViewFeatureImage = imgData;
+    if (typeof renderFeatureImagePreview === 'function') renderFeatureImagePreview();
+    if (typeof showImageToggles === 'function') showImageToggles();
+    var allChKeys = Object.keys(contentViewChannels || {});
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    for (var ci = 0; ci < allChKeys.length; ci++) {
+        var chk = allChKeys[ci];
+        if (typeof contentViewImageInclude !== 'undefined') contentViewImageInclude[chk] = true;
+        if (typeof addImageMarkerToChannel === 'function') addImageMarkerToChannel(chk);
+        if (!window.contentViewImageMap) window.contentViewImageMap = {};
+        if (!contentViewImageMap[chk]) contentViewImageMap[chk] = {};
+        contentViewImageMap[chk][imgData.name] = imgData.dataUrl;
+        if (fid && typeof persistImageInclude === 'function') persistImageInclude(fid, chk, true);
+        if (typeof autoSaveDraft === 'function') autoSaveDraft(chk);
+    }
+    if (typeof updateChannelMediaPickers === 'function') updateChannelMediaPickers();
+    if (fid) {
+        if (typeof persistFeatureImage === 'function') persistFeatureImage(fid, imgData);
+        fetch('/api/publish/image', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ feature_id: fid, url: url, name: url, isUrl: true })
+        }).catch(function() {});
+    }
+    showToast('Image URL attached', 'success');
+}
+
+function promptBatchImageUrl(idx) {
+    var raw = prompt('Paste a public image URL (Google Drive, Dropbox, or any direct image URL):', '');
+    if (raw === null) return;
+    var url = _normalizeImageUrl(raw);
+    if (!url) { showToast('No URL entered', 'warning'); return; }
+    var imgData = { name: url, dataUrl: url, url: url, isUrl: true, size: 0 };
+    if (!window.prepBatchImages) window.prepBatchImages = {};
+    window.prepBatchImages[idx] = imgData;
+    var fid = _getBatchFeatureId(idx);
+    if (fid && typeof persistFeatureImage === 'function') persistFeatureImage(fid, imgData);
+    if (fid) {
+        fetch('/api/publish/image', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ feature_id: fid, url: url, name: url, isUrl: true })
+        }).catch(function() {});
+    }
+    var ta = document.getElementById('batch-ta-' + idx);
+    if (ta) {
+        var stripped = (ta.value || '').replace(/\n?\[image:\s*[^\]]+\]/g, '').replace(/\s+$/, '');
+        ta.value = stripped + '\n[image: ' + url + ']';
+        var pv = document.getElementById('batch-md-preview-' + idx);
+        if (pv && typeof simpleMarkdown === 'function') {
+            pv.innerHTML = simpleMarkdown(ta.value, {batchIdx: idx});
+        }
+        if (typeof autoResizeTextarea === 'function') autoResizeTextarea(ta);
+    }
+    if (typeof refreshBatchMediaButton === 'function') refreshBatchMediaButton(idx);
+    if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
+    showToast('Image URL attached', 'success');
+}
+
 function triggerFeatureGifPicker() {
     var input = document.createElement('input');
     input.type = 'file'; input.accept = 'image/gif,.gif';
@@ -5768,7 +5848,9 @@ function _renderAttachMenu(btn, view) {
             '<div class="attach-menu-item" data-action="upload-image" style="' + itemStyle + '">' +
                 '<span style="font-size:16px;">&#128190;</span> Upload from device</div>' +
             '<div class="attach-menu-item" data-action="paste-image" style="' + itemStyle + '">' +
-                '<span style="font-size:16px;">&#128203;</span> Paste from clipboard</div>';
+                '<span style="font-size:16px;">&#128203;</span> Paste from clipboard</div>' +
+            '<div class="attach-menu-item" data-action="image-url" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128279;</span> Image URL <span style="' + hintStyle + '">Drive, Dropbox, etc.</span></div>';
     } else if (view === 'gif') {
         html =
             '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
@@ -5776,7 +5858,9 @@ function _renderAttachMenu(btn, view) {
             '<div class="attach-menu-item" data-action="upload-gif" style="' + itemStyle + '">' +
                 '<span style="font-size:16px;">&#128190;</span> Upload GIF file</div>' +
             '<div class="attach-menu-item" data-action="paste-gif" style="' + itemStyle + '">' +
-                '<span style="font-size:16px;">&#128203;</span> Paste GIF from clipboard</div>';
+                '<span style="font-size:16px;">&#128203;</span> Paste GIF from clipboard</div>' +
+            '<div class="attach-menu-item" data-action="image-url" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128279;</span> GIF URL <span style="' + hintStyle + '">Direct .gif link</span></div>';
     } else if (view === 'video') {
         html =
             '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
@@ -5808,6 +5892,7 @@ function _renderAttachMenu(btn, view) {
             menu.remove();
             if (action === 'upload-image') triggerFeatureImagePicker();
             else if (action === 'paste-image') pasteFeatureImageFromClipboard();
+            else if (action === 'image-url') promptFeatureImageUrl();
             else if (action === 'upload-gif') triggerFeatureGifPicker();
             else if (action === 'paste-gif') pasteFeatureGifFromClipboard();
             else if (action === 'upload-video') triggerVideoFilePicker();
@@ -5908,7 +5993,9 @@ function _renderBatchAttachMenu(btn, idx, view) {
             '<div class="attach-menu-item" data-action="upload-image" style="' + itemStyle + '">' +
                 '<span style="font-size:16px;">&#128190;</span> Upload from device</div>' +
             '<div class="attach-menu-item" data-action="paste-image" style="' + itemStyle + '">' +
-                '<span style="font-size:16px;">&#128203;</span> Paste from clipboard</div>';
+                '<span style="font-size:16px;">&#128203;</span> Paste from clipboard</div>' +
+            '<div class="attach-menu-item" data-action="image-url" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128279;</span> Image URL <span style="' + hintStyle + '">Drive, Dropbox, etc.</span></div>';
     } else if (view === 'gif') {
         html =
             '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
@@ -5916,7 +6003,9 @@ function _renderBatchAttachMenu(btn, idx, view) {
             '<div class="attach-menu-item" data-action="upload-gif" style="' + itemStyle + '">' +
                 '<span style="font-size:16px;">&#128190;</span> Upload GIF file</div>' +
             '<div class="attach-menu-item" data-action="paste-gif" style="' + itemStyle + '">' +
-                '<span style="font-size:16px;">&#128203;</span> Paste GIF from clipboard</div>';
+                '<span style="font-size:16px;">&#128203;</span> Paste GIF from clipboard</div>' +
+            '<div class="attach-menu-item" data-action="image-url" style="' + itemStyle + '">' +
+                '<span style="font-size:16px;">&#128279;</span> GIF URL <span style="' + hintStyle + '">Direct .gif link</span></div>';
     } else if (view === 'video') {
         html =
             '<div class="attach-menu-back" style="' + backStyle + '"><span>&larr;</span> Back</div>' +
@@ -5989,6 +6078,7 @@ function _renderBatchAttachMenu(btn, idx, view) {
             menu.remove();
             if (action === 'upload-image') triggerBatchImagePicker(idx, false);
             else if (action === 'paste-image') pasteBatchImageFromClipboard(idx, false);
+            else if (action === 'image-url') promptBatchImageUrl(idx);
             else if (action === 'upload-gif') triggerBatchImagePicker(idx, true);
             else if (action === 'paste-gif') pasteBatchImageFromClipboard(idx, true);
             else if (action === 'upload-video') triggerBatchVideoPicker(idx);

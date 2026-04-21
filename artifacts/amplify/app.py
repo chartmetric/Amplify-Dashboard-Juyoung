@@ -2146,15 +2146,25 @@ def save_image_endpoint():
     feature_id = data.get("feature_id", "")
     channel = data.get("channel", "")
     data_url = data.get("dataUrl", "")
+    image_url = data.get("url", "")
+    is_url = bool(data.get("isUrl")) or (image_url and not data_url)
     filename = data.get("name", "image.png")
     file_size = data.get("size", 0)
-    if not feature_id or not data_url:
-        return jsonify({"success": False, "error": "feature_id, dataUrl required"}), 400
+    if not feature_id:
+        return jsonify({"success": False, "error": "feature_id required"}), 400
+    if is_url and image_url:
+        try:
+            save_publish_image(feature_id, channel, image_url, filename or image_url, file_size)
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+        return jsonify({"success": True, "kind": "url"}), 200
+    if not data_url:
+        return jsonify({"success": False, "error": "dataUrl or url required"}), 400
     try:
         save_publish_image(feature_id, channel, data_url, filename, file_size)
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
-    return jsonify({"success": True}), 200
+    return jsonify({"success": True, "kind": "data"}), 200
 
 
 @app.route("/api/publish/image/hosted/<img_id>")
