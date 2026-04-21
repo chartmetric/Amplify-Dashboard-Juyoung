@@ -10,7 +10,7 @@ CHANNEL_CONFIGS = {
         "enabled": True,
     },
     "email_newsletter": {
-        "display_name": "Email Newsletter Block",
+        "display_name": "Marketing Newsletter",
         "description": "Product update block for the Chartmetric newsletter",
         "max_chars": 350,
         "tone": "Benefit-first, empowering, direct. Lead with what the user can NOW do, not what was built. Second person ('you'). Warm but concise.",
