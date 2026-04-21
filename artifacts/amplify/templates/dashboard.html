@@ -5366,11 +5366,16 @@ function regenerateChannel(chKey) {
     }
 
     var apiChKey = getApiChannelKey(chKey);
+    var _regenFeature = Object.assign({}, contentViewFeature || {});
+    var _featLink = (typeof contentViewFeatureLink !== 'undefined' && contentViewFeatureLink)
+        ? contentViewFeatureLink
+        : ((typeof getPersistedFeatureLink === 'function' && _regenFeature && _regenFeature.id) ? getPersistedFeatureLink(_regenFeature.id) : '');
+    if (_featLink) _regenFeature.feature_url = _featLink;
     fetch('/api/generate/single', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-            feature: contentViewFeature,
+            feature: _regenFeature,
             channel: apiChKey,
             feedback: feedback,
             current_content: currentContent
