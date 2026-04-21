@@ -125,20 +125,18 @@ IMPORTANT RULES:
 - Reference specific Chartmetric features/pages by name when relevant (e.g., 'Artist Page', 'Track Page', 'Playlist tab')
 - Never fabricate data points or statistics \u2014 only reference data if it's in the feature context
 - ABSOLUTELY NEVER use the em dash character (\u2014) in any generated content. This is a hard rule with zero exceptions. Use periods, commas, or semicolons instead. Rewrite sentences to avoid needing dashes entirely. Also never use en dashes (\u2013). Only use regular hyphens (-) for compound words.
-- LINK HANDLING (HARD RULES, NO EXCEPTIONS):
-  - NEVER embed a URL, markdown hyperlink `[text](URL)`, plain URL, or `<a>` tag anywhere in the body. Not even as a CTA. Not even when a Feature URL is provided. The Feature URL is shown to the reader separately (as a CTA button or attachment) and is applied at publish time by the platform. The body is link-free.
-  - Write a natural CTA phrase that names the destination without hyperlinking it. Examples:
-    * "Explore the new Genius charts in your Charts tab."
-    * "Open it in your Artist Page."
-    * "Try it now in Sync."
-    * "Check it out on your dashboard."
-  - Do NOT write markdown link syntax such as `[Check out My Insights](https://...)` or `[learn more](...)`. Do NOT include `https://` or `www.` anywhere in the body. Do NOT paste raw URLs.
-  - Reference Chartmetric features and pages by name (e.g., "Charts", "Artist Page", "Sync"), but never as a hyperlink.
-- Channel-specific notes:
-  - Twitter: No URL in tweet text. URLs are added separately at publish time.
+- LINK HANDLING:
+  - When a Feature URL is provided, embed it according to the channel's rules below. When no Feature URL is provided ("Not provided"), write a natural verbal CTA phrase instead and never invent a URL.
+  - Never paste any URL other than the supplied Feature URL.
+  - Reference Chartmetric features and pages by name (e.g., "Charts", "Artist Page", "Sync") even when also linking to them.
+- Channel-specific link rules:
+  - Twitter: End the tweet with the Feature URL on its own final line (raw URL, no markdown). Twitter renders it as a clickable link automatically. Keep it under the character limit including the URL.
   - HMC article: No feature URL anywhere.
-  - Email channels (email_newsletter, email_standalone): Do NOT write any verbal CTA phrase ("Check it out", "Try it now", "Open it in...", "Explore..."). The platform appends a real CTA button below the body automatically. End the body with a natural concluding sentence about the benefit, not an action prompt.
-  - In-app, LinkedIn, Notion monthly: No embedded link in the body. The CTA is a verbal phrase only."""
+  - In-app, LinkedIn, Notion monthly, Marketing Newsletter (email_newsletter): The platform will auto-append a CTA hyperlink below the body, so the body itself should end with a natural concluding sentence — do not paste the URL inline.
+  - Resend email channels (email_short, email_medium, email_long, email_standalone, email_standalone_digest): Use your judgement to choose ONE of the following based on what the Feature URL points to:
+    1. Standalone CTA button — use this when the URL is a high-intent/conversion destination such as `/pricing`, `/plans`, `/signup`, `/upgrade`, `/billing`, `/trial`, `/demo`, `/contact`, or the Chartmetric homepage. Render it as a single line on its own at the end of the body using the format `[cta: text=Short Action Label|url=THE_URL]` (for example `[cta: text=See pricing|url=https://app.chartmetric.com/pricing]`). Keep the label 2-4 words.
+    2. Inline hyperlink — use this when the URL points to a specific feature/page (e.g., an Artist Page, a chart, a tool page). Weave a short markdown link `[descriptive phrase](THE_URL)` naturally into the prose where it makes sense, ideally on the noun that names the destination (e.g., "see it on the new [Genius charts page](URL)"). Do NOT put it on its own line and do NOT also add a `[cta:...]` button — pick one or the other per feature.
+    Never include both styles for the same Feature URL. Never repeat the URL twice."""
 
 USER_PROMPT_TEMPLATE = """FEATURE CONTEXT:
 Title: {title}
@@ -185,20 +183,82 @@ AUTO_CTA_LABELS = {
     "notion_monthly": "Link",
 }
 
+RESEND_EMAIL_CHANNELS = {
+    "email_short",
+    "email_medium",
+    "email_long",
+    "email_standalone",
+    "email_standalone_digest",
+}
+
+CONVERSION_URL_HINTS = (
+    "/pricing", "/plans", "/plan", "/signup", "/sign-up", "/upgrade",
+    "/billing", "/subscribe", "/trial", "/demo", "/contact",
+)
+
+
+def _is_conversion_url(url: str) -> bool:
+    if not url:
+        return False
+    u = url.lower().rstrip("/")
+    if any(hint in u for hint in CONVERSION_URL_HINTS):
+        return True
+    import re as _re
+    if _re.match(r"^https?://(?:www\.|app\.)?chartmetric\.com/?$", u):
+        return True
+    return False
+
+
+def _conversion_cta_label(url: str) -> str:
+    u = (url or "").lower()
+    if "pricing" in u or "plans" in u or "plan" in u:
+        return "See pricing"
+    if "signup" in u or "sign-up" in u:
+        return "Sign up"
+    if "upgrade" in u or "billing" in u or "subscribe" in u:
+        return "Upgrade now"
+    if "trial" in u:
+        return "Start free trial"
+    if "demo" in u:
+        return "Book a demo"
+    if "contact" in u:
+        return "Contact us"
+    return "Get started"
+
 
 def _auto_append_cta_link(content: str, channel_key: str, feature_url: str | None) -> str:
-    """Append a markdown CTA link to the generated body for channels where the
-    embedded CTA is part of the deliverable (Marketing Newsletter, In-App,
-    LinkedIn, Notion monthly). Twitter, Resend emails, the digest section, and
-    HMC articles are skipped because they handle the link elsewhere or the AI
-    already inlines it. No-ops if the body already contains the URL."""
-    if not feature_url or channel_key not in AUTO_CTA_LINK_CHANNELS or not content:
+    """Make sure the Feature URL ends up in the rendered draft.
+
+    - email_newsletter / inapp / linkedin / notion_monthly: append a markdown
+      `[Label](url)` line (those surfaces don't have a separate CTA mechanism).
+    - twitter: append the raw URL on its own final line so X autolinks it.
+    - Resend email channels: prefer to leave whatever the AI produced (it is
+      instructed to weave inline links for specific pages and use a
+      `[cta: text=...|url=...]` button for conversion pages). If the AI
+      forgot the URL entirely, fall back to a `[cta: ...]` block for
+      conversion URLs or a standalone `[Learn more](url)` line for feature
+      pages — sendgrid_client renders both as buttons.
+
+    No-ops if the body already references the URL."""
+    if not feature_url or not content:
         return content
     if feature_url in content:
         return content
-    label = AUTO_CTA_LABELS.get(channel_key, "Link")
-    cta_md = f"[{label}]({feature_url})"
-    return content.rstrip() + "\n\n" + cta_md
+
+    if channel_key == "twitter":
+        return content.rstrip() + "\n\n" + feature_url
+
+    if channel_key in AUTO_CTA_LINK_CHANNELS:
+        label = AUTO_CTA_LABELS.get(channel_key, "Link")
+        return content.rstrip() + "\n\n" + f"[{label}]({feature_url})"
+
+    if channel_key in RESEND_EMAIL_CHANNELS:
+        if _is_conversion_url(feature_url):
+            label = _conversion_cta_label(feature_url)
+            return content.rstrip() + "\n\n" + f"[cta: text={label}|url={feature_url}]"
+        return content.rstrip() + "\n\n" + f"[Learn more]({feature_url})"
+
+    return content
 
 
 def generate_for_channel(feature_data: dict, channel_key: str, custom_instructions: str = None, feedback: str = None, current_content: str = None, skip_cache: bool = False, mode: str = None) -> dict:
