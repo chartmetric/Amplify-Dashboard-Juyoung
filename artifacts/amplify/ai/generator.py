@@ -176,12 +176,46 @@ AUTO_CTA_LINK_CHANNELS = {
     "notion_monthly",
 }
 
-AUTO_CTA_LABELS = {
-    "email_newsletter": "Check it out",
-    "inapp": "Open it now",
-    "linkedin": "Learn more",
-    "notion_monthly": "Link",
-}
+CHARTMETRIC_PATH_LABELS = [
+    (r"/artist(?:/|$)", "the Artist Page"),
+    (r"/track(?:/|$)", "the Track Page"),
+    (r"/playlist(?:/|$)", "the Playlists page"),
+    (r"/album(?:/|$)", "the Album Page"),
+    (r"/label(?:/|$)", "the Label Page"),
+    (r"/curator(?:/|$)", "the Curator Page"),
+    (r"/charts?(?:/|$)", "the Charts page"),
+    (r"/trends?(?:/|$)", "the Trends page"),
+    (r"/sync(?:/|$)", "the Sync tab"),
+    (r"/influencer", "the Influencers tab"),
+    (r"/tiktok", "the TikTok tab"),
+    (r"/youtube", "the YouTube tab"),
+    (r"/spotify", "the Spotify tab"),
+    (r"/instagram", "the Instagram tab"),
+    (r"/cmpro|/insights", "My Insights"),
+    (r"/discover", "Discover"),
+    (r"/search", "Search"),
+    (r"/dashboard", "your dashboard"),
+]
+
+
+def _label_from_url(url: str) -> str:
+    """Best-effort short page/tab name derived from a Chartmetric URL path,
+    used as the link text when the AI failed to embed the link itself."""
+    import re as _re
+    if not url:
+        return "the page"
+    try:
+        path = _re.sub(r"^https?://[^/]+", "", url).split("?")[0].split("#")[0]
+    except Exception:
+        path = url
+    for pattern, label in CHARTMETRIC_PATH_LABELS:
+        if _re.search(pattern, path, _re.IGNORECASE):
+            return label
+    seg = path.strip("/").split("/")[0] if path.strip("/") else ""
+    if seg:
+        pretty = seg.replace("-", " ").replace("_", " ").strip().title()
+        return f"the {pretty} page"
+    return "the page"
 
 RESEND_EMAIL_CHANNELS = {
     "email_short",
@@ -249,14 +283,17 @@ def _auto_append_cta_link(content: str, channel_key: str, feature_url: str | Non
         return content.rstrip() + "\n\n" + feature_url
 
     if channel_key in AUTO_CTA_LINK_CHANNELS:
-        label = AUTO_CTA_LABELS.get(channel_key, "Link")
-        return content.rstrip() + "\n\n" + f"[{label}]({feature_url})"
+        label = _label_from_url(feature_url)
+        verb = "Try it on" if "tab" in label else "Check it out on"
+        return content.rstrip() + "\n\n" + f"{verb} [{label}]({feature_url})."
 
     if channel_key in RESEND_EMAIL_CHANNELS:
         if _is_conversion_url(feature_url):
             label = _conversion_cta_label(feature_url)
             return content.rstrip() + "\n\n" + f"[cta: text={label}|url={feature_url}]"
-        return content.rstrip() + "\n\n" + f"[Learn more]({feature_url})"
+        page_label = _label_from_url(feature_url)
+        verb = "Try it on" if "tab" in page_label else "Check it out on"
+        return content.rstrip() + "\n\n" + f"{verb} [{page_label}]({feature_url})."
 
     return content
 
