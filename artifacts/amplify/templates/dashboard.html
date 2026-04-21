@@ -5586,6 +5586,17 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
             var prevImg = window.prepBatchImages[batchIdx];
             window.prepBatchImages[batchIdx] = imgData;
             if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
+            try {
+                var _bfid = ((prepBatchResults || [])[batchIdx] || {}).feature_id || '';
+                if (_bfid) {
+                    if (typeof persistFeatureImage === 'function') persistFeatureImage(_bfid, imgData);
+                    fetch('/api/publish/image', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ feature_id: _bfid, dataUrl: imgData.dataUrl, name: imgData.name, size: imgData.size })
+                    }).catch(function() {});
+                }
+            } catch(_e) {}
             renderBatchImagePreview(batchIdx);
             if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
             var bta = document.getElementById('batch-ta-' + batchIdx);
@@ -6291,6 +6302,10 @@ function removeBatchVideoByName(idx, name) {
 function removeBatchImageInline(idx) {
     var img = (window.prepBatchImages || {})[idx];
     var name = img ? img.name : null;
+    try {
+        var _bfid = ((prepBatchResults || [])[idx] || {}).feature_id || '';
+        if (_bfid && typeof persistFeatureImage === 'function') persistFeatureImage(_bfid, null);
+    } catch(_e) {}
     if (window.prepBatchImages) delete window.prepBatchImages[idx];
     if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     renderBatchImagePreview(idx);
@@ -7470,6 +7485,10 @@ function renderBatchImagePreview(idx) {
 }
 
 function removeBatchImage(idx) {
+    try {
+        var _bfid = ((prepBatchResults || [])[idx] || {}).feature_id || '';
+        if (_bfid && typeof persistFeatureImage === 'function') persistFeatureImage(_bfid, null);
+    } catch(_e) {}
     if (window.prepBatchImages) delete window.prepBatchImages[idx];
     if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     var wrap = document.getElementById('batch-img-wrap-' + idx);
