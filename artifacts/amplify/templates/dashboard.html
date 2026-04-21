@@ -7738,10 +7738,7 @@ function updateChannelStatus(chKey) {
                     var pubLabel = prevPubbed ? 'Republish In-App' : 'Publish In-App';
                     ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">' + toggleLabel + '</span><span class="dd-arrow">&#9650;</span></button><div class="custom-dropdown-menu"><div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">' + pubLabel + ' &#x1F4F1;</div><div class="custom-dropdown-item" onclick="window.open(\'/api/announcements/widget\', \'_blank\'); closeDropdown(\'' + ddId + '\');">Preview Widget &#x2197;</div></div>';
                 } else {
-                    var prevPubbed = contentViewPublished[chKey];
-                    var toggleLabel = prevPubbed ? 'Repost or Preview' : 'Post or Preview';
-                    var postLabel = prevPubbed ? 'Repost to X' : 'Post to X';
-                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">' + toggleLabel + '</span><span class="dd-arrow">&#9650;</span></button><div class="custom-dropdown-menu"><div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">' + postLabel + ' &#x2192;</div><div class="custom-dropdown-item" onclick="previewOnX(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview on X &#x2197;</div></div>';
+                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="copyChannelContent(\'' + chKey + '\', this)" type="button"><span class="dd-label">Copy</span></button>';
                 }
                 actionsEl.insertBefore(ddWrapper, actionsEl.querySelector('.btn-undo-approve'));
             } else {
@@ -8277,6 +8274,47 @@ function clipboardPublish(chKey) {
     }
 
     richClipboardCopy(content, onCopySuccess, fallbackCopy);
+}
+
+function _flashCopyButton(btn) {
+    if (!btn) return;
+    var lbl = btn.querySelector('.dd-label') || btn;
+    var prev = lbl.textContent;
+    lbl.textContent = 'Copied!';
+    btn.disabled = true;
+    setTimeout(function() { lbl.textContent = prev; btn.disabled = false; }, 1400);
+}
+
+function copyChannelContent(chKey, btn) {
+    var ta = document.getElementById('channel-ta-' + chKey);
+    var text = ta ? ta.value : ((contentViewChannels && contentViewChannels[chKey]) || '');
+    if (!text) { showToast('Nothing to copy', 'warning'); return; }
+    var ok = function() { _flashCopyButton(btn); showToast('Copied to clipboard', 'success'); };
+    var fail = function() { showToast('Copy failed', 'error'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(ok).catch(fail);
+    } else {
+        try {
+            var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t);
+            t.select(); document.execCommand('copy'); document.body.removeChild(t); ok();
+        } catch(e) { fail(); }
+    }
+}
+
+function copyBatchContent(idx, btn) {
+    var ta = document.getElementById('batch-ta-' + idx);
+    var text = ta ? ta.value : (((prepBatchResults || [])[idx] || {}).content || '');
+    if (!text) { showToast('Nothing to copy', 'warning'); return; }
+    var ok = function() { _flashCopyButton(btn); showToast('Copied to clipboard', 'success'); };
+    var fail = function() { showToast('Copy failed', 'error'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(ok).catch(fail);
+    } else {
+        try {
+            var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t);
+            t.select(); document.execCommand('copy'); document.body.removeChild(t); ok();
+        } catch(e) { fail(); }
+    }
 }
 
 function publishToChannel(chKey, skipConfirm) {
@@ -9674,7 +9712,7 @@ function updateBatchItemStatus(idx) {
                 var ddWrapper = document.createElement('div');
                 ddWrapper.className = 'custom-dropdown publish-dropdown batch-publish-dd';
                 ddWrapper.id = ddId;
-                ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">Post or Preview</span><span class="dd-arrow">&#9650;</span></button><div class="custom-dropdown-menu"><div class="custom-dropdown-item" onclick="batchPublishItem(' + idx + '); document.getElementById(\'' + ddId + '\').querySelector(\'.custom-dropdown-menu\').classList.remove(\'open\');">Post to X &#x2192;</div><div class="custom-dropdown-item" onclick="batchPreviewItem(' + idx + '); document.getElementById(\'' + ddId + '\').querySelector(\'.custom-dropdown-menu\').classList.remove(\'open\');">Preview on X &#x2197;</div></div>';
+                ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="copyBatchContent(' + idx + ', this)" type="button"><span class="dd-label">Copy</span></button>';
                 actions.insertBefore(ddWrapper, actions.querySelector('.btn-undo-approve'));
             }
             if (!actions.querySelector('.btn-undo-approve')) {
