@@ -148,27 +148,32 @@ def get_all_published():
     return result
 
 
-MAX_IMAGE_SIZE = 10 * 1024 * 1024
+MAX_IMAGE_SIZE = 25 * 1024 * 1024
 
 
 def save_image(feature_id, channel, data_url, filename, file_size):
     _ensure_dirs()
 
     if len(data_url) > MAX_IMAGE_SIZE:
-        logger.warning(f"[publish_store] Image too large for {feature_id}, skipping")
-        return
+        logger.warning(f"[publish_store] Image too large for {feature_id} ({len(data_url)} bytes data-url), rejecting")
+        raise ValueError(f"Image data exceeds maximum size ({MAX_IMAGE_SIZE // (1024*1024)}MB)")
 
     img_path = _image_path_feature(feature_id)
     meta_path = _meta_path_feature(feature_id)
+    tmp_img = img_path + ".tmp"
+    tmp_meta = meta_path + ".tmp"
 
-    with open(img_path, "w") as f:
+    with open(tmp_img, "w") as f:
         f.write(data_url)
+    os.replace(tmp_img, img_path)
 
     meta = {"name": str(filename)[:200], "size": int(file_size) if file_size else 0}
-    with open(meta_path, "w") as f:
+    with open(tmp_meta, "w") as f:
         json.dump(meta, f)
+    os.replace(tmp_meta, meta_path)
 
-    logger.info(f"[publish_store] Saved feature-level image for {feature_id} ({filename}, {file_size} bytes)")
+    logger.info(f"[publish_store] Saved feature-level image for {feature_id} ({filename}, dataUrl={len(data_url)} bytes, declared={file_size})")
+    return True
 
 
 def _load_image_files(img_path, meta_path):

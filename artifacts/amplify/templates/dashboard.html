@@ -5566,7 +5566,7 @@ var contentViewFeatureImage = null;
 var contentViewImageInclude = {};
 window.contentViewVideos = {};
 
-var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+var MAX_IMAGE_BYTES = 18 * 1024 * 1024;
 var GIF_ANIMATED_CHANNELS = { email_newsletter: true, email_standalone: true, twitter: true };
 
 function _fileIsGif(file) {
@@ -5597,7 +5597,13 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ feature_id: _bfid, dataUrl: imgData.dataUrl, name: imgData.name, size: imgData.size })
-                    }).catch(function() {});
+                    }).then(function(r) { return r.json().catch(function(){ return {}; }).then(function(j){ return {ok:r.ok, j:j}; }); })
+                      .then(function(res) {
+                          if (!res.ok || (res.j && res.j.success === false)) {
+                              showToast('Image not saved on server: ' + ((res.j && res.j.error) || 'unknown error') + '. It may disappear after refresh.', 'error');
+                          }
+                      })
+                      .catch(function() { showToast('Image upload to server failed (offline?). It may disappear after refresh.', 'error'); });
                 }
             } catch(_e) {}
             renderBatchImagePreview(batchIdx);
