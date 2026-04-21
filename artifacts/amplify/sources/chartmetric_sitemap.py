@@ -27,7 +27,7 @@ _DATA_PATH = os.path.normpath(os.path.join(_HERE, "..", "data", "chartmetric_sit
 CHARTMETRIC_BASE = "https://app.chartmetric.com"
 
 PLACEHOLDER_IDS = {
-    "artist_id": "14209602",
+    "artist_id": "2762",
     "album_id": "43",
     "track_id": "10922649",
     "brand_id": "1",
