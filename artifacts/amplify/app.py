@@ -2184,6 +2184,19 @@ def serve_hosted_image(img_id):
     return send_file(BytesIO(raw), mimetype=mime_map.get(ext, f"image/{ext}"))
 
 
+@app.route("/api/publish/image/meta/<feature_id>")
+def publish_image_meta(feature_id):
+    """Return JSON metadata + dataUrl for the feature image (used by batch view to restore when localStorage missed it)."""
+    img = get_publish_image(feature_id)
+    if not img or not img.get("dataUrl"):
+        return jsonify({"exists": False}), 404
+    return jsonify({
+        "exists": True,
+        "name": img.get("name", "image"),
+        "dataUrl": img.get("dataUrl"),
+    })
+
+
 @app.route("/api/publish/image/serve/<feature_id>")
 def serve_feature_image(feature_id):
     import base64 as _b64

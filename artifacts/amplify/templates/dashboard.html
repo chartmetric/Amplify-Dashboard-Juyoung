@@ -6866,24 +6866,8 @@ function getPersistedFeatureLink(fid) {
     } catch(e) { return null; }
 }
 
-function getFeatureSourceUrl(fid) {
-    if (!fid) return '';
-    try {
-        var feats = (typeof allFeatures !== 'undefined' && Array.isArray(allFeatures)) ? allFeatures : [];
-        for (var i = 0; i < feats.length; i++) {
-            var f = feats[i];
-            if (f && f.id === fid) {
-                return (f.asana_url || f.slack_url || f.github_url || f.permalink || f.url || '').trim();
-            }
-        }
-    } catch(e) {}
-    return '';
-}
-
 function getEffectiveFeatureLink(fid) {
-    var p = getPersistedFeatureLink(fid);
-    if (p) return p;
-    return getFeatureSourceUrl(fid) || null;
+    return getPersistedFeatureLink(fid);
 }
 
 function promptFeatureLink() {
@@ -9070,6 +9054,36 @@ function startBatchGeneration() {
         if (totalRestored > 0) {
             showToast('Restored ' + totalRestored + ' attachment' + (totalRestored === 1 ? '' : 's'), 'success');
         }
+        for (var si = 0; si < prepBatchResults.length; si++) {
+            (function(_idx, _fid) {
+                if (!_fid || window.prepBatchImages[_idx]) return;
+                fetch('/api/publish/image/meta/' + encodeURIComponent(_fid))
+                    .then(function(rr) { return rr.ok ? rr.json() : null; })
+                    .then(function(meta) {
+                        if (!meta || !meta.exists || !meta.dataUrl || !meta.name) return;
+                        if (window.prepBatchImages[_idx]) return;
+                        var imgData = { name: meta.name, dataUrl: meta.dataUrl };
+                        window.prepBatchImages[_idx] = imgData;
+                        try { if (typeof persistFeatureImage === 'function') persistFeatureImage(_fid, imgData); } catch(_e) {}
+                        try { if (typeof refreshBatchMediaButton === 'function') refreshBatchMediaButton(_idx); } catch(_e) {}
+                        try { reconcileBatchAttachmentState(_idx); } catch(_e) {}
+                        try {
+                            var ta2 = document.getElementById('batch-ta-' + _idx);
+                            if (ta2) {
+                                var newContent = _reattachAttachmentsToContent(ta2.value || '', _idx);
+                                if (newContent !== ta2.value) {
+                                    ta2.value = newContent;
+                                    var pv = document.getElementById('batch-md-preview-' + _idx);
+                                    if (pv && typeof simpleMarkdown === 'function') {
+                                        pv.innerHTML = simpleMarkdown(newContent, {batchIdx: _idx});
+                                    }
+                                }
+                            }
+                        } catch(_e) {}
+                    })
+                    .catch(function() {});
+            })(si, prepBatchResults[si] && prepBatchResults[si].feature_id);
+        }
         for (var vi2 = 0; vi2 < prepBatchResults.length; vi2++) {
             (function(_idx, _fid) {
                 if (!_fid) return;
@@ -9357,18 +9371,6 @@ function _reattachAttachmentsToContent(content, idx) {
             out = out.replace(/\s+$/, '') + '\n\n' + md;
         }
     });
-    try {
-        var _r = (prepBatchResults || [])[idx] || {};
-        var _fid = _r.feature_id || '';
-        var _ch = (typeof prepChannel !== 'undefined') ? prepChannel : '';
-        var isEmail = (typeof isEmailChannel === 'function') ? isEmailChannel(_ch) : (_ch && _ch.indexOf('email') === 0);
-        if (_fid && isEmail) {
-            var _link = (typeof getEffectiveFeatureLink === 'function') ? getEffectiveFeatureLink(_fid) : null;
-            if (_link && !/\[cta:[^\]]*\]/i.test(out)) {
-                out = out.replace(/\s+$/, '') + '\n\n[cta: text=Open in Chartmetric \u2192 | url=' + _link + ']';
-            }
-        }
-    } catch(_e) {}
     return out;
 }
 
