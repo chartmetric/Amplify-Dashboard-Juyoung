@@ -171,6 +171,36 @@ EXPECTED OUTPUT FORMAT: {example_output_format}
 Generate the content now. Output ONLY the final content, nothing else."""
 
 
+AUTO_CTA_LINK_CHANNELS = {
+    "email_newsletter",
+    "inapp",
+    "linkedin",
+    "notion_monthly",
+}
+
+AUTO_CTA_LABELS = {
+    "email_newsletter": "Check it out",
+    "inapp": "Open it now",
+    "linkedin": "Learn more",
+    "notion_monthly": "Link",
+}
+
+
+def _auto_append_cta_link(content: str, channel_key: str, feature_url: str | None) -> str:
+    """Append a markdown CTA link to the generated body for channels where the
+    embedded CTA is part of the deliverable (Marketing Newsletter, In-App,
+    LinkedIn, Notion monthly). Twitter, Resend emails, the digest section, and
+    HMC articles are skipped because they handle the link elsewhere or the AI
+    already inlines it. No-ops if the body already contains the URL."""
+    if not feature_url or channel_key not in AUTO_CTA_LINK_CHANNELS or not content:
+        return content
+    if feature_url in content:
+        return content
+    label = AUTO_CTA_LABELS.get(channel_key, "Link")
+    cta_md = f"[{label}]({feature_url})"
+    return content.rstrip() + "\n\n" + cta_md
+
+
 def generate_for_channel(feature_data: dict, channel_key: str, custom_instructions: str = None, feedback: str = None, current_content: str = None, skip_cache: bool = False, mode: str = None) -> dict:
     feature_id = feature_data.get("id", "")
 
@@ -324,6 +354,10 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
             truncated = _truncate_to_last_sentence(content, char_limit)
             content = truncated
             was_trimmed = True
+
+    if result["success"]:
+        cta_url = feature_data.get("feature_url") or feature_data.get("chartmetric_url")
+        content = _auto_append_cta_link(content, channel_key, cta_url)
 
     gen_result = {
         "channel": requested_channel,
