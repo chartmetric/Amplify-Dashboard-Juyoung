@@ -7598,7 +7598,6 @@ function removeBatchImage(idx) {
 
 var PUBLISHABLE_CHANNELS = {
     twitter: '/api/publish/twitter',
-    email_newsletter: '/api/publish/email',
     email_standalone: '/api/publish/email',
     inapp: '/api/publish/inapp'
 };
@@ -7742,7 +7741,8 @@ function updateChannelStatus(chKey) {
                 var clipLabels = {
                     linkedin: 'Copy for LinkedIn \uD83D\uDCCB',
                     notion_monthly: 'Copy for Notion \uD83D\uDCCB',
-                    article_hmc: 'Copy Article \uD83D\uDCCB'
+                    article_hmc: 'Copy Article \uD83D\uDCCB',
+                    email_newsletter: 'Copy for Notion \uD83D\uDCCB'
                 };
                 clipBtn.textContent = clipLabels[chKey] || ('Copy \uD83D\uDCCB');
                 clipBtn.onclick = function() { clipboardPublish(chKey); };
@@ -9844,6 +9844,7 @@ function renderCombinedPreview() {
     document.getElementById('step4-title').textContent = (uc ? uc.name : prepChannel) + ' - Combined Preview';
 
     var isEmailCh = (prepChannel === 'email_newsletter' || prepChannel === 'email_standalone');
+    var isSendableEmail = (prepChannel === 'email_standalone');
     var publishBtn = document.querySelector('.btn-publish-all-batch');
     var previewBtn = document.querySelector('.btn-preview-all-batch');
     var emailPubBtn = document.querySelector('.btn-publish-combined-email');
@@ -9851,8 +9852,8 @@ function renderCombinedPreview() {
     var isPublishable = !!PUBLISHABLE_CHANNELS[prepChannel];
     if (publishBtn) publishBtn.style.display = (isPublishable && !isEmailCh) ? '' : 'none';
     if (previewBtn) previewBtn.style.display = (isPublishable && !isEmailCh) ? '' : 'none';
-    if (emailPubBtn) emailPubBtn.style.display = isEmailCh ? '' : 'none';
-    if (emailPrevBtn) emailPrevBtn.style.display = isEmailCh ? '' : 'none';
+    if (emailPubBtn) emailPubBtn.style.display = isSendableEmail ? '' : 'none';
+    if (emailPrevBtn) emailPrevBtn.style.display = isSendableEmail ? '' : 'none';
 
     var items = [];
     var list = document.getElementById('batch-results-list');
