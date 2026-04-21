@@ -58,11 +58,33 @@ _STOP = {
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
+def _stem(t: str) -> str:
+    """Tiny singularizer so plural/singular forms collide.
+
+    Examples: influencers->influencer, playlists->playlist,
+    countries->country, demographics->demographic. Conservative:
+    leaves words <=3 chars alone and avoids 'ss'/'us' endings.
+    """
+    if len(t) > 4 and t.endswith("ies"):
+        return t[:-3] + "y"
+    if len(t) > 3 and t.endswith("s") and not t.endswith("ss") and not t.endswith("us"):
+        return t[:-1]
+    return t
+
+
 def _tokens(text: str) -> list[str]:
     if not text:
         return []
     toks = _TOKEN_RE.findall(text.lower())
-    return [t for t in toks if t not in _STOP and len(t) > 1]
+    return [_stem(t) for t in toks if t not in _STOP and len(t) > 1]
+
+
+def _norm_text(text: str) -> str:
+    """Stemmed, space-separated form of free text — used for bigram
+    substring checks so 'live event' matches 'live events' in the URL."""
+    if not text:
+        return ""
+    return " ".join(_stem(t) for t in _TOKEN_RE.findall(text.lower()))
 
 
 _sitemap_cache: list[dict] | None = None
@@ -113,6 +135,8 @@ def _load_sitemap() -> list[dict]:
             "name_tokens": name_toks,
             "desc_tokens": desc_toks,
             "all_tokens": path_toks | name_toks | desc_toks,
+            "path_text_norm": _norm_text(re.sub(r"\{[^}]+\}", " ", pat)),
+            "name_text_norm": _norm_text(fn),
         })
 
     _sitemap_cache = entries
@@ -180,23 +204,46 @@ def infer_chartmetric_url(title: str, description: str = "", min_score: float = 
     best = None
     best_score = 0.0
     for entry in sitemap:
-        overlap = entry["all_tokens"] & text_set
-        if not overlap:
+        path_overlap = entry["path_tokens"] & text_set
+        name_overlap = entry["name_tokens"] & text_set
+        desc_overlap = entry["desc_tokens"] & text_set
+        if not (path_overlap or name_overlap or desc_overlap):
             continue
 
+        # Topical floor: a row only earns description-match points if it
+        # also matches on the URL path or feature name. Otherwise generic
+        # description verbiage (e.g. "modal", "additional", "click") lets
+        # any thematically-unrelated row win on token volume alone.
+        topical = bool(path_overlap or name_overlap)
+
         score = 0.0
-        for t in overlap:
-            w = idf.get(t, 1.0)
-            if t in entry["path_tokens"]:
-                score += w * 3.0
-            elif t in entry["name_tokens"]:
-                score += w * 2.0
-            else:
-                score += w
+        for t in path_overlap:
+            score += idf.get(t, 1.0) * 3.0
+        for t in name_overlap - path_overlap:
+            score += idf.get(t, 1.0) * 2.0
+        if topical:
+            for t in desc_overlap - path_overlap - name_overlap:
+                score += idf.get(t, 1.0)
+        else:
+            # Heavy discount on desc-only matches so they can still
+            # tiebreak between equally-scoring topical rows but never
+            # outscore a true topical match elsewhere.
+            for t in desc_overlap:
+                score += idf.get(t, 1.0) * 0.2
+
+        # Landing-page jackpot: if the URL is a single, non-placeholder
+        # segment (e.g. /influencers, /talent-search) and that one path
+        # token is rare *and* present in the input, this row is almost
+        # certainly the right answer — beating deeply-nested rows that
+        # only match the same word as a side topic.
+        if len(entry["path_tokens"]) == 1 and "{" not in entry["url_pattern"]:
+            (only,) = tuple(entry["path_tokens"])
+            if only in path_overlap and idf.get(only, 0) >= 3.0:
+                score += idf[only] * 5.0
 
         if input_bigrams:
-            path_text = entry["url_pattern"].replace("/", " ").replace("-", " ").replace("_", " ").lower()
-            name_text = entry["feature_name"].lower()
+            path_text = entry["path_text_norm"]
+            name_text = entry["name_text_norm"]
             for bg in input_bigrams:
                 if bg in path_text or bg in name_text:
                     score += 5.0
