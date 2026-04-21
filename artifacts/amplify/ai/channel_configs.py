@@ -1,3 +1,13 @@
+# Each channel may declare these fields:
+#   max_chars (required): hard ceiling on body length. Over-length drafts
+#       trigger a one-shot "shorten" retry.
+#   min_chars (optional): floor on body length. Under-length drafts trigger
+#       a one-shot "expand" retry. Length is measured AFTER stripping
+#       attachment markup (banners, badges, CTA blocks, image/video lines,
+#       hosted-image attachment markers, markdown image syntax) so the
+#       limits reflect actual prose, not embedded media. Inline markdown
+#       links count as their visible text only. Leave unset to skip the
+#       floor check (current default for most channels).
 CHANNEL_CONFIGS = {
     "twitter": {
         "display_name": "X / Twitter",
@@ -23,6 +33,7 @@ CHANNEL_CONFIGS = {
         "display_name": "Email Standalone",
         "description": "Standalone product update email",
         "max_chars": 1500,
+        "min_chars": 700,
         "tone": "Professional but warm. Benefit-led, second person. Room to paint the picture of the problem solved and highlight key use cases.",
         "format_rules": "Structure: Start with a SHORT intro header line (a catchy one-liner). Then blank line, then 2-4 paragraphs with optional bullet points. First paragraph: hook with the user's pain point or aspiration. Remaining paragraphs: feature highlights, use cases, and CTA. No HTML. DO NOT include a 'Subject:' line — the subject is managed separately at send time.",
         "audience": "Chartmetric users, trial users, and prospects",
@@ -33,6 +44,7 @@ CHANNEL_CONFIGS = {
         "display_name": "Email Standalone (Digest Section)",
         "description": "Tight ~50-word section for a multi-feature standalone email digest",
         "max_chars": 350,
+        "min_chars": 200,
         "tone": "Professional but warm. Benefit-led, second person. Tight and scannable — every word earns its place.",
         "format_rules": (
             "This is ONE SECTION inside a digest email that bundles several features together. "
@@ -55,6 +67,7 @@ CHANNEL_CONFIGS = {
         "display_name": "Email Short",
         "description": "Quick, concise product update email — to the point",
         "max_chars": 500,
+        "min_chars": 250,
         "tone": "Direct, benefit-first, concise. Get to the point fast. Second person ('you'). Warm but brief — every word must earn its place.",
         "format_rules": "Structure: Start with a SHORT intro header line (a catchy one-liner). Then blank line, then 1-2 very short paragraphs (2-3 sentences total). First paragraph: what's new and why it matters to the user. Second paragraph (optional): single CTA sentence. No bullet points. No HTML. Keep it scannable on mobile — this is a quick update, not a deep dive. DO NOT include a 'Subject:' line — the subject is managed separately at send time.",
         "audience": "Chartmetric users and trial users — busy professionals who scan emails quickly on mobile",
@@ -65,6 +78,7 @@ CHANNEL_CONFIGS = {
         "display_name": "Email Medium",
         "description": "Feature update email with key use cases and benefits",
         "max_chars": 1000,
+        "min_chars": 600,
         "tone": "Professional but warm. Benefit-led, second person. Room to paint the picture of the problem solved and highlight key use cases.",
         "format_rules": "Structure: Start with a SHORT intro header line (a catchy one-liner). Then blank line, then 2-3 short paragraphs with optional bullet points. First paragraph: hook with the user's pain point or aspiration. Second paragraph: what's new — use 2-4 bullet points to highlight key benefits or use cases. Third paragraph: CTA with specific next step. Keep paragraphs to 2-3 sentences each. No HTML. DO NOT include a 'Subject:' line — the subject is managed separately at send time.",
         "audience": "Chartmetric users and trial users — may not be daily active, so context-set briefly",
@@ -75,6 +89,7 @@ CHANNEL_CONFIGS = {
         "display_name": "Email Long",
         "description": "Comprehensive feature breakdown email with full detail",
         "max_chars": 1500,
+        "min_chars": 900,
         "tone": "Thorough, informative, empowering. Second person. Take the reader on a journey from problem to solution to action. Authoritative but accessible.",
         "format_rules": "Structure: Start with a SHORT intro header line (a catchy one-liner). Then blank line, then 3-5 paragraphs with bullet points and detail. First paragraph: hook with pain point or industry context. Second paragraph: introduce the feature and its core benefit. Third paragraph: detailed breakdown with 3-5 bullet points covering specific capabilities, who benefits, and how. Fourth paragraph: real-world scenario or use case. Fifth paragraph: strong CTA. No HTML. DO NOT include a 'Subject:' line — the subject is managed separately at send time.",
         "audience": "Chartmetric users, trial users, and prospects who want to understand the full scope of what's new",

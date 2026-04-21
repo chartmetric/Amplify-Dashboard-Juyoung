@@ -83,6 +83,33 @@ def get_content_cache_index():
 _load_content_cache()
 
 
+_ATTACHMENT_LINE_RE = __import__("re").compile(
+    r"^\s*\[(?:banner|badge|cta|image|video|hosted_image|attachment)\s*:.*?\]\s*$",
+    __import__("re").IGNORECASE | __import__("re").MULTILINE,
+)
+_MARKDOWN_IMAGE_RE = __import__("re").compile(r"!\[[^\]]*\]\([^)]*\)")
+_MARKDOWN_LINK_RE = __import__("re").compile(r"\[([^\]]+)\]\([^)]*\)")
+
+
+def _clean_for_length(text: str) -> str:
+    """Return text with attachment markup removed so length measurements
+    reflect actual prose. Strips:
+      - Whole-line `[banner|badge|cta|image|video|hosted_image|attachment: ...]` blocks
+      - Markdown image syntax `![alt](url)`
+      - Markdown link URLs (keeps the visible `[text]` portion only)
+    """
+    if not text:
+        return ""
+    cleaned = _ATTACHMENT_LINE_RE.sub("", text)
+    cleaned = _MARKDOWN_IMAGE_RE.sub("", cleaned)
+    cleaned = _MARKDOWN_LINK_RE.sub(lambda m: m.group(1), cleaned)
+    return cleaned.strip()
+
+
+def _measured_len(text: str) -> int:
+    return len(_clean_for_length(text))
+
+
 def _truncate_to_last_sentence(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
@@ -147,7 +174,7 @@ Team Reactions: {reactions_info}
 Feature URL: {feature_url}
 
 CHANNEL: {channel_display_name}
-CHARACTER LIMIT: {max_chars}
+CHARACTER LIMIT: {max_chars}{length_range_hint}
 TONE: {tone}
 FORMAT: {format_rules}
 TARGET AUDIENCE: {audience}
@@ -397,6 +424,16 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
             )
         feedback_learning_section = "\n".join(parts)
 
+    min_chars = config.get("min_chars")
+    if min_chars:
+        length_range_hint = (
+            f"\nLENGTH RANGE: Aim for {min_chars}–{config['max_chars']} characters of prose. "
+            f"Drafts under {min_chars} characters will be rejected and regenerated. "
+            f"This range is measured on prose only — banners, badges, CTA blocks, and image/video attachments don't count."
+        )
+    else:
+        length_range_hint = ""
+
     user_prompt = USER_PROMPT_TEMPLATE.format(
         title=feature_data.get("title", ""),
         description=feature_data.get("description", ""),
@@ -409,6 +446,7 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
         feature_url=feature_data.get("feature_url") or feature_data.get("chartmetric_url") or "Not provided",
         channel_display_name=config["display_name"],
         max_chars=config["max_chars"],
+        length_range_hint=length_range_hint,
         tone=config["tone"],
         format_rules=config["format_rules"],
         audience=config["audience"],
@@ -427,35 +465,70 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
     content = result.get("content", "")
     was_trimmed = False
     char_limit = config["max_chars"]
-
-    if result["success"] and len(content) > char_limit:
-        logger.info(f"[{channel_key}] Content is {len(content)} chars, exceeds {char_limit}. Requesting shorter version.")
-        shorten_prompt = (
-            f"The following content is {len(content)} characters but must be under {char_limit} characters. "
-            f"Shorten it while keeping the same tone and key message. Output ONLY the shortened version:\n\n{content}"
-        )
-        retry_result = generate_content(SYSTEM_PROMPT, shorten_prompt, max_tokens=max_tokens)
-        if retry_result["success"] and retry_result.get("content"):
-            content = retry_result["content"]
-            was_trimmed = True
-            logger.info(f"[{channel_key}] Shortened to {len(content)} chars.")
-
-        if len(content) > char_limit:
-            logger.warning(f"[{channel_key}] Still {len(content)} chars after retry. Truncating at last sentence.")
-            truncated = _truncate_to_last_sentence(content, char_limit)
-            content = truncated
-            was_trimmed = True
+    char_floor = config.get("min_chars")
 
     if result["success"]:
+        measured = _measured_len(content)
+        if measured > char_limit:
+            logger.info(f"[{channel_key}] Content is {measured} prose chars, exceeds {char_limit}. Requesting shorter version.")
+            shorten_prompt = (
+                f"The following content is {measured} characters but must be under {char_limit} characters. "
+                f"Shorten it while keeping the same tone and key message. Output ONLY the shortened version:\n\n{content}"
+            )
+            retry_result = generate_content(SYSTEM_PROMPT, shorten_prompt, max_tokens=max_tokens)
+            if retry_result["success"] and retry_result.get("content"):
+                content = retry_result["content"]
+                was_trimmed = True
+                measured = _measured_len(content)
+                logger.info(f"[{channel_key}] Shortened to {measured} prose chars.")
+
+            if measured > char_limit:
+                logger.warning(f"[{channel_key}] Still {measured} prose chars after retry. Truncating at last sentence.")
+                content = _truncate_to_last_sentence(content, char_limit)
+                was_trimmed = True
+                measured = _measured_len(content)
+
+        if char_floor and measured < char_floor:
+            logger.info(f"[{channel_key}] Content is {measured} prose chars, below floor {char_floor}. Requesting expanded version.")
+            expand_prompt = (
+                f"The following content is {measured} characters but should be between {char_floor} and {char_limit} characters of prose. "
+                f"Expand it to fall within that range while preserving tone, structure, the closing CTA sentence, and any attachment markup. "
+                f"Add concrete benefits, use cases, or supporting detail — do not pad with filler. "
+                f"Output ONLY the expanded version:\n\n{content}"
+            )
+            expand_result = generate_content(SYSTEM_PROMPT, expand_prompt, max_tokens=max_tokens)
+            if expand_result["success"] and expand_result.get("content"):
+                expanded = expand_result["content"]
+                expanded_measured = _measured_len(expanded)
+                if expanded_measured <= char_limit:
+                    content = expanded
+                    measured = expanded_measured
+                    logger.info(f"[{channel_key}] Expanded to {measured} prose chars.")
+                else:
+                    logger.warning(f"[{channel_key}] Expand retry overshot ceiling ({expanded_measured} > {char_limit}); keeping original short draft.")
+            else:
+                logger.warning(f"[{channel_key}] Expand retry failed; keeping original short draft.")
+
         cta_url = feature_data.get("feature_url") or feature_data.get("chartmetric_url")
+        content_before_cta = content
         content = _auto_append_cta_link(content, channel_key, cta_url)
+
+        if content != content_before_cta and _measured_len(content) > char_limit:
+            suffix = content[len(content_before_cta):]
+            suffix_len = _measured_len(suffix)
+            body_budget = char_limit - suffix_len - 4
+            if body_budget > 0:
+                trimmed_body = _truncate_to_last_sentence(content_before_cta, body_budget)
+                content = _auto_append_cta_link(trimmed_body, channel_key, cta_url)
+                was_trimmed = True
+                logger.info(f"[{channel_key}] Trimmed body to {_measured_len(trimmed_body)} chars to fit appended CTA under {char_limit}.")
 
     gen_result = {
         "channel": requested_channel,
         "channel_display_name": config["display_name"],
         "max_chars": char_limit,
         "content": content,
-        "char_count": len(content),
+        "char_count": _measured_len(content),
         "was_trimmed": was_trimmed,
         "success": result["success"],
         "error": result.get("error"),
