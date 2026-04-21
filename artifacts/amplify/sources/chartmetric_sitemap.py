@@ -66,11 +66,24 @@ def _tokens(text: str) -> list[str]:
 
 
 _sitemap_cache: list[dict] | None = None
-_pattern_index: dict[str, dict] | None = None
+
+
+def _path_tokens(url_pattern: str) -> set[str]:
+    """Tokens that come from the URL pattern itself (high signal)."""
+    cleaned = re.sub(r"\{[^}]+\}", " ", url_pattern)
+    cleaned = re.sub(r":\w+", " ", cleaned)
+    cleaned = cleaned.replace("/", " ").replace("-", " ").replace("_", " ")
+    return set(_tokens(cleaned))
 
 
 def _load_sitemap() -> list[dict]:
-    global _sitemap_cache, _pattern_index
+    """One scoring entry per sitemap row, not per URL pattern.
+
+    Grouping all features under the same pattern gave heavily-populated
+    patterns (e.g. `/shortlist/...`) an unfair token volume advantage on
+    generic words like "artist". Per-row scoring keeps each candidate
+    focused."""
+    global _sitemap_cache
     if _sitemap_cache is not None:
         return _sitemap_cache
     try:
@@ -79,35 +92,30 @@ def _load_sitemap() -> list[dict]:
     except Exception as e:
         logger.warning(f"Failed to load chartmetric sitemap from {_DATA_PATH}: {e}")
         _sitemap_cache = []
-        _pattern_index = {}
         return _sitemap_cache
 
-    grouped: dict[str, dict] = {}
+    entries: list[dict] = []
     for r in rows:
         pat = (r.get("url_pattern") or "").strip()
         if not pat:
             continue
-        bucket = grouped.setdefault(
-            pat,
-            {
-                "url_pattern": pat,
-                "entity_type": (r.get("entity_type") or "").strip(),
-                "feature_names": [],
-                "feature_descs": [],
-                "tokens": set(_tokens(pat.replace("/", " ").replace("_", " "))),
-            },
-        )
         fn = (r.get("feature_name") or "").strip()
         fd = (r.get("feature_description") or "").strip()
-        if fn:
-            bucket["feature_names"].append(fn)
-            bucket["tokens"].update(_tokens(fn))
-        if fd:
-            bucket["feature_descs"].append(fd)
-            bucket["tokens"].update(_tokens(fd))
+        path_toks = _path_tokens(pat)
+        name_toks = set(_tokens(fn))
+        desc_toks = set(_tokens(fd))
+        entries.append({
+            "url_pattern": pat,
+            "entity_type": (r.get("entity_type") or "").strip(),
+            "feature_name": fn,
+            "feature_desc": fd,
+            "path_tokens": path_toks,
+            "name_tokens": name_toks,
+            "desc_tokens": desc_toks,
+            "all_tokens": path_toks | name_toks | desc_toks,
+        })
 
-    _sitemap_cache = list(grouped.values())
-    _pattern_index = grouped
+    _sitemap_cache = entries
     return _sitemap_cache
 
 
@@ -123,9 +131,40 @@ def _fill_placeholders(url_pattern: str) -> str:
     return CHARTMETRIC_BASE + out
 
 
-def infer_chartmetric_url(title: str, description: str = "", min_score: int = 2) -> Optional[str]:
+_idf_cache: dict[str, float] | None = None
+
+
+def _idf() -> dict[str, float]:
+    """Inverse document frequency per token across all sitemap rows.
+    Rare tokens (e.g. "shortlist", "live-events") get higher weight than
+    generic ones (e.g. "artist", "page")."""
+    global _idf_cache
+    if _idf_cache is not None:
+        return _idf_cache
+    import math
+    entries = _load_sitemap()
+    n = max(len(entries), 1)
+    df: dict[str, int] = defaultdict(int)
+    for e in entries:
+        for t in e["all_tokens"]:
+            df[t] += 1
+    _idf_cache = {t: math.log(1 + n / (1 + c)) for t, c in df.items()}
+    return _idf_cache
+
+
+def _bigrams(tokens: list[str]) -> set[str]:
+    return {f"{a} {b}" for a, b in zip(tokens, tokens[1:])}
+
+
+def infer_chartmetric_url(title: str, description: str = "", min_score: float = 2.0) -> Optional[str]:
     """Return the best-guess Chartmetric URL for a feature based on its
-    title+description, or None if no candidate scores above the threshold."""
+    title+description, or None if no candidate scores above the threshold.
+
+    Scoring weights tokens by IDF (rare = more diagnostic), gives a 3x
+    boost to tokens appearing in the URL path itself, a 2x boost to
+    tokens in the feature name, and a large bigram bonus when a 2-word
+    phrase from the input also appears in the URL path or feature name.
+    """
     sitemap = _load_sitemap()
     if not sitemap:
         return None
@@ -135,19 +174,36 @@ def infer_chartmetric_url(title: str, description: str = "", min_score: int = 2)
         return None
 
     text_set = set(text_tokens)
-    text_freq = defaultdict(int)
-    for t in text_tokens:
-        text_freq[t] += 1
+    idf = _idf()
+    input_bigrams = _bigrams(text_tokens)
 
     best = None
-    best_score = 0
+    best_score = 0.0
     for entry in sitemap:
-        overlap = entry["tokens"] & text_set
+        overlap = entry["all_tokens"] & text_set
         if not overlap:
             continue
-        score = sum(text_freq[t] for t in overlap)
-        depth_bonus = entry["url_pattern"].count("/") * 0.1
-        score = score + depth_bonus
+
+        score = 0.0
+        for t in overlap:
+            w = idf.get(t, 1.0)
+            if t in entry["path_tokens"]:
+                score += w * 3.0
+            elif t in entry["name_tokens"]:
+                score += w * 2.0
+            else:
+                score += w
+
+        if input_bigrams:
+            path_text = entry["url_pattern"].replace("/", " ").replace("-", " ").replace("_", " ").lower()
+            name_text = entry["feature_name"].lower()
+            for bg in input_bigrams:
+                if bg in path_text or bg in name_text:
+                    score += 5.0
+                    bg_dashed = bg.replace(" ", "-")
+                    if bg_dashed in entry["url_pattern"].lower():
+                        score += 5.0
+
         if score > best_score:
             best_score = score
             best = entry
@@ -156,9 +212,8 @@ def infer_chartmetric_url(title: str, description: str = "", min_score: int = 2)
         return None
 
     url = _fill_placeholders(best["url_pattern"])
-    fn_preview = best["feature_names"][0] if best["feature_names"] else best["entity_type"]
     logger.info(
         f"[sitemap] Inferred URL for {title!r} -> {url} "
-        f"(score={best_score:.1f}, matched feature={fn_preview!r})"
+        f"(score={best_score:.1f}, matched feature={best['feature_name']!r})"
     )
     return url
