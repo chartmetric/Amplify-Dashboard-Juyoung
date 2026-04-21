@@ -180,6 +180,71 @@ def _bigrams(tokens: list[str]) -> set[str]:
     return {f"{a} {b}" for a, b in zip(tokens, tokens[1:])}
 
 
+# Stemmed entity-type words. When the input contains one of these, rows
+# whose URL is scoped to that entity get a small bias bonus.
+_ENTITY_WORDS = {
+    "artist", "track", "album", "playlist", "label", "brand", "festival",
+    "songwriter", "curator", "city", "country", "genre", "shortlist",
+    "influencer", "video", "sound",
+}
+
+
+def _entities_in(text_set: set[str]) -> set[str]:
+    return _ENTITY_WORDS & text_set
+
+
+_chart_platform_cache: dict[str, str] | None = None
+
+
+def _chart_platforms() -> dict[str, str]:
+    """Map of chart-platform slug (e.g. 'spotify', 'apple-music',
+    'genius') -> a sensible default /charts/<platform>/... URL.
+
+    We mine platforms from the sitemap (any row whose URL matches
+    /charts/<platform>/...) and then extend with a small set of
+    known platforms that are live on chartmetric but not yet in
+    the snapshot (e.g. genius).
+    """
+    global _chart_platform_cache
+    if _chart_platform_cache is not None:
+        return _chart_platform_cache
+
+    out: dict[str, str] = {}
+    for r in _load_sitemap():
+        m = re.match(r"^/charts/([^/]+)/", r["url_pattern"])
+        if m:
+            plat = m.group(1)
+            out.setdefault(plat, r["url_pattern"])
+
+    # Platforms live on chartmetric but missing from the snapshot.
+    extras = {
+        "genius": "/charts/genius/top-tracks",
+    }
+    for k, v in extras.items():
+        out.setdefault(k, v)
+
+    _chart_platform_cache = out
+    return out
+
+
+def _detect_chart_platform_url(text_norm: str) -> Optional[str]:
+    """If the text mentions '<platform> chart(s)', return the canonical
+    /charts/<platform>/... URL — used as a final override when the
+    normal matcher picks a non-charts row but the feature is clearly
+    about a charts page."""
+    if not text_norm:
+        return None
+    for plat, default_url in _chart_platforms().items():
+        plat_norm = " ".join(_stem(t) for t in plat.split("-") if t)
+        if not plat_norm:
+            continue
+        # Match "<plat> chart" — _norm_text already singularised
+        # "charts" -> "chart" via _stem.
+        if re.search(r"(?<![a-z0-9])" + re.escape(plat_norm) + r" chart(?![a-z0-9])", text_norm):
+            return default_url
+    return None
+
+
 def infer_chartmetric_url(title: str, description: str = "", min_score: float = 2.0) -> Optional[str]:
     """Return the best-guess Chartmetric URL for a feature based on its
     title+description, or None if no candidate scores above the threshold.
@@ -200,6 +265,7 @@ def infer_chartmetric_url(title: str, description: str = "", min_score: float = 
     text_set = set(text_tokens)
     idf = _idf()
     input_bigrams = _bigrams(text_tokens)
+    text_norm_full = _norm_text(f"{title or ''} {description or ''}")
 
     best = None
     best_score = 0.0
@@ -210,36 +276,74 @@ def infer_chartmetric_url(title: str, description: str = "", min_score: float = 
         if not (path_overlap or name_overlap or desc_overlap):
             continue
 
-        # Topical floor: a row only earns description-match points if it
-        # also matches on the URL path or feature name. Otherwise generic
-        # description verbiage (e.g. "modal", "additional", "click") lets
-        # any thematically-unrelated row win on token volume alone.
-        topical = bool(path_overlap or name_overlap)
-
+        # Topical floor: description tokens only contribute fully when
+        # the URL path itself agrees with the topic. If only the name
+        # matched (e.g. row name "Full Page" — generic), description
+        # tokens get heavily discounted so a bloated description can't
+        # win on volume alone. If nothing topical matched, near-zero.
         score = 0.0
         for t in path_overlap:
             score += idf.get(t, 1.0) * 3.0
         for t in name_overlap - path_overlap:
             score += idf.get(t, 1.0) * 2.0
-        if topical:
-            for t in desc_overlap - path_overlap - name_overlap:
-                score += idf.get(t, 1.0)
+        # Cap desc contribution to the TOP 5 matched tokens (by IDF)
+        # so a row with a bloated marketing-brochure description (e.g.
+        # the /artists "Full Page" row has 130+ desc tokens) can't
+        # accumulate a runaway score on token volume alone.
+        if path_overlap:
+            desc_extras = sorted(
+                (idf.get(t, 1.0) for t in desc_overlap - path_overlap - name_overlap),
+                reverse=True,
+            )[:5]
+            score += sum(desc_extras)
+        elif name_overlap:
+            desc_extras = sorted(
+                (idf.get(t, 1.0) for t in desc_overlap - name_overlap),
+                reverse=True,
+            )[:5]
+            score += sum(desc_extras) * 0.3
         else:
-            # Heavy discount on desc-only matches so they can still
-            # tiebreak between equally-scoring topical rows but never
-            # outscore a true topical match elsewhere.
-            for t in desc_overlap:
-                score += idf.get(t, 1.0) * 0.2
+            desc_extras = sorted(
+                (idf.get(t, 1.0) for t in desc_overlap),
+                reverse=True,
+            )[:5]
+            score += sum(desc_extras) * 0.2
 
         # Landing-page jackpot: if the URL is a single, non-placeholder
-        # segment (e.g. /influencers, /talent-search) and that one path
-        # token is rare *and* present in the input, this row is almost
-        # certainly the right answer — beating deeply-nested rows that
-        # only match the same word as a side topic.
-        if len(entry["path_tokens"]) == 1 and "{" not in entry["url_pattern"]:
+        # segment (e.g. /influencers, /talent-search, /shortlists) and
+        # that one path token is reasonably specific *and* present in
+        # the input, this row is almost certainly the right answer —
+        # beating deeply-nested rows that only match the same word as
+        # a side topic.
+        if (
+            len(entry["path_tokens"]) == 1
+            and "{" not in entry["url_pattern"]
+            and ":" not in entry["url_pattern"]
+        ):
             (only,) = tuple(entry["path_tokens"])
-            if only in path_overlap and idf.get(only, 0) >= 3.0:
+            if only in path_overlap and idf.get(only, 0) >= 2.5:
                 score += idf[only] * 5.0
+
+        # Entity-type bias: when the input mentions an entity word
+        # (artist, track, album, shortlist, ...), prefer URL patterns
+        # that are scoped to that entity. This disambiguates rows
+        # whose feature_name is shared across entity types — e.g.
+        # "Stats & Trends" exists under /artist, /album and /playlist.
+        for ent in _entities_in(text_set):
+            pat = entry["url_pattern"]
+            if pat == f"/{ent}s" or pat == f"/{ent}" or pat.startswith(f"/{ent}/") or pat.startswith(f"/{ent}s/"):
+                score += 5.0
+                break
+
+        # Name-substring bonus: when a multi-token feature_name appears
+        # verbatim inside the input text, this row is essentially named
+        # in the input — give it a strong boost so e.g. a row literally
+        # named "Stats & Trends" wins over an unrelated /industry row
+        # that just happens to share a single rare token.
+        if entry["name_text_norm"] and " " in entry["name_text_norm"]:
+            if entry["name_text_norm"] in text_norm_full:
+                ntoks = entry["name_text_norm"].count(" ") + 1
+                score += 8.0 * ntoks
 
         if input_bigrams:
             path_text = entry["path_text_norm"]
@@ -254,6 +358,23 @@ def infer_chartmetric_url(title: str, description: str = "", min_score: float = 
         if score > best_score:
             best_score = score
             best = entry
+
+    # Final override: if the input clearly mentions a "<platform> chart(s)"
+    # but the best match isn't a /charts/<platform>/... row, the matcher
+    # has gotten confused (likely because a chart platform is missing
+    # from the snapshot or because a description mentions the platform
+    # in passing on an unrelated row). Trust the explicit phrasing.
+    chart_url = _detect_chart_platform_url(text_norm_full)
+    if chart_url:
+        best_pat = best["url_pattern"] if best else ""
+        target_prefix = "/".join(chart_url.split("/")[:3]) + "/"  # '/charts/<plat>/'
+        if not best_pat.startswith(target_prefix):
+            url = _fill_placeholders(chart_url)
+            logger.info(
+                f"[sitemap] Chart-platform override for {title!r} -> {url} "
+                f"(was best={best_pat or 'None'} score={best_score:.1f})"
+            )
+            return url
 
     if not best or best_score < min_score:
         return None
