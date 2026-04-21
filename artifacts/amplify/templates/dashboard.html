@@ -318,13 +318,13 @@
             flex-shrink: 0; cursor: pointer; position: relative; transition: transform 0.1s;
         }
         .score-badge:hover { transform: scale(1.08); }
-        .score-5 { background: rgba(0,201,167,0.15); color: #00C9A7; }
-        .score-4 { background: rgba(59,130,246,0.15); color: #3b82f6; }
-        .score-3 { background: rgba(234,179,8,0.15); color: #eab308; }
-        .score-2 { background: rgba(249,115,22,0.15); color: #f97316; }
-        .score-1 { background: rgba(107,114,128,0.15); color: #6b7280; }
-        .score-0 { background: rgba(107,114,128,0.1); color: #4b5563; }
-        .score-autoskipped { background: rgba(234,179,8,0.12); color: #eab308; font-size: 16px; font-weight: 700; }
+        .score-5 { background: rgba(139,148,158,0.08); color: var(--text-primary); box-shadow: inset 3px 0 0 #00C9A7; }
+        .score-4 { background: rgba(139,148,158,0.08); color: var(--text-primary); box-shadow: inset 3px 0 0 #3b82f6; }
+        .score-3 { background: rgba(139,148,158,0.08); color: var(--text-primary); box-shadow: inset 3px 0 0 #eab308; }
+        .score-2 { background: rgba(139,148,158,0.08); color: var(--text-muted); box-shadow: inset 3px 0 0 #f97316; }
+        .score-1 { background: rgba(139,148,158,0.08); color: var(--text-muted); box-shadow: inset 3px 0 0 #6b7280; }
+        .score-0 { background: rgba(139,148,158,0.06); color: var(--text-dim); box-shadow: inset 3px 0 0 #4b5563; }
+        .score-autoskipped { background: rgba(139,148,158,0.06); color: var(--text-muted); font-size: 16px; font-weight: 700; box-shadow: inset 3px 0 0 #eab308; }
         .override-indicator {
             position: absolute; top: -4px; right: -4px; font-size: 10px;
             background: var(--bg-card); border-radius: 50%; width: 16px; height: 16px;
@@ -361,31 +361,35 @@
         .chevron { font-size: 12px; color: var(--text-muted); transition: transform 0.2s; flex-shrink: 0; margin-top: 3px; }
         .feature-card.expanded .chevron { transform: rotate(180deg); }
         .card-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; position: relative; }
-        .category-pill {
+        .category-pill, .cat-badge {
             font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 99px;
-            text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; transition: opacity 0.15s;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            background: rgba(139,148,158,0.08); color: var(--text-muted);
+            display: inline-flex; align-items: center; gap: 5px;
+            transition: opacity 0.15s;
         }
-        .category-pill:hover { opacity: 0.8; }
-        .cat-new_feature { background: rgba(0,201,167,0.15); color: #00C9A7; }
-        .cat-improvement { background: rgba(59,130,246,0.15); color: #3b82f6; }
-        .cat-bug_fix { background: rgba(239,68,68,0.15); color: #ef4444; }
-        .cat-infrastructure { background: rgba(107,114,128,0.15); color: #6b7280; }
-        .cat-mobile { background: rgba(168,85,247,0.15); color: #a855f7; }
-        .cat-deprecation { background: rgba(249,115,22,0.15); color: #f97316; }
-        .cat-default { background: rgba(107,114,128,0.15); color: var(--text-muted); }
-        .cat-autoskipped { background: rgba(234,179,8,0.12); color: #eab308; font-style: italic; }
-        .cat-badge { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .cat-badge.cat-new_feature { background: rgba(0,201,167,0.15); color: #00C9A7; }
-        .cat-badge.cat-improvement { background: rgba(59,130,246,0.15); color: #3b82f6; }
-        .cat-badge.cat-bug_fix { background: rgba(239,68,68,0.15); color: #ef4444; }
-        .cat-badge.cat-infrastructure { background: rgba(107,114,128,0.15); color: #6b7280; }
-        .cat-badge.cat-mobile { background: rgba(168,85,247,0.15); color: #a855f7; }
-        .cat-badge.cat-deprecation { background: rgba(249,115,22,0.15); color: #f97316; }
-        .cat-badge.cat-unknown, .cat-badge.cat-autoskipped { background: rgba(234,179,8,0.15); color: #eab308; }
-        .pre-filter-badge { font-size: 10px; padding: 2px 8px; border-radius: 99px; background: rgba(107,114,128,0.15); color: #6b7280; }
+        .category-pill { cursor: pointer; }
+        .category-pill:hover { opacity: 0.85; }
+        .category-pill::before, .cat-badge::before {
+            content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+            background: #6b7280; flex-shrink: 0;
+        }
+        .category-pill.cat-new_feature::before, .cat-badge.cat-new_feature::before { background: #00C9A7; }
+        .category-pill.cat-improvement::before, .cat-badge.cat-improvement::before { background: #3b82f6; }
+        .category-pill.cat-bug_fix::before, .cat-badge.cat-bug_fix::before { background: #ef4444; }
+        .category-pill.cat-infrastructure::before, .cat-badge.cat-infrastructure::before { background: #6b7280; }
+        .category-pill.cat-mobile::before, .cat-badge.cat-mobile::before { background: #a855f7; }
+        .category-pill.cat-deprecation::before, .cat-badge.cat-deprecation::before { background: #f97316; }
+        .category-pill.cat-autoskipped, .cat-badge.cat-autoskipped, .cat-badge.cat-unknown { font-style: italic; }
+        .category-pill.cat-autoskipped::before, .cat-badge.cat-autoskipped::before, .cat-badge.cat-unknown::before { background: #eab308; }
+        .pre-filter-badge { font-size: 10px; padding: 2px 8px; border-radius: 99px; background: rgba(139,148,158,0.08); color: var(--text-muted); }
         .auto-classified-pill {
             font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
-            background: rgba(234,179,8,0.12); color: #eab308; white-space: nowrap; cursor: default;
+            background: rgba(139,148,158,0.08); color: var(--text-muted); white-space: nowrap; cursor: default;
+            display: inline-flex; align-items: center; gap: 5px;
+        }
+        .auto-classified-pill::before {
+            content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #eab308;
         }
         .btn-star {
             background: transparent; border: 1px solid var(--border, #2a3a4a); color: var(--text-dim, #99aabb);
@@ -422,11 +426,16 @@
         .source-pill {
             font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
             text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap;
+            background: rgba(139,148,158,0.08); color: var(--text-muted);
+            display: inline-flex; align-items: center; gap: 5px;
         }
-        .source-slack-asana { background: rgba(0,201,167,0.12); color: #00C9A7; }
-        .source-slack-only { background: rgba(234,179,8,0.12); color: #eab308; }
-        .source-asana-only { background: rgba(249,115,22,0.12); color: #f97316; }
-        .version-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(88,166,255,0.1); color: #58a6ff; font-family: 'SF Mono', 'Fira Code', monospace; white-space: nowrap; }
+        .source-pill::before {
+            content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #6b7280;
+        }
+        .source-slack-asana::before { background: #00C9A7; }
+        .source-slack-only::before { background: #eab308; }
+        .source-asana-only::before { background: #f97316; }
+        .version-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(139,148,158,0.08); color: var(--text-muted); font-family: 'SF Mono', 'Fira Code', monospace; white-space: nowrap; }
         .date-pill { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(139,148,158,0.08); color: var(--text-muted); white-space: nowrap; display: inline-flex; align-items: center; }
         .picker-row-date { font-size: 11px; color: var(--text-muted); font-weight: 500; margin-left: 8px; white-space: nowrap; }
         .prefix-label { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: rgba(139,148,158,0.1); color: #8b949e; font-weight: 600; }
