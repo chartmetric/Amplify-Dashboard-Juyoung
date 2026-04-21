@@ -11999,20 +11999,50 @@ function submitManualFeature() {
         }
         f._justAdded = true;
         allFeatures.unshift(f);
+
+        var searchInputEl = document.getElementById('feature-search-input');
+        if (searchInputEl) searchInputEl.value = '';
+        var searchClearEl = document.getElementById('feature-search-clear');
+        if (searchClearEl) searchClearEl.style.display = 'none';
+        featureSearchQuery = '';
+        activeCategoryFilters = ['all'];
+        activeSourceFilters = ['announced', 'not_announced'];
+        var impEl = document.getElementById('importance-filter');
+        if (impEl) {
+            var impVal = parseInt(impEl.value, 10) || 0;
+            var newScore = (f.classification && f.classification.importance_score) || 0;
+            if (newScore > 0 && newScore < impVal) impEl.value = String(newScore);
+            if (newScore === 0) impEl.value = '1';
+        }
+        currentPage = 1;
+        var catPills = document.querySelectorAll('#category-filter-row .cat-filter-pill');
+        for (var ci = 0; ci < catPills.length; ci++) {
+            var pc = catPills[ci].getAttribute('data-cat');
+            catPills[ci].classList.remove('active', 'active-auto-skipped');
+            if (pc === 'all') catPills[ci].classList.add('active');
+        }
+        var srcPills = document.querySelectorAll('#source-filter-row .cat-filter-pill');
+        for (var si = 0; si < srcPills.length; si++) {
+            var ps = srcPills[si].getAttribute('data-source');
+            srcPills[si].classList.remove('active');
+            if (ps === 'announced' || ps === 'not_announced') srcPills[si].classList.add('active');
+        }
         renderAll();
 
         closeManualFeatureModal();
 
         if (statusBar) {
-            statusBar.textContent = 'Added: ' + f.title;
+            statusBar.textContent = 'Added: ' + f.title + ' — pinned to top';
             statusBar.className = 'paste-status success';
             statusBar.style.display = 'block';
-            setTimeout(function() { statusBar.style.display = 'none'; }, 3000);
+            setTimeout(function() { statusBar.style.display = 'none'; }, 4000);
         }
 
-        var firstCard = document.querySelector('.feature-card.just-added');
-        if (firstCard) firstCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(function() { delete f._justAdded; }, 2500);
+        setTimeout(function() {
+            var firstCard = document.querySelector('.feature-card.just-added');
+            if (firstCard) firstCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 50);
+        setTimeout(function() { delete f._justAdded; }, 6000);
     })
     .catch(function(err) {
         errEl.textContent = 'Network error: ' + (err && err.message ? err.message : 'failed');
