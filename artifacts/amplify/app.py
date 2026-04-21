@@ -112,6 +112,20 @@ def dashboard():
     return render_template("dashboard.html")
 
 
+@app.route("/__startup_log")
+def startup_log():
+    """Return contents of the production bootstrap log for deploy diagnostics."""
+    path = os.environ.get("AMPLIFY_STARTUP_LOG", "/tmp/amplify_startup.log")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return content, 200, {"Content-Type": "text/plain; charset=utf-8"}
+    except FileNotFoundError:
+        return f"no startup log at {path}", 404, {"Content-Type": "text/plain; charset=utf-8"}
+    except Exception as e:
+        return f"error reading {path}: {e}", 500, {"Content-Type": "text/plain; charset=utf-8"}
+
+
 @app.route("/api/health")
 def health():
     """Health check with API key status, channel count, and example counts.

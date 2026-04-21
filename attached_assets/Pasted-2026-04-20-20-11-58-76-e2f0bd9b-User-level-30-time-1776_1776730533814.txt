@@ -1,0 +1,56 @@
+2026-04-20 20:11:58.76
+e2f0bd9b
+User
+{"level":30,"time":1776730318760,"pid":20,"hostname":"localhost","req":{"id":51,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":200},"responseTime":1,"msg":"request completed"}
+2026-04-20 20:12:00.32
+e2f0bd9b
+User
+{"level":30,"time":1776730320329,"pid":20,"hostname":"localhost","req":{"id":52,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":200},"responseTime":0,"msg":"request completed"}
+2026-04-20 20:12:01.58
+e2f0bd9b
+User
+{"level":30,"time":1776730321586,"pid":20,"hostname":"localhost","req":{"id":53,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":200},"responseTime":0,"msg":"request completed"}
+2026-04-20 20:12:03.14
+e2f0bd9b
+User
+{"level":30,"time":1776730323141,"pid":20,"hostname":"localhost","req":{"id":54,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":200},"responseTime":1,"msg":"request completed"}
+2026-04-20 20:12:03.35
+e2f0bd9b
+User
+{"level":30,"time":1776730323357,"pid":20,"hostname":"localhost","req":{"id":55,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":200},"responseTime":0,"msg":"request completed"}
+2026-04-20 20:12:04.71
+e2f0bd9b
+User
+{"level":30,"time":1776730324714,"pid":20,"hostname":"localhost","req":{"id":56,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":200},"responseTime":0,"msg":"request completed"}
+2026-04-20 20:12:05.54
+e2f0bd9b
+User
+{"level":30,"time":1776730325548,"pid":20,"hostname":"localhost","req":{"id":57,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":200},"responseTime":1,"msg":"request completed"}
+2026-04-20 20:12:07.07
+e2f0bd9b
+User
+{"level":30,"time":1776730327071,"pid":20,"hostname":"localhost","req":{"id":58,"method":"GET","url":"/api-server/healthz"},"res":{"statusCode":200},"responseTime":0,"msg":"request completed"}
+2026-04-20 20:12:07.20
+e2f0bd9b
+System
+not all artifact ports opened within timeout expected=[5000 8080] detected=1
+2026-04-20 20:12:07.20
+e2f0bd9b
+System
+sending SIGTERM to artifact process artifact=artifacts/amplify
+2026-04-20 20:12:07.20
+e2f0bd9b
+System
+sending SIGTERM to artifact process artifact=artifacts/api-server
+2026-04-20 20:12:07.21
+e2f0bd9b
+System
+artifact process exited with error error=signal: terminated artifact=artifacts/api-server
+2026-04-20 20:12:07.21
+e2f0bd9b
+System
+all artifact processes stopped
+2026-04-20 20:12:07.21
+e2f0bd9b
+System
+a port configuration was specified but the required port was never opened

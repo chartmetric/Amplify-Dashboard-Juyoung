@@ -6866,6 +6866,26 @@ function getPersistedFeatureLink(fid) {
     } catch(e) { return null; }
 }
 
+function getFeatureSourceUrl(fid) {
+    if (!fid) return '';
+    try {
+        var feats = (typeof allFeatures !== 'undefined' && Array.isArray(allFeatures)) ? allFeatures : [];
+        for (var i = 0; i < feats.length; i++) {
+            var f = feats[i];
+            if (f && f.id === fid) {
+                return (f.asana_url || f.slack_url || f.github_url || f.permalink || f.url || '').trim();
+            }
+        }
+    } catch(e) {}
+    return '';
+}
+
+function getEffectiveFeatureLink(fid) {
+    var p = getPersistedFeatureLink(fid);
+    if (p) return p;
+    return getFeatureSourceUrl(fid) || null;
+}
+
 function promptFeatureLink() {
     var current = contentViewFeatureLink || '';
     var url = prompt('Enter a URL for the hyperlink:', current);
@@ -9337,6 +9357,18 @@ function _reattachAttachmentsToContent(content, idx) {
             out = out.replace(/\s+$/, '') + '\n\n' + md;
         }
     });
+    try {
+        var _r = (prepBatchResults || [])[idx] || {};
+        var _fid = _r.feature_id || '';
+        var _ch = (typeof prepChannel !== 'undefined') ? prepChannel : '';
+        var isEmail = (typeof isEmailChannel === 'function') ? isEmailChannel(_ch) : (_ch && _ch.indexOf('email') === 0);
+        if (_fid && isEmail) {
+            var _link = (typeof getEffectiveFeatureLink === 'function') ? getEffectiveFeatureLink(_fid) : null;
+            if (_link && !/\[cta:[^\]]*\]/i.test(out)) {
+                out = out.replace(/\s+$/, '') + '\n\n[cta: text=Open in Chartmetric \u2192 | url=' + _link + ']';
+            }
+        }
+    } catch(_e) {}
     return out;
 }
 
