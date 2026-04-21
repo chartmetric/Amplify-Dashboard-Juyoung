@@ -463,6 +463,30 @@ def get_video_thumb_path(video_id):
     return None
 
 
+def delete_video(feature_id, video_id):
+    """Permanently delete a video (file, thumbnail, metadata) belonging to feature_id.
+
+    Raises ValueError if the video is missing or does not belong to the given feature.
+    Returns True on success.
+    """
+    import shutil
+    vdir = _video_dir(video_id)
+    meta_path = os.path.join(vdir, "meta.json")
+    if not os.path.exists(meta_path):
+        raise ValueError("Video not found")
+    try:
+        with open(meta_path) as f:
+            meta = json.load(f)
+    except Exception as e:
+        raise ValueError(f"Could not read video metadata: {e}")
+    owner = meta.get("feature_id")
+    if owner != feature_id:
+        raise ValueError("Video does not belong to this feature")
+    shutil.rmtree(vdir)
+    logger.info(f"[publish_store] Deleted video {video_id} for feature {feature_id}")
+    return True
+
+
 def list_feature_videos(feature_id):
     _ensure_dirs()
     results = []

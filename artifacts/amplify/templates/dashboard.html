@@ -4747,29 +4747,44 @@ function enterContentView(feature) {
     window.contentViewVideos = {};
     imageUndoStack = [];
 
+    var _videoPreviewEl = document.getElementById('feature-image-preview');
+    if (_videoPreviewEl) {
+      var _existingVideoCards = _videoPreviewEl.querySelectorAll('.video-preview-item');
+      for (var _i = 0; _i < _existingVideoCards.length; _i++) _existingVideoCards[_i].remove();
+    }
+
+    window.videoLoadToken = (window.videoLoadToken || 0) + 1;
+    window.videoLoadFeatureId = feature && feature.id ? feature.id : '';
+    var _myVideoToken = window.videoLoadToken;
+    var _myVideoFeatureId = window.videoLoadFeatureId;
+
     if (feature && feature.id) {
       fetch('/api/features/' + encodeURIComponent(feature.id) + '/videos')
         .then(function(r) { return r.ok ? r.json() : []; })
         .then(function(vids) {
-          if (Array.isArray(vids)) {
-            vids.forEach(function(v) {
-              if (v.filename && v.thumb_url && v.video_url) {
-                window.contentViewVideos[v.filename] = { thumb_url: v.thumb_url, video_url: v.video_url };
-                if (typeof renderVideoPreview === 'function') {
-                  renderVideoPreview({ filename: v.filename, video_id: v.filename, thumb_url: v.thumb_url, video_url: v.video_url });
-                }
+          if (_myVideoToken !== window.videoLoadToken || _myVideoFeatureId !== window.videoLoadFeatureId) return;
+          if (!Array.isArray(vids)) return;
+          var seenIds = {};
+          var seenNames = {};
+          vids.forEach(function(v) {
+            if (!v || !v.video_id || !v.filename || !v.thumb_url || !v.video_url) return;
+            if (seenIds[v.video_id] || seenNames[v.filename]) return;
+            seenIds[v.video_id] = true;
+            seenNames[v.filename] = true;
+            window.contentViewVideos[v.filename] = { video_id: v.video_id, thumb_url: v.thumb_url, video_url: v.video_url, name: v.filename };
+            if (typeof renderVideoPreview === 'function') {
+              renderVideoPreview({ filename: v.filename, video_id: v.video_id, thumb_url: v.thumb_url, video_url: v.video_url });
+            }
+          });
+          if (typeof updateAttachmentsEmptyState === 'function') updateAttachmentsEmptyState();
+          if (vids.length > 0) {
+            document.querySelectorAll('.channel-card').forEach(function(card) {
+              var ta = card.querySelector('textarea');
+              if (ta && ta.value && ta.value.indexOf('[video:') !== -1) {
+                var previewEl = card.querySelector('.content-preview');
+                if (previewEl) previewEl.innerHTML = simpleMarkdown(ta.value);
               }
             });
-            if (typeof updateAttachmentsEmptyState === 'function') updateAttachmentsEmptyState();
-            if (vids.length > 0) {
-              document.querySelectorAll('.channel-card').forEach(function(card) {
-                var ta = card.querySelector('textarea');
-                if (ta && ta.value && ta.value.indexOf('[video:') !== -1) {
-                  var previewEl = card.querySelector('.content-preview');
-                  if (previewEl) previewEl.innerHTML = simpleMarkdown(ta.value);
-                }
-              });
-            }
           }
         })
         .catch(function() {});
@@ -6503,6 +6518,12 @@ function renderVideoPreview(data) {
     var vidUrl = data.video_url || '';
     var thumbUrl = data.thumb_url || '';
     var vidId = data.video_id || '';
+    var _existing = preview.querySelectorAll('.video-preview-item');
+    for (var _e = 0; _e < _existing.length; _e++) {
+        var _ev = _existing[_e];
+        if (vidId && _ev.getAttribute('data-video-id') === vidId) return;
+        if (!vidId && vidName && _ev.getAttribute('data-video-name') === vidName) return;
+    }
     var videoHtml =
         '<div class="attachment-card video-preview-item" data-video-id="' + escHtml(vidId) + '" data-video-name="' + escHtml(vidName) + '">' +
             '<div class="attachment-thumb" style="position:relative;overflow:hidden;">' +
@@ -6528,11 +6549,15 @@ function renderVideoPreview(data) {
     if (typeof showVideoToggles === 'function') showVideoToggles();
 }
 
-function removeFeatureVideo(btn) {
-    var card = btn.closest('.video-preview-item');
-    if (!card) return;
-    var vidName = card.getAttribute('data-video-name') || '';
-    card.remove();
+function _deleteVideoOnServer(featureId, videoId) {
+    return fetch('/api/features/' + encodeURIComponent(featureId) + '/videos/' + encodeURIComponent(videoId), { method: 'DELETE' })
+        .then(function(r) {
+            return r.json().then(function(j) { return { ok: r.ok, body: j }; }, function() { return { ok: r.ok, body: {} }; });
+        });
+}
+
+function _purgeVideoFromUI(card, vidName) {
+    if (card && card.parentNode) card.remove();
     if (window.contentViewVideos && vidName && window.contentViewVideos[vidName]) {
         delete window.contentViewVideos[vidName];
     }
@@ -6555,20 +6580,77 @@ function removeFeatureVideo(btn) {
     }
     updateAttachmentsEmptyState();
     if (typeof showVideoToggles === 'function') showVideoToggles();
-    showToast('Video removed', 'success');
+}
+
+function removeFeatureVideo(btn) {
+    var card = btn.closest('.video-preview-item');
+    if (!card) return;
+    var vidName = card.getAttribute('data-video-name') || '';
+    var vidId = card.getAttribute('data-video-id') || '';
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    if (!fid || !vidId) {
+        showToast('Cannot delete video: missing identifier', 'error');
+        return;
+    }
+    if (!window.confirm('Permanently delete this video? This cannot be undone.')) return;
+    var origLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Deleting…';
+    _deleteVideoOnServer(fid, vidId)
+        .then(function(res) {
+            if (!res.ok || !res.body || !res.body.success) {
+                btn.disabled = false;
+                btn.textContent = origLabel;
+                var msg = (res.body && res.body.error) ? res.body.error : 'unknown error';
+                showToast('Failed to delete video: ' + msg, 'error');
+                return;
+            }
+            _purgeVideoFromUI(card, vidName);
+            showToast('Video deleted', 'success');
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = origLabel;
+            showToast('Failed to delete video: ' + (err && err.message ? err.message : err), 'error');
+        });
 }
 
 function replaceFeatureVideo(btn) {
     var card = btn.closest('.video-preview-item');
     if (!card) return;
+    var vidName = card.getAttribute('data-video-name') || '';
+    var vidId = card.getAttribute('data-video-id') || '';
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
     var input = document.createElement('input');
     input.type = 'file';
     input.accept = 'video/*';
     input.onchange = function() {
         if (!input.files || !input.files[0]) return;
-        var fakeRemoveBtn = card.querySelector('.btn-remove');
-        if (fakeRemoveBtn) removeFeatureVideo(fakeRemoveBtn);
-        handleVideoFile(input.files[0]);
+        var newFile = input.files[0];
+        if (!fid || !vidId) {
+            showToast('Cannot replace video: missing identifier', 'error');
+            return;
+        }
+        var origLabel = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Replacing…';
+        _deleteVideoOnServer(fid, vidId)
+            .then(function(res) {
+                if (!res.ok || !res.body || !res.body.success) {
+                    btn.disabled = false;
+                    btn.textContent = origLabel;
+                    var msg = (res.body && res.body.error) ? res.body.error : 'unknown error';
+                    showToast('Failed to replace video: ' + msg, 'error');
+                    return;
+                }
+                _purgeVideoFromUI(card, vidName);
+                handleVideoFile(newFile);
+            })
+            .catch(function(err) {
+                btn.disabled = false;
+                btn.textContent = origLabel;
+                showToast('Failed to replace video: ' + (err && err.message ? err.message : err), 'error');
+            });
     };
     input.click();
 }

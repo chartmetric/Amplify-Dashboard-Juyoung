@@ -29,7 +29,7 @@ from ai.pre_filter import pre_filter_batch  # kept for backward compat, not used
 from ai.generator import generate_for_channel, generate_all_channels, get_content_cache_index
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
-from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published, save_video as save_publish_video, get_video_path, get_video_thumb_path, list_feature_videos
+from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published, save_video as save_publish_video, get_video_path, get_video_thumb_path, list_feature_videos, delete_video as delete_publish_video
 from ai.classification_overrides import save_override as save_classification_override, get_overrides as get_classification_overrides
 from ai.feature_sets import save_set as save_feature_set, get_sets as get_feature_sets, delete_set as delete_feature_set
 from datetime import datetime, timezone
@@ -2366,6 +2366,23 @@ def serve_external_video_thumb(key):
     if not path:
         return redirect("https://via.placeholder.com/640x360/222222/999999?text=Video")
     return send_file(path, mimetype="image/jpeg")
+
+
+@app.route("/api/features/<feature_id>/videos/<video_id>", methods=["DELETE"])
+def delete_feature_video(feature_id, video_id):
+    if not feature_id or not video_id:
+        return jsonify({"success": False, "error": "feature_id and video_id required"}), 400
+    try:
+        delete_publish_video(feature_id, video_id)
+    except ValueError as e:
+        msg = str(e)
+        logger.warning(f"[features/videos DELETE] REJECT feature_id={feature_id!r} video_id={video_id!r}: {msg}")
+        status = 404 if "not found" in msg.lower() or "does not belong" in msg.lower() else 400
+        return jsonify({"success": False, "error": msg}), status
+    except Exception as e:
+        logger.exception(f"[features/videos DELETE] UNCAUGHT feature_id={feature_id!r} video_id={video_id!r} type={type(e).__name__}")
+        return jsonify({"success": False, "error": f"Delete failed: {type(e).__name__}: {e}"}), 500
+    return jsonify({"success": True}), 200
 
 
 @app.route("/api/features/<feature_id>/videos")
