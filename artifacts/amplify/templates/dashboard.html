@@ -2034,6 +2034,7 @@
             <span class="approved-counter" id="approved-counter">Approved: 0/0 channels</span>
             <button class="btn-approve" id="btn-approve-selected" onclick="approveSelectedChannels()" style="display:none;">Approve Selected</button>
             <button class="btn-approve" id="btn-approve-all" onclick="approveAllChannels()">Approve All</button>
+            <button class="btn-generate btn-regenerate" id="btn-regenerate-all" onclick="regenerateAllChannels()" title="Regenerate every channel for this feature from scratch">&#8634; Regenerate All</button>
             <button class="btn-undo-all" id="btn-undo-all" onclick="undoAllApprovals()" style="display:none;">Undo All</button>
             <button class="btn-publish" id="btn-publish" disabled onclick="publishAllApproved()">Publish All Approved &rarr;</button>
         </div>
@@ -5317,6 +5318,29 @@ function simpleMarkdown(text, opts) {
     }
     flushPara();
     return result.join('');
+}
+
+function regenerateAllChannels() {
+    var keys = Object.keys(contentViewChannels || {});
+    if (!keys.length) {
+        showToast('Nothing to regenerate', 'warning');
+        return;
+    }
+    if (!confirm('Regenerate drafts for all ' + keys.length + ' channels for this feature? Any unsaved edits in the channel cards will be replaced.')) return;
+    var btn = document.getElementById('btn-regenerate-all');
+    var origLabel = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '\u21bb Regenerating...'; }
+    keys.forEach(function(chKey) {
+        try {
+            var fbInput = document.getElementById('feedback-' + chKey);
+            if (fbInput) fbInput.value = '';
+            regenerateChannel(chKey);
+        } catch (e) { console.warn('regen failed for', chKey, e); }
+    });
+    setTimeout(function() {
+        if (btn) { btn.disabled = false; btn.innerHTML = origLabel || '\u21bb Regenerate All'; }
+    }, 1200);
+    showToast('Regenerating all ' + keys.length + ' channels...', 'success');
 }
 
 function regenerateChannel(chKey) {
