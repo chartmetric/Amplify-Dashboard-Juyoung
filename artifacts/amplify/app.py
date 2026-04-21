@@ -29,7 +29,7 @@ from ai.pre_filter import pre_filter_batch  # kept for backward compat, not used
 from ai.generator import generate_for_channel, generate_all_channels, get_content_cache_index
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
-from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published, save_video as save_publish_video, get_video_path, get_video_thumb_path, list_feature_videos, delete_video as delete_publish_video, cleanup_orphan_videos
+from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published, save_video as save_publish_video, save_video_url as save_publish_video_url, get_video_path, get_video_thumb_path, list_feature_videos, delete_video as delete_publish_video, cleanup_orphan_videos
 from ai.classification_overrides import save_override as save_classification_override, get_overrides as get_classification_overrides
 from ai.feature_sets import save_set as save_feature_set, get_sets as get_feature_sets, delete_set as delete_feature_set
 from datetime import datetime, timezone
@@ -1892,10 +1892,17 @@ def _build_video_map(feature_id):
         fname = v.get("filename", "")
         if vid_id and fname:
             has_thumb = v.get("has_thumb", True)
-            video_map[fname] = {
-                "thumb_url": f"{scheme}://{base}/api/videos/{vid_id}/thumb" if has_thumb else fallback_thumb,
-                "video_url": f"{scheme}://{base}/api/videos/{vid_id}",
-            }
+            if v.get("is_url"):
+                ext_thumb = v.get("external_thumb_url") or ""
+                video_map[fname] = {
+                    "thumb_url": ext_thumb or fallback_thumb,
+                    "video_url": v.get("external_url") or "",
+                }
+            else:
+                video_map[fname] = {
+                    "thumb_url": f"{scheme}://{base}/api/videos/{vid_id}/thumb" if has_thumb else fallback_thumb,
+                    "video_url": f"{scheme}://{base}/api/videos/{vid_id}",
+                }
     return video_map
 
 
@@ -2462,11 +2469,32 @@ def save_video_endpoint():
     data = request.get_json() or {}
     feature_id = data.get("feature_id", "")
     data_url = data.get("dataUrl", "")
+    is_url = bool(data.get("isUrl"))
+    ext_url = (data.get("url") or "").strip()
+    ext_thumb = (data.get("thumb_url") or "").strip()
     filename = data.get("name", "video.mp4")
-    logger.info(f"[publish/video] REQ feature_id={feature_id!r} filename={filename!r} dataUrl_len={len(data_url)}")
-    if not feature_id or not data_url:
-        logger.warning(f"[publish/video] REJECT missing fields feature_id_set={bool(feature_id)} dataUrl_set={bool(data_url)}")
-        return jsonify({"success": False, "error": "feature_id, dataUrl required"}), 400
+    logger.info(f"[publish/video] REQ feature_id={feature_id!r} filename={filename!r} isUrl={is_url} dataUrl_len={len(data_url)} url_len={len(ext_url)}")
+    if not feature_id:
+        logger.warning(f"[publish/video] REJECT missing feature_id")
+        return jsonify({"success": False, "error": "feature_id required"}), 400
+    if is_url or (ext_url and not data_url):
+        if not ext_url:
+            return jsonify({"success": False, "error": "url required for URL-only video"}), 400
+        try:
+            video_id = save_publish_video_url(feature_id, ext_url, filename, thumb_url=ext_thumb)
+        except ValueError as e:
+            logger.warning(f"[publish/video] REJECT ValueError(url): {e}")
+            return jsonify({"success": False, "error": str(e)}), 400
+        except Exception as e:
+            logger.exception(f"[publish/video] UNCAUGHT(url) type={type(e).__name__} repr={e!r}")
+            return jsonify({"success": False, "error": f"Video URL save failed: {type(e).__name__}: {e}"}), 500
+        thumb_url = ext_thumb or f"/api/videos/{video_id}/thumb"
+        video_url = ext_url
+        logger.info(f"[publish/video] OK url video_id={video_id} dt={(_time.time()-_t0)*1000:.0f}ms")
+        return jsonify({"success": True, "video_id": video_id, "thumb_url": thumb_url, "video_url": video_url, "is_url": True}), 200
+    if not data_url:
+        logger.warning(f"[publish/video] REJECT missing dataUrl")
+        return jsonify({"success": False, "error": "dataUrl required"}), 400
     try:
         video_id = save_publish_video(feature_id, data_url, filename)
     except ValueError as e:
@@ -2547,12 +2575,22 @@ def get_feature_videos(feature_id):
         fname = v.get("filename", "")
         has_thumb = v.get("has_thumb", True)
         if vid_id and fname:
-            result.append({
-                "video_id": vid_id,
-                "filename": fname,
-                "thumb_url": f"{scheme}://{base}/api/videos/{vid_id}/thumb" if has_thumb else "https://via.placeholder.com/640x360/222222/999999?text=Video",
-                "video_url": f"{scheme}://{base}/api/videos/{vid_id}",
-            })
+            if v.get("is_url"):
+                ext_thumb = v.get("external_thumb_url") or ""
+                result.append({
+                    "video_id": vid_id,
+                    "filename": fname,
+                    "thumb_url": ext_thumb or "https://via.placeholder.com/640x360/222222/999999?text=Video",
+                    "video_url": v.get("external_url") or "",
+                    "is_url": True,
+                })
+            else:
+                result.append({
+                    "video_id": vid_id,
+                    "filename": fname,
+                    "thumb_url": f"{scheme}://{base}/api/videos/{vid_id}/thumb" if has_thumb else "https://via.placeholder.com/640x360/222222/999999?text=Video",
+                    "video_url": f"{scheme}://{base}/api/videos/{vid_id}",
+                })
     return jsonify(result), 200
 
 

@@ -347,6 +347,47 @@ def _normalize_video_to_mp4(src_path, dst_path):
         return False
 
 
+def save_video_url(feature_id, url, filename, thumb_url=None):
+    """Register an external (URL-only) video against feature_id.
+
+    Persists a meta.json describing the remote video so it survives reload and
+    is included in list_feature_videos / _build_video_map. No bytes are stored
+    on disk; the email pipeline keeps using the external URL/thumbnail.
+    """
+    _ensure_dirs()
+    if not url or not isinstance(url, str):
+        raise ValueError("URL is required")
+    url = url.strip()
+    if not re.match(r'^https?://', url, re.IGNORECASE):
+        raise ValueError("URL must start with http:// or https://")
+    if len(url) > 2048:
+        raise ValueError("URL too long")
+    thumb_url = (thumb_url or "").strip()
+    if thumb_url and not re.match(r'^https?://', thumb_url, re.IGNORECASE):
+        thumb_url = ""
+    if thumb_url and len(thumb_url) > 2048:
+        thumb_url = ""
+
+    video_id = str(uuid.uuid4())
+    vdir = _video_dir(video_id)
+    os.makedirs(vdir, exist_ok=True)
+    meta = {
+        "video_id": video_id,
+        "feature_id": feature_id,
+        "filename": str(filename or url)[:200],
+        "ext": "",
+        "size": 0,
+        "has_thumb": bool(thumb_url),
+        "is_url": True,
+        "external_url": url,
+        "external_thumb_url": thumb_url,
+    }
+    with open(os.path.join(vdir, "meta.json"), "w") as f:
+        json.dump(meta, f)
+    logger.info(f"[publish_store] Saved video URL {video_id} for feature {feature_id} ({url})")
+    return video_id
+
+
 def save_video(feature_id, data_url, filename):
     _ensure_dirs()
 

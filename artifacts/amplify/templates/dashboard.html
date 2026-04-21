@@ -6284,22 +6284,62 @@ function pasteBatchImageFromClipboard(idx, gifOnly) {
 }
 
 function promptBatchVideoUrl(idx) {
-    var url = prompt('Enter a video URL (YouTube, Vimeo, or direct .mp4 link):');
-    if (!url || !url.trim()) return;
-    url = url.trim();
-    if (!/^https?:\/\//i.test(url)) {
-        showToast('Please enter a valid URL starting with http:// or https://', 'warning');
+    var raw = prompt('Paste a video URL (YouTube, Vimeo, or direct .mp4 link):', '');
+    if (raw === null) return;
+    var norm = (typeof _normalizeVideoUrl === 'function') ? _normalizeVideoUrl(raw) : null;
+    if (!norm) { showToast('Please enter a valid video URL', 'warning'); return; }
+    var fid = _getBatchFeatureId(idx);
+    if (!fid) {
+        showToast('Cannot attach video URL: this batch item has no feature id.', 'error');
         return;
     }
-    var ta = document.getElementById('batch-ta-' + idx);
-    if (!ta) { showToast('Editor not found', 'warning'); return; }
-    var marker = '[video: ' + url + ']';
-    if (ta.value.indexOf(marker) === -1) {
-        ta.value = ta.value.replace(/\s+$/, '') + '\n' + marker;
-        ta.dispatchEvent(new Event('input'));
+    var url = norm.url;
+    var thumb = norm.thumb_url;
+    if (!window.prepBatchVideos) window.prepBatchVideos = {};
+    if (!window.prepBatchVideos[idx]) window.prepBatchVideos[idx] = [];
+    var arr = window.prepBatchVideos[idx];
+    var dup = false;
+    for (var i = 0; i < arr.length; i++) { if (arr[i] && arr[i].name === url) { dup = true; break; } }
+    if (!dup) {
+        arr.push({ name: url, url: url, video_url: url, thumb_url: thumb, is_url: true });
+        if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     }
-    switchToBatchPreview(idx);
-    showToast('Video link added', 'success');
+    var ta = document.getElementById('batch-ta-' + idx);
+    if (ta) {
+        var marker = '[video: ' + url + ']';
+        if (ta.value.indexOf(marker) === -1) {
+            ta.value = ta.value.replace(/\s+$/, '') + '\n' + marker;
+            ta.dispatchEvent(new Event('input'));
+        }
+        switchToBatchPreview(idx);
+    }
+    if (typeof refreshBatchMediaButton === 'function') refreshBatchMediaButton(idx);
+    fetch('/api/publish/video', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ feature_id: fid, url: url, thumb_url: thumb, name: url, isUrl: true })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (!data || !data.success) {
+            showToast('Video URL save failed (will not appear in email): ' + ((data && data.error) || 'unknown'), 'error');
+            return;
+        }
+        var arr2 = (window.prepBatchVideos[idx] || []);
+        for (var j = arr2.length - 1; j >= 0; j--) {
+            if (arr2[j] && arr2[j].name === url && !arr2[j].video_id) {
+                arr2[j].video_id = data.video_id;
+                arr2[j].video_url = data.video_url || url;
+                arr2[j].thumb_url = data.thumb_url || thumb;
+                break;
+            }
+        }
+        if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
+        showToast('Video URL attached', 'success');
+    })
+    .catch(function(err) {
+        showToast('Video URL save failed: ' + (err && err.message ? err.message : err), 'error');
+    });
 }
 
 function getBatchMediaCount(idx) {
@@ -6698,35 +6738,87 @@ function replaceFeatureVideo(btn) {
     input.click();
 }
 
+function _normalizeVideoUrl(raw) {
+    if (!raw) return null;
+    var url = String(raw).trim();
+    if (!url) return null;
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    var ytId = null;
+    var m = url.match(/youtu\.be\/([\w-]{11})/);
+    if (m) ytId = m[1];
+    if (!ytId) {
+        m = url.match(/youtube\.com\/(?:watch\?(?:[^#]*&)*v=|embed\/|shorts\/|v\/)([\w-]{11})/);
+        if (m) ytId = m[1];
+    }
+    if (!ytId) {
+        m = url.match(/youtube\.com\/.*[?&]v=([\w-]{11})/);
+        if (m) ytId = m[1];
+    }
+    if (ytId) {
+        return {
+            url: 'https://www.youtube.com/watch?v=' + ytId,
+            thumb_url: 'https://i.ytimg.com/vi/' + ytId + '/hqdefault.jpg',
+            source: 'youtube'
+        };
+    }
+    var vm = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    if (vm) {
+        return {
+            url: 'https://vimeo.com/' + vm[1],
+            thumb_url: 'https://vumbnail.com/' + vm[1] + '.jpg',
+            source: 'vimeo'
+        };
+    }
+    if (/^https?:\/\/[^\s]+\.(mp4|mov|webm|m4v|ogg|ogv)(\?|#|$)/i.test(url)) {
+        return { url: url, thumb_url: '', source: 'direct' };
+    }
+    return null;
+}
+
 function promptVideoUrl() {
-    var url = prompt('Enter a video URL (YouTube, Vimeo, or direct .mp4 link):');
-    if (!url || !url.trim()) return;
-    url = url.trim();
-    if (!/^https?:\/\//i.test(url)) {
-        showToast('Please enter a valid URL starting with http:// or https://', 'warning');
-        return;
-    }
-    var emailKeys = ['email_newsletter', 'email_standalone'];
-    var allChKeys = Object.keys(contentViewChannels);
-    var addedCount = 0;
-    for (var i = 0; i < allChKeys.length; i++) {
-        var chKey = allChKeys[i];
-        if (emailKeys.indexOf(chKey) === -1 && chKey.indexOf('email') === -1) continue;
-        var ta = document.getElementById('ta-' + chKey);
-        if (ta) {
-            var marker = '\n[video: ' + url + ']';
-            ta.value = ta.value.replace(/\s+$/, '') + marker;
-            ta.dispatchEvent(new Event('input'));
-            autoSaveDraft(chKey);
-            switchToPreview(chKey);
-            addedCount++;
+    var raw = prompt('Paste a video URL (YouTube, Vimeo, or direct .mp4 link):', '');
+    if (raw === null) return;
+    var norm = _normalizeVideoUrl(raw);
+    if (!norm) { showToast('Please enter a valid video URL', 'warning'); return; }
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    if (!fid) { showToast('No feature selected', 'warning'); return; }
+    var url = norm.url;
+    var thumb = norm.thumb_url;
+    fetch('/api/publish/video', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ feature_id: fid, url: url, thumb_url: thumb, name: url, isUrl: true })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (!data || !data.success) {
+            showToast('Could not attach video URL: ' + ((data && data.error) || 'unknown'), 'error');
+            return;
         }
-    }
-    if (addedCount === 0) {
-        showToast('No email channels found to add video to', 'warning');
-    } else {
-        showToast('Video link added to ' + addedCount + ' email channel' + (addedCount > 1 ? 's' : ''), 'success');
-    }
+        if (!window.contentViewVideos) window.contentViewVideos = {};
+        window.contentViewVideos[url] = {
+            video_id: data.video_id,
+            thumb_url: data.thumb_url || thumb,
+            video_url: data.video_url || url,
+            name: url,
+            is_url: true
+        };
+        renderVideoPreview({
+            filename: url,
+            video_id: data.video_id,
+            thumb_url: data.thumb_url || thumb,
+            video_url: data.video_url || url
+        });
+        var added = addVideoMarkerToEmailChannels(url);
+        if (added === 0) {
+            showToast('Video URL attached (no email channels found to insert marker)', 'warning');
+        } else {
+            showToast('Video URL attached', 'success');
+        }
+    })
+    .catch(function(err) {
+        showToast('Could not attach video URL: ' + (err && err.message ? err.message : err), 'error');
+    });
 }
 
 function pasteFeatureImageFromClipboard() {
