@@ -29,7 +29,7 @@ from ai.pre_filter import pre_filter_batch  # kept for backward compat, not used
 from ai.generator import generate_for_channel, generate_all_channels, get_content_cache_index
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
-from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published, save_video as save_publish_video, get_video_path, get_video_thumb_path, list_feature_videos, delete_video as delete_publish_video
+from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published, save_video as save_publish_video, get_video_path, get_video_thumb_path, list_feature_videos, delete_video as delete_publish_video, cleanup_orphan_videos
 from ai.classification_overrides import save_override as save_classification_override, get_overrides as get_classification_overrides
 from ai.feature_sets import save_set as save_feature_set, get_sets as get_feature_sets, delete_set as delete_feature_set
 from datetime import datetime, timezone
@@ -1297,6 +1297,92 @@ def backfill_low_signal_classifications():
         "dry_run": dry_run,
         "samples": samples,
     })
+
+
+def _collect_known_feature_ids() -> set:
+    """Gather every feature_id that could legitimately own attached media.
+
+    Pulls from the in-memory pipeline cache and every features-cache JSON on
+    disk so the cleanup endpoint doesn't accidentally delete videos for a
+    feature that simply isn't loaded into the current process.
+    """
+    ids: set = set()
+    try:
+        for entry in _pipeline_cache.values():
+            for f in (entry or {}).get("features", []) or []:
+                fid = f.get("id") if isinstance(f, dict) else None
+                if fid:
+                    ids.add(fid)
+    except Exception as e:
+        logger.warning(f"[cleanup] failed to read pipeline cache: {e}")
+
+    try:
+        for name in os.listdir(_FEATURES_CACHE_DIR):
+            if not (name.startswith(".features_cache_days") and name.endswith(".json")):
+                continue
+            path = os.path.join(_FEATURES_CACHE_DIR, name)
+            try:
+                with open(path) as f:
+                    data = json.load(f)
+                for feat in data.get("features", []) or []:
+                    fid = feat.get("id") if isinstance(feat, dict) else None
+                    if fid:
+                        ids.add(fid)
+            except Exception as e:
+                logger.warning(f"[cleanup] failed to read {name}: {e}")
+    except Exception as e:
+        logger.warning(f"[cleanup] failed to scan features cache dir: {e}")
+
+    return ids
+
+
+@app.route("/api/admin/cleanup-orphan-videos", methods=["POST"])
+def cleanup_orphan_videos_endpoint():
+    """One-shot maintenance: remove orphan / duplicate videos from disk.
+
+    Pre-existing videos accumulated under .publish_videos/ before the
+    server-side delete fix landed (task #42). This endpoint walks every
+    meta.json and removes:
+    - videos whose owning feature_id no longer exists in any features cache
+    - exact duplicates per feature (same filename + size, keeping the newest)
+    - directories with missing/unreadable meta.json
+
+    Safe to re-run; logs every removal.
+
+    Category: Admin (gated by AMPLIFY_ADMIN_TOKEN)
+
+    Query/body params:
+    - dry_run (bool, default false): preview without deleting.
+    - admin_token: passed via header X-Admin-Token, query, or body.
+
+    Response: {"scanned", "removed_orphan", "removed_duplicate",
+               "removed_unreadable", "dry_run", "known_feature_count"}
+    """
+    auth_err = _check_admin_auth()
+    if auth_err is not None:
+        return auth_err
+
+    def _parse_bool(v):
+        if isinstance(v, bool):
+            return v
+        if v is None:
+            return False
+        return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+    body = request.get_json(silent=True) or {}
+    dry_run = _parse_bool(body.get("dry_run", request.args.get("dry_run")))
+
+    known = _collect_known_feature_ids()
+    if not known:
+        logger.warning("[cleanup] No known feature ids found; skipping orphan-by-feature pass to avoid mass deletion. Run after the pipeline has loaded features.")
+        report = cleanup_orphan_videos(known_feature_ids=None, dry_run=dry_run)
+        report["known_feature_count"] = 0
+        report["note"] = "Skipped orphan-by-feature deletion because no features are loaded. Refresh the pipeline and re-run."
+        return jsonify(report)
+
+    report = cleanup_orphan_videos(known_feature_ids=known, dry_run=dry_run)
+    report["known_feature_count"] = len(known)
+    return jsonify(report)
 
 
 @app.route("/api/classifications/cache")

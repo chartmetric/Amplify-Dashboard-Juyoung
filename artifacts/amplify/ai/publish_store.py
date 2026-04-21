@@ -487,6 +487,131 @@ def delete_video(feature_id, video_id):
     return True
 
 
+def cleanup_orphan_videos(known_feature_ids, dry_run=False):
+    """One-shot maintenance routine that prunes stray videos under VIDEOS_DIR.
+
+    Removes:
+    - Video directories with missing/unreadable meta.json (irrecoverable).
+    - Videos whose owning feature_id is not in `known_feature_ids`.
+    - Exact duplicates per feature (same filename + size); keeps the newest
+      directory by mtime and removes the older copies.
+
+    Safe to re-run: if there is nothing to clean up it is a no-op. When
+    `dry_run=True`, no files are touched and the report still describes what
+    would have been removed.
+
+    `known_feature_ids` should be an iterable of all currently-known feature
+    ids. If it is None, the orphan-by-feature check is skipped (only the
+    duplicate / unreadable cleanup runs).
+
+    Returns a report dict:
+        {
+          "scanned": N,
+          "removed_orphan": [{"video_id", "feature_id", "filename"}, ...],
+          "removed_duplicate": [{"video_id", "feature_id", "filename", "size", "kept": kept_id}, ...],
+          "removed_unreadable": [{"video_id", "reason"}, ...],
+          "dry_run": bool,
+        }
+    """
+    import shutil
+
+    _ensure_dirs()
+    report = {
+        "scanned": 0,
+        "removed_orphan": [],
+        "removed_duplicate": [],
+        "removed_unreadable": [],
+        "dry_run": bool(dry_run),
+    }
+
+    if not os.path.isdir(VIDEOS_DIR):
+        return report
+
+    known = set(known_feature_ids) if known_feature_ids is not None else None
+
+    def _rm(vdir):
+        if dry_run:
+            return
+        try:
+            shutil.rmtree(vdir)
+        except Exception as e:
+            logger.warning(f"[publish_store] cleanup_orphan_videos: failed to remove {vdir}: {e}")
+
+    entries = []
+    for entry in os.listdir(VIDEOS_DIR):
+        vdir = os.path.join(VIDEOS_DIR, entry)
+        if not os.path.isdir(vdir):
+            continue
+        report["scanned"] += 1
+        meta_path = os.path.join(vdir, "meta.json")
+        if not os.path.exists(meta_path):
+            report["removed_unreadable"].append({"video_id": entry, "reason": "missing meta.json"})
+            logger.info(f"[publish_store] cleanup: removing {entry} (missing meta.json){' [dry-run]' if dry_run else ''}")
+            _rm(vdir)
+            continue
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except Exception as e:
+            report["removed_unreadable"].append({"video_id": entry, "reason": f"unreadable meta: {e}"})
+            logger.info(f"[publish_store] cleanup: removing {entry} (unreadable meta: {e}){' [dry-run]' if dry_run else ''}")
+            _rm(vdir)
+            continue
+
+        try:
+            mtime = os.path.getmtime(vdir)
+        except Exception:
+            mtime = 0.0
+        entries.append((entry, vdir, meta, mtime))
+
+    surviving = []
+    for entry, vdir, meta, mtime in entries:
+        fid = meta.get("feature_id")
+        if known is not None and fid not in known:
+            report["removed_orphan"].append({
+                "video_id": entry,
+                "feature_id": fid,
+                "filename": meta.get("filename", ""),
+            })
+            logger.info(f"[publish_store] cleanup: removing orphan {entry} (feature_id={fid!r} not found){' [dry-run]' if dry_run else ''}")
+            _rm(vdir)
+            continue
+        surviving.append((entry, vdir, meta, mtime))
+
+    by_key = {}
+    for entry, vdir, meta, mtime in surviving:
+        fid = meta.get("feature_id")
+        key = (fid, meta.get("filename", ""), int(meta.get("size") or 0))
+        by_key.setdefault(key, []).append((entry, vdir, meta, mtime))
+
+    for key, items in by_key.items():
+        if len(items) <= 1:
+            continue
+        items.sort(key=lambda x: x[3], reverse=True)
+        keeper = items[0]
+        for entry, vdir, meta, mtime in items[1:]:
+            report["removed_duplicate"].append({
+                "video_id": entry,
+                "feature_id": meta.get("feature_id"),
+                "filename": meta.get("filename", ""),
+                "size": meta.get("size", 0),
+                "kept": keeper[0],
+            })
+            logger.info(
+                f"[publish_store] cleanup: removing duplicate {entry} "
+                f"(feature_id={meta.get('feature_id')!r} filename={meta.get('filename','')!r} "
+                f"size={meta.get('size')}) — keeping {keeper[0]}{' [dry-run]' if dry_run else ''}"
+            )
+            _rm(vdir)
+
+    logger.info(
+        f"[publish_store] cleanup_orphan_videos done: scanned={report['scanned']} "
+        f"orphan={len(report['removed_orphan'])} duplicate={len(report['removed_duplicate'])} "
+        f"unreadable={len(report['removed_unreadable'])} dry_run={dry_run}"
+    )
+    return report
+
+
 def list_feature_videos(feature_id):
     _ensure_dirs()
     results = []
