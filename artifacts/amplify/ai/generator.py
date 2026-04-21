@@ -133,10 +133,7 @@ IMPORTANT RULES:
   - Twitter: End the tweet with the Feature URL on its own final line (raw URL, no markdown). Twitter renders it as a clickable link automatically. Keep it under the character limit including the URL.
   - HMC article: No feature URL anywhere.
   - In-app, LinkedIn, Notion monthly, Marketing Newsletter (email_newsletter): End the body with a CTA sentence in the form "Check it out on [page/tab name](URL)" / "Try it in [page/tab name](URL)" / "Explore it on [page/tab name](URL)". The markdown link MUST wrap the destination's page/tab name (e.g., `[any Artist Page's YouTube tab](URL)`, `[the Sync tab](URL)`), never the verbal CTA phrase itself. Do not paste the bare URL.
-  - Resend email channels (email_short, email_medium, email_long, email_standalone, email_standalone_digest): Use your judgement to choose ONE of the following based on what the Feature URL points to:
-    1. Standalone CTA button — use this when the URL is a high-intent/conversion destination such as `/pricing`, `/plans`, `/signup`, `/upgrade`, `/billing`, `/trial`, `/demo`, `/contact`, or the Chartmetric homepage. Render it as a single line on its own at the end of the body using the format `[cta: text=Short Action Label|url=THE_URL]` (for example `[cta: text=See pricing|url=https://app.chartmetric.com/pricing]`). Keep the label 2-4 words.
-    2. Inline hyperlink — use this when the URL points to a specific feature/page (e.g., an Artist Page, a chart, a tool page). Write a short CTA sentence like "Check it out on [page/tab name](URL)" / "Try it on [page/tab name](URL)" / "Explore it in [page/tab name](URL)". The markdown link MUST wrap the destination's page/tab name (e.g., `[any Artist Page's YouTube tab](URL)`, `[the new Genius Charts page](URL)`, `[the Sync tab](URL)`) — never wrap the verbal CTA phrase itself ("Check it out", "Try it now", etc.) and never paste the bare URL. Place this sentence at the end of the body, on its own line, so it reads as the closing CTA. Do NOT also add a `[cta:...]` button.
-    Never include both styles for the same Feature URL. Never repeat the URL twice."""
+  - Resend email channels (email_short, email_medium, email_long, email_standalone, email_standalone_digest): End the body with an inline hyperlink CTA sentence in the form "Check it out on [page/tab name](URL)" / "Try it on [page/tab name](URL)" / "Explore it in [page/tab name](URL)". The markdown link MUST wrap the destination's page/tab name (e.g., `[any Artist Page's YouTube tab](URL)`, `[the new Genius Charts page](URL)`, `[the Sync tab](URL)`) — never wrap the verbal CTA phrase itself ("Check it out", "Try it now", etc.) and never paste the bare URL. Place this sentence on its own final line so it reads as the closing CTA. Never emit `[cta: ...]` button syntax. Never repeat the URL twice."""
 
 USER_PROMPT_TEMPLATE = """FEATURE CONTEXT:
 Title: {title}
@@ -288,9 +285,6 @@ def _auto_append_cta_link(content: str, channel_key: str, feature_url: str | Non
         return content.rstrip() + "\n\n" + f"{verb} [{label}]({feature_url})."
 
     if channel_key in RESEND_EMAIL_CHANNELS:
-        if _is_conversion_url(feature_url):
-            label = _conversion_cta_label(feature_url)
-            return content.rstrip() + "\n\n" + f"[cta: text={label}|url={feature_url}]"
         page_label = _label_from_url(feature_url)
         verb = "Try it on" if "tab" in page_label else "Check it out on"
         return content.rstrip() + "\n\n" + f"{verb} [{page_label}]({feature_url})."
