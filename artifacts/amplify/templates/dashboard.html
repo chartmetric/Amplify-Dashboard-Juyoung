@@ -2141,6 +2141,7 @@
                 <h2 class="prep-title">What are you prepping content for?</h2>
                 <p class="prep-subtitle">Pick a channel to batch-generate content for multiple features at once</p>
             </div>
+            <div id="drafts-bar-step1" style="margin:0 0 14px 0;"></div>
             <div class="use-case-grid" id="use-case-grid"></div>
         </div>
 
@@ -2214,6 +2215,7 @@
                 <button class="btn-publish-combined-email" onclick="publishCombinedEmail()" style="display:none;background:#00C9A7;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Publish Email &#x1F4E7;</button>
                 <button class="btn-preview-combined-email" onclick="previewCombinedEmail()" style="display:none;background:transparent;color:#00C9A7;border:1.5px solid #00C9A7;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Preview HTML &#x2197;</button>
                 <button class="btn-copy-all" onclick="copyAllCombined()">Copy All Combined</button>
+                <button class="btn-save-draft" onclick="saveCombinedAsDraft()" style="background:transparent;color:#a78bfa;border:1.5px solid #a78bfa;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">&#128190; Save as Draft</button>
                 <button class="btn-done" onclick="exitPrepWorkflow()">Done - Back to Dashboard</button>
             </div>
         </div>
@@ -8974,6 +8976,287 @@ function exitPrepWorkflow() {
     window.prepBatchImages = {};
     window.prepBatchVideos = {};
     window.prepBatchLinks = {};
+    window._currentDraftId = null;
+    window._restoredCombined = null;
+}
+
+// ---------------------------------------------------------------------------
+// Email drafts (server-side persistence of the combined-preview screen).
+// Lets the marketer save in-progress combined emails and resume later.
+// ---------------------------------------------------------------------------
+function _collectCombinedDraftSnapshot() {
+    var results = (prepBatchResults || []).slice();
+    var imagesByFid = {}, videosByFid = {}, linksByFid = {};
+    var approvedFids = {};
+    var initByFid = {};
+    for (var i = 0; i < results.length; i++) {
+        var r = results[i] || {};
+        var fid = r.feature_id;
+        if (!fid) continue;
+        if (prepBatchApproved[i]) approvedFids[fid] = true;
+        if (prepBatchInitialDrafts[i] !== undefined) initByFid[fid] = prepBatchInitialDrafts[i];
+        var img = (window.prepBatchImages || {})[i];
+        var vids = (window.prepBatchVideos || {})[i];
+        var lnks = (window.prepBatchLinks || {})[i];
+        if (img) imagesByFid[fid] = img;
+        if (vids) videosByFid[fid] = vids;
+        if (lnks) linksByFid[fid] = lnks;
+        // Capture latest textarea content if present, since user may have edited
+        var ta = document.getElementById('batch-ta-' + i);
+        if (ta) results[i] = Object.assign({}, r, { content: ta.value });
+    }
+    var subj = document.getElementById('combined-email-subject');
+    var fromName = document.getElementById('combined-email-fromname');
+    var tpl = document.getElementById('combined-email-template');
+    var audSel = document.getElementById('combined-email-audience');
+    var customEmails = document.getElementById('combined-email-custom');
+    var bcc = document.getElementById('combined-email-bcc');
+    var bannerTitle = document.getElementById('combined-banner-title');
+    var bannerMonth = document.getElementById('combined-banner-month');
+    var body = document.getElementById('combined-email-body');
+    var audValue = audSel ? audSel.value : '';
+    var audLabel = '';
+    if (audSel && audSel.selectedIndex >= 0) {
+        var opt = audSel.options[audSel.selectedIndex];
+        audLabel = opt ? (opt.textContent || '') : '';
+    }
+    return {
+        channel: prepChannel || '',
+        featureIds: results.map(function(r) { return (r && r.feature_id) || ''; }).filter(Boolean),
+        results: results,
+        approvedByFeatureId: approvedFids,
+        initialDraftsByFeatureId: initByFid,
+        imagesByFeatureId: imagesByFid,
+        videosByFeatureId: videosByFid,
+        linksByFeatureId: linksByFid,
+        emailSubjects: window.prepBatchEmailSubject || {},
+        modeOverride: window.prepBatchModeOverride || null,
+        combined: {
+            subject: subj ? subj.value : '',
+            fromName: fromName ? fromName.value : '',
+            templateId: tpl ? tpl.value : '',
+            audienceId: audValue || '',
+            audienceLabel: audLabel,
+            customEmails: customEmails ? customEmails.value : '',
+            bcc: bcc ? bcc.value : '',
+            bannerTitle: bannerTitle ? bannerTitle.value : '',
+            bannerMonth: bannerMonth ? bannerMonth.value : '',
+            body: body ? body.value : ''
+        }
+    };
+}
+
+function saveCombinedAsDraft() {
+    var items = window._combinedEmailItems || [];
+    if (!items.length && (!prepBatchResults || !prepBatchResults.length)) {
+        showToast('Nothing to save yet \u2014 generate or approve some features first', 'warning');
+        return;
+    }
+    var subjEl = document.getElementById('combined-email-subject');
+    var defaultName = (subjEl && subjEl.value.trim())
+        ? subjEl.value.trim().substring(0, 80)
+        : ('Draft ' + new Date().toLocaleString());
+    var name = window.prompt('Name this draft:', defaultName);
+    if (name === null) return;
+    name = (name || '').trim() || defaultName;
+    var snapshot = _collectCombinedDraftSnapshot();
+    var btn = document.querySelector('.btn-save-draft');
+    var originalText = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Saving...'; }
+    fetch('/api/email-drafts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name: name, snapshot: snapshot, id: window._currentDraftId || null })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+        if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
+        if (resp.error) { showToast('Save failed: ' + resp.error, 'error'); return; }
+        window._currentDraftId = resp.id;
+        showToast('Draft saved: ' + name + ' \u2705');
+    })
+    .catch(function(err) {
+        if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
+        showToast('Save failed: ' + err.message, 'error');
+    });
+}
+
+function renderDraftsBar() {
+    var bar = document.getElementById('drafts-bar-step1');
+    if (!bar) return;
+    bar.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:6px 0;">Loading saved drafts...</div>';
+    fetch('/api/email-drafts')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var drafts = (data && data.drafts) || [];
+        if (!drafts.length) { bar.innerHTML = ''; return; }
+        var rows = '';
+        var max = Math.min(drafts.length, 8);
+        for (var i = 0; i < max; i++) {
+            var d = drafts[i];
+            var when = new Date((d.ts || 0) * 1000).toLocaleString();
+            var meta = (d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's');
+            if (d.channel) meta += ' \u00b7 ' + d.channel.replace(/_/g, ' ');
+            if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
+            meta += ' \u00b7 ' + when;
+            var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic;">' + escHtml(d.subject) + '</div>' : '';
+            rows += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);">'
+                + '<div style="flex:1;min-width:0;">'
+                + '<div style="color:var(--text-body);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
+                + subjLine
+                + '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(meta) + '</div>'
+                + '</div>'
+                + '<button onclick="loadEmailDraft(\'' + d.id + '\')" style="background:#a78bfa;color:#fff;border:none;padding:6px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">Resume</button>'
+                + '<button onclick="deleteEmailDraft(\'' + d.id + '\')" title="Delete draft" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">\u2715</button>'
+                + '</div>';
+        }
+        var more = drafts.length > max ? '<div style="color:var(--text-muted);font-size:11px;margin-top:6px;">+ ' + (drafts.length - max) + ' older drafts not shown</div>' : '';
+        bar.innerHTML = '<div style="background:var(--bg-elev,rgba(167,139,250,0.04));border:1px solid rgba(167,139,250,0.25);border-radius:8px;padding:12px 14px;">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+            + '<div style="font-weight:600;color:var(--text-body);font-size:14px;">\uD83D\uDCBE Saved drafts (' + drafts.length + ')</div>'
+            + '<div style="font-size:11px;color:var(--text-muted);">Click "Resume" to reopen</div>'
+            + '</div>'
+            + '<div style="display:flex;flex-direction:column;gap:6px;">' + rows + '</div>'
+            + more
+            + '</div>';
+    })
+    .catch(function() { bar.innerHTML = ''; });
+}
+
+function deleteEmailDraft(id) {
+    if (!confirm('Delete this draft? This cannot be undone.')) return;
+    fetch('/api/email-drafts/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+        if (resp.error) { showToast('Delete failed: ' + resp.error, 'error'); return; }
+        if (window._currentDraftId === id) window._currentDraftId = null;
+        showToast('Draft deleted');
+        renderDraftsBar();
+    })
+    .catch(function(err) { showToast('Delete failed: ' + err.message, 'error'); });
+}
+
+function _rebuildBatchListFromState() {
+    var list = document.getElementById('batch-results-list');
+    if (!list) return;
+    list.innerHTML = '';
+    var results = prepBatchResults || [];
+    for (var idx = 0; idx < results.length; idx++) {
+        var r = results[idx] || {};
+        var item = buildBatchItem(r, idx);
+        list.appendChild(item);
+    }
+    // Apply approved/published visual state
+    for (var i = 0; i < results.length; i++) {
+        if (prepBatchApproved[i] || prepBatchPublished[i]) {
+            try { updateBatchItemStatus(i); } catch (_e) {}
+        }
+    }
+    try { renderBatchEmailSubjectRow(); } catch (_e) {}
+    try { renderDigestModeBanner(); } catch (_e) {}
+    try { updateBatchApprovalCount(); } catch (_e) {}
+    try { initBatchDragDrop(); } catch (_e) {}
+    var topBar = document.getElementById('batch-actions-top');
+    var botBar = document.getElementById('batch-bottom-bar');
+    if (topBar) topBar.style.display = 'flex';
+    if (botBar) botBar.style.display = 'flex';
+}
+
+function loadEmailDraft(id) {
+    fetch('/api/email-drafts/' + encodeURIComponent(id))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.error) { showToast('Load failed: ' + d.error, 'error'); return; }
+        var snap = d.snapshot || {};
+        prepChannel = snap.channel || prepChannel;
+        var results = snap.results || [];
+        prepBatchResults = results;
+        prepSelectedIds = {};
+        prepBatchApproved = {};
+        prepBatchPublished = {};
+        prepBatchInitialDrafts = {};
+        prepBatchRegenFeedback = {};
+        window.prepBatchImages = {};
+        window.prepBatchVideos = {};
+        window.prepBatchLinks = {};
+        var approvedByFid = snap.approvedByFeatureId || {};
+        var initByFid = snap.initialDraftsByFeatureId || {};
+        var imgByFid = snap.imagesByFeatureId || {};
+        var vidByFid = snap.videosByFeatureId || {};
+        var lnkByFid = snap.linksByFeatureId || {};
+        for (var i = 0; i < results.length; i++) {
+            var fid = results[i] && results[i].feature_id;
+            if (!fid) continue;
+            prepSelectedIds[fid] = true;
+            if (approvedByFid[fid]) prepBatchApproved[i] = true;
+            if (initByFid[fid] !== undefined) prepBatchInitialDrafts[i] = initByFid[fid];
+            if (imgByFid[fid]) window.prepBatchImages[i] = imgByFid[fid];
+            if (vidByFid[fid]) window.prepBatchVideos[i] = vidByFid[fid];
+            if (lnkByFid[fid]) window.prepBatchLinks[i] = lnkByFid[fid];
+        }
+        window.prepBatchEmailSubject = snap.emailSubjects || {};
+        window.prepBatchModeOverride = snap.modeOverride || null;
+        window._currentDraftId = d.id;
+        window._restoredCombined = snap.combined || null;
+        // Step 3 must be visible first so #batch-results-list exists in the DOM
+        // for buildBatchItem to populate. renderCombinedPreview() reads the DOM
+        // (not state), so without this rebuild it would show "No approved items".
+        prepGoToStep(3);
+        _rebuildBatchListFromState();
+        // Now jump to step 4 — renderCombinedPreview will see the populated list.
+        prepGoToStep(4);
+        setTimeout(_applyRestoredCombinedFields, 80);
+    })
+    .catch(function(err) { showToast('Load failed: ' + err.message, 'error'); });
+}
+
+function _applyRestoredCombinedFields() {
+    var c = window._restoredCombined;
+    if (!c) return;
+    var subj = document.getElementById('combined-email-subject');
+    if (subj && c.subject) subj.value = c.subject;
+    var from = document.getElementById('combined-email-fromname');
+    if (from && c.fromName) from.value = c.fromName;
+    var bccI = document.getElementById('combined-email-bcc');
+    if (bccI && c.bcc) bccI.value = c.bcc;
+    var bt = document.getElementById('combined-banner-title');
+    if (bt && c.bannerTitle) bt.value = c.bannerTitle;
+    var bm = document.getElementById('combined-banner-month');
+    if (bm && c.bannerMonth) bm.value = c.bannerMonth;
+    var body = document.getElementById('combined-email-body');
+    if (body && c.body) body.value = c.body;
+    var audSel = document.getElementById('combined-email-audience');
+    var custIn = document.getElementById('combined-email-custom');
+    function trySetAud(remaining) {
+        if (!audSel) return;
+        if (c.audienceId === '__custom__') {
+            audSel.value = '__custom__';
+            if (custIn) { custIn.style.display = 'block'; custIn.value = c.customEmails || ''; }
+            if (typeof onCombinedEmailAudienceChange === 'function') onCombinedEmailAudienceChange();
+            return;
+        }
+        if (c.audienceId) {
+            for (var i = 0; i < audSel.options.length; i++) {
+                if (audSel.options[i].value === c.audienceId) {
+                    audSel.value = c.audienceId;
+                    if (typeof onCombinedEmailAudienceChange === 'function') onCombinedEmailAudienceChange();
+                    return;
+                }
+            }
+        }
+        if (remaining > 0) setTimeout(function() { trySetAud(remaining - 1); }, 200);
+    }
+    trySetAud(50);
+    var tpl = document.getElementById('combined-email-template');
+    function trySetTpl(remaining) {
+        if (!tpl || !c.templateId) return;
+        for (var i = 0; i < tpl.options.length; i++) {
+            if (tpl.options[i].value === c.templateId) { tpl.value = c.templateId; return; }
+        }
+        if (remaining > 0) setTimeout(function() { trySetTpl(remaining - 1); }, 200);
+    }
+    trySetTpl(50);
+    showToast('Draft restored \u2705');
 }
 
 var BATCH_ATTACH_STORAGE_KEY = 'amplify:batchAttachments:v1';
@@ -9071,7 +9354,7 @@ function prepGoToStep(step) {
     });
     document.getElementById('prep-step' + step).style.display = 'block';
 
-    if (step === 1) renderUseCaseGrid();
+    if (step === 1) { renderUseCaseGrid(); renderDraftsBar(); }
     if (step === 2) renderFeaturePicker();
     if (step === 3) {
         if (prepBatchResults.length === 0) startBatchGeneration();

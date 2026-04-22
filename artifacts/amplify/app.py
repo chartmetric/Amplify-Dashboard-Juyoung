@@ -798,6 +798,151 @@ def _get_enriched_features():
     return result["features"]
 
 
+# ---------------------------------------------------------------------------
+# Email draft store (server-side persistence of in-progress combined emails).
+# Single JSON file; small (a few drafts max). Snapshot is opaque to the
+# server — the frontend round-trips it.
+# ---------------------------------------------------------------------------
+_email_drafts_lock = threading.Lock()
+_EMAIL_DRAFTS_PATH = os.path.join(_FEATURES_CACHE_DIR, ".email_drafts.json")
+_EMAIL_DRAFT_MAX_BYTES = 8 * 1024 * 1024  # 8 MB safety cap per draft
+_EMAIL_DRAFTS_TOTAL_MAX_BYTES = 64 * 1024 * 1024  # 64 MB total store cap
+
+
+def _load_email_drafts() -> dict:
+    try:
+        if os.path.exists(_EMAIL_DRAFTS_PATH):
+            with open(_EMAIL_DRAFTS_PATH, "r") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and isinstance(data.get("drafts"), list):
+                return data
+    except Exception as e:
+        logger.warning(f"[email-drafts] Failed to load: {e}")
+    return {"drafts": []}
+
+
+def _save_email_drafts(data: dict) -> None:
+    import uuid as _uuid
+    with _email_drafts_lock:
+        try:
+            tmp = _EMAIL_DRAFTS_PATH + f".{_uuid.uuid4().hex[:8]}.tmp"
+            with open(tmp, "w") as f:
+                json.dump(data, f, separators=(",", ":"))
+            os.replace(tmp, _EMAIL_DRAFTS_PATH)
+        except Exception as e:
+            logger.warning(f"[email-drafts] Failed to save: {e}")
+            raise
+
+
+def _draft_summary(d: dict) -> dict:
+    snap = d.get("snapshot") or {}
+    combined = snap.get("combined") or {}
+    return {
+        "id": d.get("id"),
+        "name": d.get("name") or "Untitled draft",
+        "ts": d.get("ts") or 0,
+        "channel": snap.get("channel") or "",
+        "feature_count": len(snap.get("featureIds") or []),
+        "subject": combined.get("subject") or "",
+        "audience_label": combined.get("audienceLabel") or "",
+    }
+
+
+@app.route("/api/email-drafts", methods=["GET"])
+def list_email_drafts():
+    try:
+        data = _load_email_drafts()
+        drafts = sorted(
+            (_draft_summary(d) for d in data.get("drafts", [])),
+            key=lambda d: d.get("ts", 0),
+            reverse=True,
+        )
+        return jsonify({"drafts": list(drafts)})
+    except Exception as e:
+        logger.error(f"[email-drafts] list error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/email-drafts", methods=["POST"])
+def save_email_draft():
+    import uuid as _uuid
+    try:
+        body = request.get_json(force=True) or {}
+        name = (body.get("name") or "").strip() or "Untitled draft"
+        snapshot = body.get("snapshot")
+        draft_id = body.get("id") or _uuid.uuid4().hex[:12]
+        if not isinstance(snapshot, dict):
+            return jsonify({"error": "snapshot must be an object"}), 400
+        # Rough size guard.
+        try:
+            approx_bytes = len(json.dumps(snapshot))
+            if approx_bytes > _EMAIL_DRAFT_MAX_BYTES:
+                return jsonify({
+                    "error": f"Draft too large ({approx_bytes // 1024} KB). Limit is {_EMAIL_DRAFT_MAX_BYTES // 1024} KB.",
+                }), 413
+        except Exception:
+            pass
+        data = _load_email_drafts()
+        drafts = data.get("drafts", [])
+        now = time.time()
+        # Upsert by id.
+        existing_idx = next((i for i, d in enumerate(drafts) if d.get("id") == draft_id), -1)
+        record = {"id": draft_id, "name": name, "ts": now, "snapshot": snapshot}
+        if existing_idx >= 0:
+            drafts[existing_idx] = record
+        else:
+            drafts.append(record)
+        # Cap to last 50 drafts to avoid unbounded growth.
+        if len(drafts) > 50:
+            drafts = sorted(drafts, key=lambda d: d.get("ts", 0), reverse=True)[:50]
+        # Total-store size cap: drop oldest drafts (other than the one just
+        # saved) until we're under the cap. Keeps disk usage bounded even when
+        # snapshots embed base64 images/videos.
+        drafts = sorted(drafts, key=lambda d: d.get("ts", 0), reverse=True)
+        while len(drafts) > 1 and len(json.dumps({"drafts": drafts})) > _EMAIL_DRAFTS_TOTAL_MAX_BYTES:
+            # Drop the oldest, but never the one we just saved.
+            for j in range(len(drafts) - 1, -1, -1):
+                if drafts[j].get("id") != draft_id:
+                    drafts.pop(j)
+                    break
+            else:
+                break
+        data["drafts"] = drafts
+        _save_email_drafts(data)
+        return jsonify({"success": True, "id": draft_id, "summary": _draft_summary(record)})
+    except Exception as e:
+        logger.error(f"[email-drafts] save error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/email-drafts/<draft_id>", methods=["GET"])
+def get_email_draft(draft_id: str):
+    try:
+        data = _load_email_drafts()
+        for d in data.get("drafts", []):
+            if d.get("id") == draft_id:
+                return jsonify(d)
+        return jsonify({"error": "not found"}), 404
+    except Exception as e:
+        logger.error(f"[email-drafts] get error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/email-drafts/<draft_id>", methods=["DELETE"])
+def delete_email_draft(draft_id: str):
+    try:
+        data = _load_email_drafts()
+        before = len(data.get("drafts", []))
+        data["drafts"] = [d for d in data.get("drafts", []) if d.get("id") != draft_id]
+        if len(data["drafts"]) == before:
+            return jsonify({"error": "not found"}), 404
+        _save_email_drafts(data)
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"[email-drafts] delete error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/features/enriched")
 def enriched_features():
     """Fetch all features from Asana cross-referenced with Slack release data.
