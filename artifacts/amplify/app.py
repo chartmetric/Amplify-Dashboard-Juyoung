@@ -109,7 +109,19 @@ def dashboard():
     Category: System
     Response: HTML dashboard page.
     """
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", artifact_id="")
+
+
+@app.route("/artifact/<artifact_id>")
+def dashboard_artifact(artifact_id: str):
+    """Dashboard with a specific artifact (draft or published) deep-linked.
+
+    The frontend reads `window._initialArtifactId` and auto-opens that
+    artifact in the prep workflow. If the id doesn't exist, the frontend
+    falls back to the dashboard home and shows a toast.
+    """
+    safe = "".join(ch for ch in (artifact_id or "") if ch.isalnum())[:64]
+    return render_template("dashboard.html", artifact_id=safe)
 
 
 @app.route("/__startup_log")
@@ -845,6 +857,9 @@ def _draft_summary(d: dict) -> dict:
         "feature_count": len(snap.get("featureIds") or []),
         "subject": combined.get("subject") or "",
         "audience_label": combined.get("audienceLabel") or "",
+        "status": d.get("status") or "draft",
+        "last_published_ts": d.get("last_published_ts") or 0,
+        "last_recipient_count": d.get("last_recipient_count") or 0,
     }
 
 
@@ -863,14 +878,28 @@ def list_email_drafts():
         return jsonify({"error": str(e)}), 500
 
 
+_DRAFT_ID_RE = re_module.compile(r"^[A-Za-z0-9]{1,64}$")
+
+
+def _normalize_draft_id(raw) -> str:
+    """Coerce caller-supplied draft IDs into [A-Za-z0-9]{1,64} or generate one.
+
+    Mirrors the /artifact/<id> route's character whitelist so deep links
+    always round-trip.
+    """
+    import uuid as _uuid
+    if raw and isinstance(raw, str) and _DRAFT_ID_RE.match(raw):
+        return raw
+    return _uuid.uuid4().hex[:12]
+
+
 @app.route("/api/email-drafts", methods=["POST"])
 def save_email_draft():
-    import uuid as _uuid
     try:
         body = request.get_json(force=True) or {}
         name = (body.get("name") or "").strip() or "Untitled draft"
         snapshot = body.get("snapshot")
-        draft_id = body.get("id") or _uuid.uuid4().hex[:12]
+        draft_id = _normalize_draft_id(body.get("id"))
         if not isinstance(snapshot, dict):
             return jsonify({"error": "snapshot must be an object"}), 400
         # Rough size guard.
@@ -887,7 +916,21 @@ def save_email_draft():
         now = time.time()
         # Upsert by id.
         existing_idx = next((i for i, d in enumerate(drafts) if d.get("id") == draft_id), -1)
-        record = {"id": draft_id, "name": name, "ts": now, "snapshot": snapshot}
+        prev = drafts[existing_idx] if existing_idx >= 0 else {}
+        # Status is sticky: once "published", stays published unless caller
+        # explicitly downgrades it. Keeps Resend visible across edits.
+        incoming_status = (body.get("status") or "").strip().lower()
+        if incoming_status not in ("draft", "published"):
+            incoming_status = prev.get("status") or "draft"
+        record = {
+            "id": draft_id,
+            "name": name,
+            "ts": now,
+            "snapshot": snapshot,
+            "status": incoming_status,
+            "last_published_ts": prev.get("last_published_ts") or 0,
+            "last_recipient_count": prev.get("last_recipient_count") or 0,
+        }
         if existing_idx >= 0:
             drafts[existing_idx] = record
         else:
@@ -925,6 +968,32 @@ def get_email_draft(draft_id: str):
         return jsonify({"error": "not found"}), 404
     except Exception as e:
         logger.error(f"[email-drafts] get error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/email-drafts/<draft_id>/mark-published", methods=["POST"])
+def mark_email_draft_published(draft_id: str):
+    """Flip a draft to status='published' and stamp last_published_ts.
+
+    Called by the frontend (and by `/api/publish/email` when the request
+    includes a draft_id) so My Artifacts can show what's been sent.
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        recipient_count = int(body.get("recipient_count") or 0)
+        data = _load_email_drafts()
+        drafts = data.get("drafts", [])
+        for d in drafts:
+            if d.get("id") == draft_id:
+                d["status"] = "published"
+                d["last_published_ts"] = time.time()
+                if recipient_count > 0:
+                    d["last_recipient_count"] = recipient_count
+                _save_email_drafts(data)
+                return jsonify({"success": True, "summary": _draft_summary(d)})
+        return jsonify({"error": "not found"}), 404
+    except Exception as e:
+        logger.error(f"[email-drafts] mark-published error: {e}")
         return jsonify({"error": str(e)}), 500
 
 

@@ -1777,6 +1777,7 @@
                 </div>
             </div>
             <button class="btn-analytics" onclick="toggleAnalytics()">&#128202; Analytics</button>
+            <button class="btn-analytics" id="btn-my-artifacts" onclick="openMyArtifacts()" title="View saved drafts and past sends" style="position:relative;">&#128194; My Artifacts<span id="my-artifacts-count" style="display:none;margin-left:6px;background:#a78bfa;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:700;"></span></button>
             <button class="btn-prep-content" onclick="startPrepWorkflow()">Prep Content</button>
             <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">&#127769;</button>
             <div style="display:flex;align-items:center;gap:6px;" title="API server connection">
@@ -2223,9 +2224,28 @@
 
     <div class="toast-container" id="toast-container"></div>
 
+    <div id="my-artifacts-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.6);align-items:flex-start;justify-content:center;padding:60px 20px;overflow-y:auto;" onclick="if(event.target===this)closeMyArtifacts()">
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;max-width:880px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+            <div style="padding:18px 22px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
+                <div>
+                    <div style="font-size:18px;font-weight:700;color:var(--text-body);">&#128194; My Artifacts</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Saved drafts and past sends. Open to edit, resend, or delete.</div>
+                </div>
+                <button onclick="closeMyArtifacts()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;">&#10005;</button>
+            </div>
+            <div style="padding:14px 22px 8px;display:flex;gap:8px;align-items:center;">
+                <button id="my-art-tab-all" class="cat-filter-pill active" onclick="setMyArtifactsTab('all')" style="cursor:pointer;">All <span id="my-art-count-all" style="margin-left:4px;color:var(--text-muted);"></span></button>
+                <button id="my-art-tab-draft" class="cat-filter-pill" onclick="setMyArtifactsTab('draft')" style="cursor:pointer;">Drafts <span id="my-art-count-draft" style="margin-left:4px;color:var(--text-muted);"></span></button>
+                <button id="my-art-tab-published" class="cat-filter-pill" onclick="setMyArtifactsTab('published')" style="cursor:pointer;">Published <span id="my-art-count-published" style="margin-left:4px;color:var(--text-muted);"></span></button>
+            </div>
+            <div id="my-artifacts-list" style="padding:8px 22px 22px;max-height:60vh;overflow-y:auto;"></div>
+        </div>
+    </div>
+
     <div class="site-footer">Built with &#9889; by Juyoung &mdash; Chartmetric AI Week 2026</div>
 
 <script>
+window._initialArtifactId = "{{ artifact_id|default('', true) }}";
 (function initTheme() {
     var saved = localStorage.getItem('ampTheme');
     if (saved === 'light') {
@@ -8978,7 +8998,200 @@ function exitPrepWorkflow() {
     window.prepBatchLinks = {};
     window._currentDraftId = null;
     window._restoredCombined = null;
+    _setArtifactUrl(null);
+    refreshMyArtifactsCount();
 }
+
+// ---------------------------------------------------------------------------
+// Per-artifact deep links: /artifact/<id> updates the browser URL while a
+// draft or sent artifact is open, so the marketer can bookmark or share.
+// ---------------------------------------------------------------------------
+function _setArtifactUrl(id) {
+    try {
+        var path = id ? ('/artifact/' + encodeURIComponent(id)) : '/';
+        if (window.location.pathname !== path) {
+            window.history.pushState({ artifactId: id || null }, '', path);
+        }
+    } catch (_e) {}
+}
+
+window.addEventListener('popstate', function(ev) {
+    var st = ev.state || {};
+    var m = window.location.pathname.match(/^\/artifact\/([A-Za-z0-9]+)$/);
+    var id = (st.artifactId) || (m ? m[1] : null);
+    if (id && id !== window._currentDraftId) {
+        loadEmailDraft(id);
+    } else if (!id) {
+        var overlay = document.getElementById('prep-overlay');
+        if (overlay && overlay.style.display !== 'none') exitPrepWorkflow();
+    }
+});
+
+// ---------------------------------------------------------------------------
+// My Artifacts modal: unified list of drafts + past sends, with Open / Resend
+// / Delete actions. Reuses /api/email-drafts as the storage layer.
+// ---------------------------------------------------------------------------
+window._myArtifactsTab = 'all';
+window._myArtifactsCache = [];
+
+function refreshMyArtifactsCount() {
+    fetch('/api/email-drafts')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var arts = (data && data.drafts) || [];
+        window._myArtifactsCache = arts;
+        var badge = document.getElementById('my-artifacts-count');
+        if (!badge) return;
+        if (arts.length > 0) {
+            badge.style.display = '';
+            badge.textContent = arts.length;
+        } else {
+            badge.style.display = 'none';
+        }
+    })
+    .catch(function() {});
+}
+
+function openMyArtifacts() {
+    var modal = document.getElementById('my-artifacts-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    renderMyArtifactsList();
+    fetch('/api/email-drafts').then(function(r) { return r.json(); }).then(function(data) {
+        window._myArtifactsCache = (data && data.drafts) || [];
+        renderMyArtifactsList();
+    }).catch(function() {});
+}
+
+function closeMyArtifacts() {
+    var modal = document.getElementById('my-artifacts-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function setMyArtifactsTab(tab) {
+    window._myArtifactsTab = tab;
+    ['all','draft','published'].forEach(function(t) {
+        var el = document.getElementById('my-art-tab-' + t);
+        if (el) {
+            if (t === tab) el.classList.add('active'); else el.classList.remove('active');
+        }
+    });
+    renderMyArtifactsList();
+}
+
+function renderMyArtifactsList() {
+    var list = document.getElementById('my-artifacts-list');
+    if (!list) return;
+    var all = window._myArtifactsCache || [];
+    var counts = { all: all.length, draft: 0, published: 0 };
+    for (var i = 0; i < all.length; i++) {
+        var s = all[i].status || 'draft';
+        if (s === 'published') counts.published++; else counts.draft++;
+    }
+    ['all','draft','published'].forEach(function(t) {
+        var c = document.getElementById('my-art-count-' + t);
+        if (c) c.textContent = '(' + counts[t] + ')';
+    });
+    var tab = window._myArtifactsTab || 'all';
+    var items = all.filter(function(d) {
+        if (tab === 'all') return true;
+        var s = d.status || 'draft';
+        return s === tab;
+    });
+    if (!items.length) {
+        list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text-muted);font-size:13px;">No artifacts in this view yet. Drafts you save and emails you send will show up here.</div>';
+        return;
+    }
+    // ID format is enforced server-side ([A-Za-z0-9]{1,64}), but we still
+    // only render IDs through escAttr/escHtml and bind handlers via event
+    // delegation rather than inline onclick to defang any future bypass.
+    var ID_RE = /^[A-Za-z0-9]{1,64}$/;
+    var html = '';
+    for (var i = 0; i < items.length; i++) {
+        var d = items[i];
+        if (!d || !ID_RE.test(String(d.id || ''))) continue;
+        var safeId = String(d.id);
+        var isPub = (d.status === 'published');
+        var when = new Date(((isPub && d.last_published_ts) ? d.last_published_ts : d.ts) * 1000).toLocaleString();
+        var meta = (d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's');
+        if (d.channel) meta += ' \u00b7 ' + d.channel.replace(/_/g, ' ');
+        if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
+        var sentMeta = isPub
+            ? ('<span style="color:#4ade80;font-size:11px;font-weight:600;">\u2713 Sent ' + escHtml(when) + (d.last_recipient_count ? ' \u00b7 ' + d.last_recipient_count + ' recipients' : '') + '</span>')
+            : ('<span style="color:#a78bfa;font-size:11px;font-weight:600;">Draft \u00b7 saved ' + escHtml(when) + '</span>');
+        var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:12px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">' + escHtml(d.subject) + '</div>' : '';
+        var openLabel = isPub ? 'Open / Resend' : 'Open';
+        var openColor = isPub ? '#4ade80' : '#a78bfa';
+        html += '<div data-art-id="' + safeId + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);margin-bottom:8px;">'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="font-weight:600;color:var(--text-body);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
+            + subjLine
+            + '<div style="margin-top:5px;color:var(--text-muted);font-size:11px;">' + escHtml(meta) + '</div>'
+            + '<div style="margin-top:3px;">' + sentMeta + '</div>'
+            + '<div style="margin-top:4px;"><a href="/artifact/' + encodeURIComponent(safeId) + '" data-art-link="' + safeId + '" style="color:var(--text-muted);font-size:10px;text-decoration:none;font-family:monospace;">/artifact/' + escHtml(safeId) + '</a></div>'
+            + '</div>'
+            + '<div style="display:flex;flex-direction:column;gap:6px;">'
+            + '<button data-art-action="open" data-art-id="' + safeId + '" style="background:' + openColor + ';color:#fff;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">' + openLabel + '</button>'
+            + '<button data-art-action="delete" data-art-id="' + safeId + '" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">Delete</button>'
+            + '</div>'
+            + '</div>';
+    }
+    list.innerHTML = html;
+    // Delegated handler: bind once per render.
+    list.onclick = function(ev) {
+        var t = ev.target;
+        var link = t.closest && t.closest('a[data-art-link]');
+        if (link) {
+            ev.preventDefault();
+            var lid = link.getAttribute('data-art-link');
+            if (ID_RE.test(lid)) _openArtifactFromList(lid);
+            return;
+        }
+        var btn = t.closest && t.closest('button[data-art-action]');
+        if (!btn) return;
+        var id = btn.getAttribute('data-art-id') || '';
+        if (!ID_RE.test(id)) return;
+        var act = btn.getAttribute('data-art-action');
+        if (act === 'open') _openArtifactFromList(id);
+        else if (act === 'delete') _deleteArtifactFromList(id);
+    };
+}
+
+function _openArtifactFromList(id) {
+    closeMyArtifacts();
+    loadEmailDraft(id);
+}
+
+function _deleteArtifactFromList(id) {
+    if (!confirm('Delete this artifact? This cannot be undone.')) return;
+    fetch('/api/email-drafts/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+        if (resp.error) { showToast('Delete failed: ' + resp.error, 'error'); return; }
+        window._myArtifactsCache = (window._myArtifactsCache || []).filter(function(d) { return d.id !== id; });
+        if (window._currentDraftId === id) window._currentDraftId = null;
+        renderMyArtifactsList();
+        refreshMyArtifactsCount();
+        showToast('Deleted');
+    })
+    .catch(function(err) { showToast('Delete failed: ' + err.message, 'error'); });
+}
+
+// On page load: refresh count badge; if URL is /artifact/<id>, deep-link in.
+document.addEventListener('DOMContentLoaded', function() {
+    refreshMyArtifactsCount();
+    var initId = window._initialArtifactId;
+    if (initId) {
+        setTimeout(function() {
+            var overlay = document.getElementById('prep-overlay');
+            if (overlay) {
+                overlay.style.display = 'block';
+                document.body.style.overflow = 'hidden';
+            }
+            loadEmailDraft(initId);
+        }, 300);
+    }
+});
 
 // ---------------------------------------------------------------------------
 // Email drafts (server-side persistence of the combined-preview screen).
@@ -9073,6 +9286,8 @@ function saveCombinedAsDraft() {
         if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
         if (resp.error) { showToast('Save failed: ' + resp.error, 'error'); return; }
         window._currentDraftId = resp.id;
+        _setArtifactUrl(resp.id);
+        refreshMyArtifactsCount();
         showToast('Draft saved: ' + name + ' \u2705');
     })
     .catch(function(err) {
@@ -9166,7 +9381,13 @@ function loadEmailDraft(id) {
     fetch('/api/email-drafts/' + encodeURIComponent(id))
     .then(function(r) { return r.json(); })
     .then(function(d) {
-        if (d.error) { showToast('Load failed: ' + d.error, 'error'); return; }
+        if (d.error) {
+            showToast('Artifact not found', 'error');
+            try { window.history.replaceState({}, '', '/'); } catch (_e) {}
+            var ov = document.getElementById('prep-overlay');
+            if (ov && ov.style.display !== 'none') exitPrepWorkflow();
+            return;
+        }
         var snap = d.snapshot || {};
         prepChannel = snap.channel || prepChannel;
         var results = snap.results || [];
@@ -9197,7 +9418,15 @@ function loadEmailDraft(id) {
         window.prepBatchEmailSubject = snap.emailSubjects || {};
         window.prepBatchModeOverride = snap.modeOverride || null;
         window._currentDraftId = d.id;
+        window._currentDraftStatus = d.status || 'draft';
         window._restoredCombined = snap.combined || null;
+        _setArtifactUrl(d.id);
+        // Open the prep overlay if it isn't already (e.g. deep-link load)
+        var overlay = document.getElementById('prep-overlay');
+        if (overlay && overlay.style.display === 'none') {
+            overlay.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
         // Step 3 must be visible first so #batch-results-list exists in the DOM
         // for buildBatchItem to populate. renderCombinedPreview() reads the DOM
         // (not state), so without this rebuild it would show "No approved items".
@@ -11262,6 +11491,31 @@ function publishCombinedEmail() {
                 prepBatchPublished[idx] = true;
                 updateBatchItemStatus(idx);
             }
+            // Persist this artifact and mark it published so it appears
+            // under "My Artifacts > Published" with a Resend button later.
+            (function _persistAsPublished() {
+                var snapshot = _collectCombinedDraftSnapshot();
+                var subjEl = document.getElementById('combined-email-subject');
+                var name = (subjEl && subjEl.value.trim()) ? subjEl.value.trim().substring(0, 80) : 'Sent ' + new Date().toLocaleString();
+                fetch('/api/email-drafts', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name: name, snapshot: snapshot, id: window._currentDraftId || null, status: 'published' })
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(s) {
+                    if (s && s.id) {
+                        window._currentDraftId = s.id;
+                        _setArtifactUrl(s.id);
+                        fetch('/api/email-drafts/' + encodeURIComponent(s.id) + '/mark-published', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ recipient_count: resp.count || 0 })
+                        }).then(function() { refreshMyArtifactsCount(); }).catch(function() {});
+                    }
+                })
+                .catch(function() {});
+            })();
             var sentCount = resp.count || 1;
             var toastMsg = sentCount > 2
                 ? 'Email sent to ' + sentCount + ' recipients \u2705 (' + items.length + ' features marked published)'
