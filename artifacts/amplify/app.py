@@ -811,17 +811,140 @@ def _get_enriched_features():
 
 
 # ---------------------------------------------------------------------------
-# Email draft store (server-side persistence of in-progress combined emails).
-# Single JSON file; small (a few drafts max). Snapshot is opaque to the
-# server — the frontend round-trips it.
+# Email draft / artifact store.
+#
+# Persists in Postgres (DATABASE_URL) so artifacts survive deploy restarts on
+# Replit (the container filesystem is wiped on redeploy). Falls back to the
+# legacy on-disk JSON file when no DATABASE_URL is configured (local dev) and
+# performs a one-time migration from JSON -> DB on first DB write so existing
+# drafts aren't lost.
 # ---------------------------------------------------------------------------
 _email_drafts_lock = threading.Lock()
 _EMAIL_DRAFTS_PATH = os.path.join(_FEATURES_CACHE_DIR, ".email_drafts.json")
 _EMAIL_DRAFT_MAX_BYTES = 8 * 1024 * 1024  # 8 MB safety cap per draft
 _EMAIL_DRAFTS_TOTAL_MAX_BYTES = 64 * 1024 * 1024  # 64 MB total store cap
 
+_DRAFTS_DB_URL = os.environ.get("DATABASE_URL", "").strip()
+_drafts_db_initialized = False
+
+
+def _drafts_db_conn():
+    """Open a short-lived psycopg2 connection. Returns None if unavailable."""
+    if not _DRAFTS_DB_URL:
+        return None
+    try:
+        import psycopg2  # type: ignore
+        return psycopg2.connect(_DRAFTS_DB_URL, connect_timeout=5)
+    except Exception as e:
+        logger.warning(f"[email-drafts] DB connect failed: {e}")
+        return None
+
+
+def _ensure_drafts_table(conn) -> bool:
+    """Create the email_drafts table on first use; idempotent."""
+    global _drafts_db_initialized
+    if _drafts_db_initialized:
+        return True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS email_drafts (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    ts DOUBLE PRECISION NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'draft',
+                    last_published_ts DOUBLE PRECISION DEFAULT 0,
+                    last_recipient_count INTEGER DEFAULT 0,
+                    snapshot JSONB NOT NULL
+                )
+                """
+            )
+            conn.commit()
+        _drafts_db_initialized = True
+        # One-time migration from on-disk JSON -> DB so any drafts saved
+        # before we moved to Postgres are preserved.
+        try:
+            if os.path.exists(_EMAIL_DRAFTS_PATH):
+                with open(_EMAIL_DRAFTS_PATH, "r") as f:
+                    legacy = json.load(f)
+                drafts = (legacy or {}).get("drafts") or []
+                if drafts:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT COUNT(*) FROM email_drafts")
+                        (existing,) = cur.fetchone()
+                    if existing == 0:
+                        with conn.cursor() as cur:
+                            for d in drafts:
+                                cur.execute(
+                                    """
+                                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                    ON CONFLICT (id) DO NOTHING
+                                    """,
+                                    (
+                                        d.get("id"),
+                                        d.get("name") or "Untitled draft",
+                                        float(d.get("ts") or 0),
+                                        d.get("status") or "draft",
+                                        float(d.get("last_published_ts") or 0),
+                                        int(d.get("last_recipient_count") or 0),
+                                        json.dumps(d.get("snapshot") or {}),
+                                    ),
+                                )
+                            conn.commit()
+                        logger.info(f"[email-drafts] Migrated {len(drafts)} legacy drafts JSON -> Postgres")
+        except Exception as e:
+            logger.warning(f"[email-drafts] Legacy JSON migration skipped: {e}")
+        return True
+    except Exception as e:
+        logger.warning(f"[email-drafts] CREATE TABLE failed: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _row_to_draft(row) -> dict:
+    """Map an email_drafts row tuple to the on-disk-style draft dict."""
+    snap = row[6]
+    if isinstance(snap, (bytes, str)):
+        try:
+            snap = json.loads(snap)
+        except Exception:
+            snap = {}
+    return {
+        "id": row[0],
+        "name": row[1],
+        "ts": float(row[2] or 0),
+        "status": row[3] or "draft",
+        "last_published_ts": float(row[4] or 0),
+        "last_recipient_count": int(row[5] or 0),
+        "snapshot": snap or {},
+    }
+
 
 def _load_email_drafts() -> dict:
+    """Load all drafts. Tries Postgres first, falls back to JSON file."""
+    conn = _drafts_db_conn()
+    if conn is not None:
+        try:
+            if _ensure_drafts_table(conn):
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot FROM email_drafts ORDER BY ts DESC"
+                    )
+                    rows = cur.fetchall()
+                return {"drafts": [_row_to_draft(r) for r in rows]}
+        except Exception as e:
+            logger.warning(f"[email-drafts] DB load failed, falling back to JSON: {e}")
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    # JSON fallback
     try:
         if os.path.exists(_EMAIL_DRAFTS_PATH):
             with open(_EMAIL_DRAFTS_PATH, "r") as f:
@@ -829,11 +952,63 @@ def _load_email_drafts() -> dict:
             if isinstance(data, dict) and isinstance(data.get("drafts"), list):
                 return data
     except Exception as e:
-        logger.warning(f"[email-drafts] Failed to load: {e}")
+        logger.warning(f"[email-drafts] JSON load failed: {e}")
     return {"drafts": []}
 
 
 def _save_email_drafts(data: dict) -> None:
+    """Persist the full drafts list. Postgres-first; JSON fallback for dev."""
+    drafts = (data or {}).get("drafts") or []
+    conn = _drafts_db_conn()
+    if conn is not None:
+        try:
+            if _ensure_drafts_table(conn):
+                ids = [d.get("id") for d in drafts if d.get("id")]
+                with conn.cursor() as cur:
+                    # Delete rows no longer present (eviction by total-cap, etc.)
+                    if ids:
+                        cur.execute(
+                            "DELETE FROM email_drafts WHERE id <> ALL(%s)", (ids,)
+                        )
+                    else:
+                        cur.execute("DELETE FROM email_drafts")
+                    for d in drafts:
+                        cur.execute(
+                            """
+                            INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (id) DO UPDATE SET
+                                name = EXCLUDED.name,
+                                ts = EXCLUDED.ts,
+                                status = EXCLUDED.status,
+                                last_published_ts = EXCLUDED.last_published_ts,
+                                last_recipient_count = EXCLUDED.last_recipient_count,
+                                snapshot = EXCLUDED.snapshot
+                            """,
+                            (
+                                d.get("id"),
+                                d.get("name") or "Untitled draft",
+                                float(d.get("ts") or 0),
+                                d.get("status") or "draft",
+                                float(d.get("last_published_ts") or 0),
+                                int(d.get("last_recipient_count") or 0),
+                                json.dumps(d.get("snapshot") or {}),
+                            ),
+                        )
+                    conn.commit()
+                return
+        except Exception as e:
+            logger.warning(f"[email-drafts] DB save failed, falling back to JSON: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    # JSON fallback (local dev or DB outage)
     import uuid as _uuid
     with _email_drafts_lock:
         try:
@@ -842,7 +1017,7 @@ def _save_email_drafts(data: dict) -> None:
                 json.dump(data, f, separators=(",", ":"))
             os.replace(tmp, _EMAIL_DRAFTS_PATH)
         except Exception as e:
-            logger.warning(f"[email-drafts] Failed to save: {e}")
+            logger.warning(f"[email-drafts] JSON save failed: {e}")
             raise
 
 
