@@ -10917,7 +10917,32 @@ function publishCombinedEmail() {
         }
         payload.to_email = emails.join(',');
         payload.is_test = false;
-        confirmMsg = 'Send this combined email (' + data.featureIds.length + ' features) to "' + audName + '" (' + audContacts.length + ' contacts) via Resend?';
+        var SHOW_N = 10;
+        var preview = audContacts.slice(0, SHOW_N);
+        var rest = audContacts.length - preview.length;
+        var rowsHtml = '';
+        for (var ri = 0; ri < preview.length; ri++) {
+            var ct = preview[ri] || {};
+            var ctName = ct.name || '';
+            var ctEmail = ct.email || '';
+            rowsHtml += '<li style="padding:3px 0;">'
+                + (ctName ? '<span style="color:#fff;font-weight:600;">' + escHtml(ctName) + '</span> ' : '')
+                + '<span style="color:#9aa;">' + escHtml(ctEmail) + '</span>'
+                + '</li>';
+        }
+        if (rest > 0) {
+            rowsHtml += '<li style="padding:5px 0 0;color:#7a8;font-style:italic;">+ ' + rest + ' more</li>';
+        }
+        confirmMsg = '<div style="text-align:left;">'
+            + '<p style="margin:0 0 10px 0;color:#ccc;font-size:14px;line-height:1.5;">'
+            + 'Send this combined email (<strong>' + data.featureIds.length + ' features</strong>) to '
+            + '<strong>"' + escHtml(audName) + '"</strong> '
+            + '(<strong>' + audContacts.length + ' contact' + (audContacts.length === 1 ? '' : 's') + '</strong>) via Resend?'
+            + '</p>'
+            + '<ul style="margin:0;padding-left:18px;color:#ccc;font-size:13px;line-height:1.5;list-style:disc;">'
+            + rowsHtml
+            + '</ul>'
+            + '</div>';
     } else {
         payload.is_test = true;
         confirmMsg = 'Send this combined email (' + data.featureIds.length + ' features) as a TEST to the configured test recipient?';
@@ -10969,7 +10994,7 @@ function publishCombinedEmail() {
             if (btn) { btn.disabled = false; btn.textContent = 'Publish Email \uD83D\uDCE7'; }
             showToast('Error sending email: ' + err.message, 'error');
         });
-    }, { title: 'Send Combined Email', icon: '\uD83D\uDCE7', confirmText: 'Yes, send it' });
+    }, { title: 'Send Combined Email', icon: '\uD83D\uDCE7', confirmText: 'Yes, send it', isHtml: true });
 }
 
 function copyAllCombined() {
