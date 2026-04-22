@@ -10386,7 +10386,7 @@ function renderCombinedEmailComposer(items) {
             '<div><label style="font-size:12px;color:var(--text-muted);font-weight:600;display:block;margin-bottom:3px;">Send To</label>' +
                 '<div style="display:flex;gap:6px;align-items:center;">' +
                     '<select id="combined-email-audience" style="flex:1;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-body);" onchange="onCombinedEmailAudienceChange()">' +
-                        '<option value="">Test recipients only</option><option value="__custom__">Custom emails...</option>' +
+                        '<option value="" disabled selected>Pick a segment or custom...</option><option value="__custom__">Custom emails...</option>' +
                     '</select>' +
                     '<span id="combined-email-audience-count" style="font-size:11px;color:var(--text-muted);white-space:nowrap;"></span>' +
                 '</div>' +
@@ -10726,7 +10726,7 @@ function loadCombinedEmailAudiences() {
         var sel = document.getElementById('combined-email-audience');
         var bccSel = document.getElementById('combined-email-bcc-audience');
         if (sel) {
-            sel.innerHTML = '<option value="">Test recipients only</option><option value="__custom__">Custom emails...</option>';
+            sel.innerHTML = '<option value="" disabled selected>Pick a segment or custom...</option><option value="__custom__">Custom emails...</option>';
             for (var i = 0; i < audiences.length; i++) {
                 sel.innerHTML += '<option value="' + escHtml(audiences[i].id || '') + '">' + escHtml(audiences[i].name || audiences[i].id || '') + '</option>';
             }
@@ -10944,8 +10944,8 @@ function publishCombinedEmail() {
             + '</ul>'
             + '</div>';
     } else {
-        payload.is_test = true;
-        confirmMsg = 'Send this combined email (' + data.featureIds.length + ' features) as a TEST to the configured test recipient?';
+        showToast('Pick a segment or choose "Custom emails..." before sending', 'error');
+        return;
     }
 
     showPublishConfirm(confirmMsg, function() {
