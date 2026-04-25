@@ -10646,7 +10646,16 @@ function updateBatchApprovalCount() {
     if (el1) el1.textContent = txt;
     if (el2) el2.textContent = txt;
     var btn = document.getElementById('btn-preview-combined');
-    if (btn) btn.disabled = approved === 0;
+    if (btn) {
+        btn.disabled = approved === 0;
+        if (approved === 0) {
+            btn.title = total === 0
+                ? 'Generate or add at least one feature, then approve it to continue.'
+                : 'Approve at least one feature to preview the combined output.';
+        } else {
+            btn.title = '';
+        }
+    }
 }
 
 function initBatchDragDrop() {
