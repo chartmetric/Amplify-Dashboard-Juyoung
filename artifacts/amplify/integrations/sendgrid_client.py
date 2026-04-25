@@ -121,39 +121,55 @@ def _build_hosted_image_map(images: dict) -> dict:
     broke images in already-sent emails — Postgres avoids that.
     """
     if not images:
+        logger.info("[hosted-images] _build_hosted_image_map called with no images")
         return {}
     import re as _re
     base_url = _get_base_url()
 
     try:
         from app import save_hosted_image_db as _save_db  # type: ignore
-    except Exception:
+    except Exception as _e:
+        logger.warning(f"[hosted-images] Could not import save_hosted_image_db: {_e}")
         _save_db = None
+
+    logger.info(
+        f"[hosted-images] _build_hosted_image_map start: count={len(images)} "
+        f"base_url={base_url!r} db_save_available={_save_db is not None} "
+        f"keys={[repr(k) for k in list(images.keys())[:5]]}"
+    )
 
     hosted = {}
     for img_name, data_url in images.items():
         if not data_url:
+            logger.warning(f"[hosted-images] Skipping '{img_name!r}': empty data_url")
             continue
         if data_url.startswith("http"):
+            logger.info(f"[hosted-images] Pass-through http URL for '{img_name!r}': {data_url[:120]}")
             hosted[img_name] = data_url
         elif data_url.startswith("data:image/"):
             import uuid as _uuid, base64 as _b64, json as _json
             m = _re.match(r"data:image/(\w+);base64,(.+)", data_url)
             if not m:
+                logger.warning(
+                    f"[hosted-images] Skipping '{img_name!r}': data URL did not match "
+                    f"data:image/<ext>;base64,<...> (head={data_url[:60]!r})"
+                )
                 continue
             ext = m.group(1)
             img_id = _uuid.uuid4().hex[:12]
             try:
                 raw = _b64.b64decode(m.group(2))
             except Exception:
-                logger.warning(f"[email] Skipping image '{img_name}': invalid base64 data")
+                logger.warning(f"[hosted-images] Skipping '{img_name!r}': invalid base64 data")
                 continue
             stored_in_db = False
+            db_err = None
             if _save_db is not None:
                 try:
                     stored_in_db = bool(_save_db(img_id, ext, str(img_name)[:200], raw))
                 except Exception as e:
-                    logger.warning(f"[email] DB hosted-image save failed for '{img_name}': {e}")
+                    db_err = repr(e)
+                    logger.warning(f"[hosted-images] DB save failed for '{img_name!r}': {db_err}")
             if not stored_in_db:
                 # Fall back to disk so local dev / unconfigured envs still work.
                 from ai.publish_store import IMAGES_DIR
@@ -163,9 +179,28 @@ def _build_hosted_image_map(images: dict) -> dict:
                     f.write(data_url)
                 with open(os.path.join(img_dir, "meta.json"), "w") as f:
                     _json.dump({"name": str(img_name)[:200], "ext": ext, "id": img_id}, f)
+                logger.warning(
+                    f"[hosted-images] '{img_name!r}' -> DISK ONLY (img_id={img_id}, "
+                    f"size={len(raw)} bytes, ext={ext}, db_err={db_err}). This will break on next redeploy."
+                )
+            else:
+                logger.info(
+                    f"[hosted-images] '{img_name!r}' -> DB OK (img_id={img_id}, "
+                    f"size={len(raw)} bytes, ext={ext})"
+                )
             hosted[img_name] = f"{base_url}/api/publish/image/hosted/{img_id}"
         else:
+            logger.warning(
+                f"[hosted-images] Unknown data_url scheme for '{img_name!r}' "
+                f"(head={data_url[:60]!r}); passing through as-is"
+            )
             hosted[img_name] = data_url
+
+    logger.info(
+        f"[hosted-images] _build_hosted_image_map done: "
+        f"in={len(images)} out={len(hosted)} "
+        f"sample={list((k, v[:120] if isinstance(v, str) else v) for k, v in list(hosted.items())[:3])}"
+    )
     return hosted
 
 
@@ -649,9 +684,36 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     final_subject = f"[TEST] {subject}" if is_test else subject
     recipients_str = ", ".join(recipients)
 
+    # Log the body markers we're about to render so we can compare them to the
+    # image_map keys (Unicode mismatches between the marker text and the key
+    # name silently turn an image into a "[Image: ...]" text placeholder).
+    import re as _re_dbg
+    _body_img_markers = [m.group(1).strip() for m in _re_dbg.finditer(r'\[image:\s*([^\]]+)\]', body or "")]
+    _body_vid_markers = [m.group(1).strip() for m in _re_dbg.finditer(r'\[video:\s*([^\]]+)\]', body or "")]
+    logger.info(
+        f"[email] send_email markers: image_markers={[repr(x) for x in _body_img_markers]} "
+        f"video_markers={[repr(x) for x in _body_vid_markers]} "
+        f"image_map_keys={[repr(k) for k in (images or {}).keys()]} "
+        f"video_map_keys={[repr(k) for k in (videos or {}).keys()]}"
+    )
+    _missing = [m for m in _body_img_markers if m not in (images or {})]
+    if _missing:
+        logger.warning(
+            f"[email] {len(_missing)} body image marker(s) NOT in image_map "
+            f"(will render as text placeholders): {[repr(x) for x in _missing]}"
+        )
+
     hosted_images = _build_hosted_image_map(images)
     bcc_list = [e.strip() for e in (bcc_email or "").split(",") if e.strip()] if bcc_email else None
     html_content = render_email_html(final_subject, body, images=hosted_images, from_name=from_name, videos=videos)
+
+    # Log every <img> tag in the rendered HTML so we can verify exactly what
+    # URLs the email recipient (and Gmail's image proxy) will fetch.
+    _img_tags = _re_dbg.findall(r'<img[^>]+src="([^"]+)"[^>]*>', html_content or "")
+    logger.info(
+        f"[email] outgoing HTML img tags: count={len(_img_tags)} "
+        f"srcs={[s[:160] for s in _img_tags[:8]]}"
+    )
     if videos:
         video_attachments, skipped_videos = _build_video_attachments(videos)
     else:

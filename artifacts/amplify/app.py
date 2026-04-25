@@ -2857,31 +2857,52 @@ def serve_hosted_image(img_id):
     from flask import send_file
     from io import BytesIO
     from ai.publish_store import IMAGES_DIR
+    ua = request.headers.get("User-Agent", "")[:120]
+    referer = request.headers.get("Referer", "")[:160]
+    via = request.headers.get("Via", "")[:120]
+    fwd = request.headers.get("X-Forwarded-For", "")[:120]
     safe_id = _re.sub(r'[^a-f0-9]', '', img_id)
     if not safe_id:
+        logger.warning(f"[hosted-images] serve REJECT: img_id={img_id!r} sanitized to empty (ua={ua!r})")
         return "Not found", 404
+    if safe_id != img_id:
+        logger.info(f"[hosted-images] serve sanitized img_id {img_id!r} -> {safe_id!r}")
     mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
     # Try Postgres first — durable across deploys.
     db_hit = _load_hosted_image_db(safe_id)
     if db_hit is not None:
         ext, raw = db_hit
+        logger.info(
+            f"[hosted-images] serve HIT(db) id={safe_id} ext={ext} bytes={len(raw)} "
+            f"ua={ua!r} ref={referer!r} via={via!r} xff={fwd!r}"
+        )
         return send_file(BytesIO(raw), mimetype=mime_map.get(ext, f"image/{ext}"))
     # Disk fallback (legacy / local dev).
     img_dir = os.path.join(IMAGES_DIR, f"_hosted_{safe_id}")
     img_dir = os.path.realpath(img_dir)
     if not img_dir.startswith(IMAGES_DIR):
+        logger.warning(f"[hosted-images] serve REJECT: path traversal id={safe_id} dir={img_dir}")
         return "Not found", 404
     dat_path = os.path.join(img_dir, "image.dat")
     meta_path = os.path.join(img_dir, "meta.json")
     if not os.path.exists(dat_path) or not os.path.exists(meta_path):
+        logger.warning(
+            f"[hosted-images] serve MISS id={safe_id} (db=miss disk=miss) "
+            f"ua={ua!r} ref={referer!r} via={via!r} xff={fwd!r}"
+        )
         return "Not found", 404
     with open(dat_path, "r") as f:
         data_url = f.read()
     m = _re.match(r"data:image/(\w+);base64,(.+)", data_url)
     if not m:
+        logger.warning(f"[hosted-images] serve INVALID id={safe_id}: disk file not a data URL")
         return "Invalid image", 500
     ext = m.group(1)
     raw = _b64.b64decode(m.group(2))
+    logger.info(
+        f"[hosted-images] serve HIT(disk) id={safe_id} ext={ext} bytes={len(raw)} "
+        f"ua={ua!r} ref={referer!r} via={via!r} xff={fwd!r}"
+    )
     return send_file(BytesIO(raw), mimetype=mime_map.get(ext, f"image/{ext}"))
 
 
