@@ -113,10 +113,22 @@ def _get_base_url() -> str:
 
 
 def _build_hosted_image_map(images: dict) -> dict:
+    """Persist inline data: images so the email can reference a stable URL.
+
+    Tries Postgres first (durable across deploys); falls back to the on-disk
+    cache used by the legacy ``/api/publish/image/hosted/<id>`` route. The
+    legacy disk cache gets wiped on every Replit redeploy, which silently
+    broke images in already-sent emails — Postgres avoids that.
+    """
     if not images:
         return {}
     import re as _re
     base_url = _get_base_url()
+
+    try:
+        from app import save_hosted_image_db as _save_db  # type: ignore
+    except Exception:
+        _save_db = None
 
     hosted = {}
     for img_name, data_url in images.items():
@@ -125,19 +137,32 @@ def _build_hosted_image_map(images: dict) -> dict:
         if data_url.startswith("http"):
             hosted[img_name] = data_url
         elif data_url.startswith("data:image/"):
-            from ai.publish_store import save_image as _save_img, IMAGES_DIR
             import uuid as _uuid, base64 as _b64, json as _json
             m = _re.match(r"data:image/(\w+);base64,(.+)", data_url)
             if not m:
                 continue
             ext = m.group(1)
             img_id = _uuid.uuid4().hex[:12]
-            img_dir = os.path.join(IMAGES_DIR, f"_hosted_{img_id}")
-            os.makedirs(img_dir, exist_ok=True)
-            with open(os.path.join(img_dir, "image.dat"), "w") as f:
-                f.write(data_url)
-            with open(os.path.join(img_dir, "meta.json"), "w") as f:
-                _json.dump({"name": str(img_name)[:200], "ext": ext, "id": img_id}, f)
+            try:
+                raw = _b64.b64decode(m.group(2))
+            except Exception:
+                logger.warning(f"[email] Skipping image '{img_name}': invalid base64 data")
+                continue
+            stored_in_db = False
+            if _save_db is not None:
+                try:
+                    stored_in_db = bool(_save_db(img_id, ext, str(img_name)[:200], raw))
+                except Exception as e:
+                    logger.warning(f"[email] DB hosted-image save failed for '{img_name}': {e}")
+            if not stored_in_db:
+                # Fall back to disk so local dev / unconfigured envs still work.
+                from ai.publish_store import IMAGES_DIR
+                img_dir = os.path.join(IMAGES_DIR, f"_hosted_{img_id}")
+                os.makedirs(img_dir, exist_ok=True)
+                with open(os.path.join(img_dir, "image.dat"), "w") as f:
+                    f.write(data_url)
+                with open(os.path.join(img_dir, "meta.json"), "w") as f:
+                    _json.dump({"name": str(img_name)[:200], "ext": ext, "id": img_id}, f)
             hosted[img_name] = f"{base_url}/api/publish/image/hosted/{img_id}"
         else:
             hosted[img_name] = data_url

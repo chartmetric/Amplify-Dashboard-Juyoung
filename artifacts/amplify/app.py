@@ -2264,6 +2264,24 @@ def get_publish_state():
     return jsonify(state), 200
 
 
+def _filter_videos_to_body_refs(video_map: dict, body: str) -> dict:
+    """Restrict the video map to those whose ``[video: name]`` marker appears
+    in the email body. Without this, any video saved against a feature gets
+    silently MIME-attached to every send, even after the user removed the
+    marker from the body — so a video uploaded once would haunt every email
+    for that feature.
+    """
+    if not video_map:
+        return {}
+    if not body:
+        return {}
+    import re as _re
+    refs = set(m.group(1).strip() for m in _re.finditer(r'\[video:\s*([^\]]+)\]', body or ""))
+    if not refs:
+        return {}
+    return {name: info for name, info in video_map.items() if name in refs}
+
+
 def _build_video_map(feature_id):
     if not feature_id:
         return {}
@@ -2363,6 +2381,16 @@ def publish_email():
                 videos.update(_build_video_map(fid))
         else:
             videos = _build_video_map(feature_id)
+        # Only attach videos that the body actually references; otherwise a
+        # previously-uploaded-then-removed video silently re-attaches to
+        # every send.
+        videos_before = len(videos)
+        videos = _filter_videos_to_body_refs(videos, content)
+        if videos_before and len(videos) < videos_before:
+            logger.info(
+                f"[publish/email] Filtered out {videos_before - len(videos)} unreferenced video(s) "
+                f"(kept {len(videos)} referenced in body)"
+            )
         logger.info(f"[publish/email] videos_attached={len(videos)} keys={list(videos.keys())[:5]}")
         result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id, videos=videos, bcc_email=bcc_email)
     except Exception as _e:
@@ -2418,6 +2446,8 @@ def preview_email():
                 videos.update(_build_video_map(fid))
     else:
         videos = _build_video_map(feature_id)
+    # Match the send path: only show videos the body actually references.
+    videos = _filter_videos_to_body_refs(videos, content)
     html = render_email_html(subject, content, images=images, from_name=from_name, videos=videos)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
@@ -2712,6 +2742,114 @@ def save_image_endpoint():
     return jsonify({"success": True, "kind": "data"}), 200
 
 
+_hosted_images_db_initialized = False
+
+
+def _ensure_hosted_images_table(conn) -> bool:
+    """Create the email_hosted_images table on first use; idempotent."""
+    global _hosted_images_db_initialized
+    if _hosted_images_db_initialized:
+        return True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS email_hosted_images (
+                    id TEXT PRIMARY KEY,
+                    ext TEXT NOT NULL,
+                    name TEXT,
+                    data BYTEA NOT NULL,
+                    created_at DOUBLE PRECISION NOT NULL
+                )
+                """
+            )
+            conn.commit()
+        _hosted_images_db_initialized = True
+        return True
+    except Exception as e:
+        logger.warning(f"[hosted-images] CREATE TABLE failed: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def save_hosted_image_db(img_id: str, ext: str, name: str, raw: bytes) -> bool:
+    """Persist a hosted image to Postgres. Returns True on success.
+
+    Imported by ``integrations.sendgrid_client._build_hosted_image_map`` so
+    that hosted email images survive deploys (the container disk does not).
+    """
+    import time as _time
+    if not img_id or not raw:
+        return False
+    conn = _drafts_db_conn()
+    if conn is None:
+        return False
+    try:
+        if not _ensure_hosted_images_table(conn):
+            return False
+        with conn.cursor() as cur:
+            import psycopg2 as _pg2  # type: ignore
+            cur.execute(
+                """
+                INSERT INTO email_hosted_images (id, ext, name, data, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    ext = EXCLUDED.ext,
+                    name = EXCLUDED.name,
+                    data = EXCLUDED.data
+                """,
+                (str(img_id), str(ext or "png"), str(name or "")[:200],
+                 _pg2.Binary(raw), float(_time.time())),
+            )
+            conn.commit()
+        return True
+    except Exception as e:
+        logger.warning(f"[hosted-images] DB save failed for {img_id}: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _load_hosted_image_db(img_id: str):
+    """Return ``(ext, raw_bytes)`` for a stored image, or None if missing."""
+    conn = _drafts_db_conn()
+    if conn is None:
+        return None
+    try:
+        if not _ensure_hosted_images_table(conn):
+            return None
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT ext, data FROM email_hosted_images WHERE id = %s",
+                (str(img_id),),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        ext, data = row[0], row[1]
+        if hasattr(data, "tobytes"):
+            data = data.tobytes()
+        return (ext or "png", bytes(data))
+    except Exception as e:
+        logger.warning(f"[hosted-images] DB load failed for {img_id}: {e}")
+        return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 @app.route("/api/publish/image/hosted/<img_id>")
 def serve_hosted_image(img_id):
     import base64 as _b64
@@ -2720,6 +2858,15 @@ def serve_hosted_image(img_id):
     from io import BytesIO
     from ai.publish_store import IMAGES_DIR
     safe_id = _re.sub(r'[^a-f0-9]', '', img_id)
+    if not safe_id:
+        return "Not found", 404
+    mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
+    # Try Postgres first — durable across deploys.
+    db_hit = _load_hosted_image_db(safe_id)
+    if db_hit is not None:
+        ext, raw = db_hit
+        return send_file(BytesIO(raw), mimetype=mime_map.get(ext, f"image/{ext}"))
+    # Disk fallback (legacy / local dev).
     img_dir = os.path.join(IMAGES_DIR, f"_hosted_{safe_id}")
     img_dir = os.path.realpath(img_dir)
     if not img_dir.startswith(IMAGES_DIR):
@@ -2735,7 +2882,6 @@ def serve_hosted_image(img_id):
         return "Invalid image", 500
     ext = m.group(1)
     raw = _b64.b64decode(m.group(2))
-    mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
     return send_file(BytesIO(raw), mimetype=mime_map.get(ext, f"image/{ext}"))
 
 
