@@ -11422,25 +11422,13 @@ function publishCombinedEmail() {
         if (bccList.length > 0) payload.bcc_email = bccList.join(',');
     }
 
-    var confirmMsg;
-    if (audId === '__custom__') {
-        var customInput = document.getElementById('combined-email-custom');
-        var raw = customInput ? customInput.value.trim() : '';
-        var customEmails = raw.split(/[,;\s]+/).map(function(e) { return e.trim(); }).filter(function(e) { return e && e.indexOf('@') > 0; });
-        if (customEmails.length === 0) { showToast('Enter at least one valid email address', 'error'); return; }
-        payload.to_email = customEmails.join(',');
-        payload.is_test = false;
-        confirmMsg = 'Send this combined email (' + data.featureIds.length + ' features) to ' + customEmails.length + ' custom address(es) via Resend?';
-    } else if (audId && audContacts && audContacts.length > 0) {
-        var emails = [];
-        for (var ci = 0; ci < audContacts.length; ci++) {
-            if (audContacts[ci].email) emails.push(audContacts[ci].email);
-        }
-        payload.to_email = emails.join(',');
-        payload.is_test = false;
+    // Build a recipient preview (first N + "+N more") shared by both the
+    // custom-emails and audience-segment paths so the user can always
+    // verify exactly who they're about to email.
+    function _buildRecipientPreviewHtml(contacts, totalLabel) {
         var SHOW_N = 10;
-        var preview = audContacts.slice(0, SHOW_N);
-        var rest = audContacts.length - preview.length;
+        var preview = contacts.slice(0, SHOW_N);
+        var rest = contacts.length - preview.length;
         var rowsHtml = '';
         for (var ri = 0; ri < preview.length; ri++) {
             var ct = preview[ri] || {};
@@ -11454,15 +11442,41 @@ function publishCombinedEmail() {
         if (rest > 0) {
             rowsHtml += '<li style="padding:5px 0 0;color:#7a8;font-style:italic;">+ ' + rest + ' more</li>';
         }
+        return '<ul style="margin:0;padding-left:18px;color:#ccc;font-size:13px;line-height:1.5;list-style:disc;">'
+            + rowsHtml
+            + '</ul>';
+    }
+
+    var confirmMsg;
+    if (audId === '__custom__') {
+        var customInput = document.getElementById('combined-email-custom');
+        var raw = customInput ? customInput.value.trim() : '';
+        var customEmails = raw.split(/[,;\s]+/).map(function(e) { return e.trim(); }).filter(function(e) { return e && e.indexOf('@') > 0; });
+        if (customEmails.length === 0) { showToast('Enter at least one valid email address', 'error'); return; }
+        payload.to_email = customEmails.join(',');
+        payload.is_test = false;
+        var customContacts = customEmails.map(function(e) { return { email: e, name: '' }; });
         confirmMsg = '<div style="text-align:left;">'
             + '<p style="margin:0 0 10px 0;color:#ccc;font-size:14px;line-height:1.5;">'
-            + 'Send this combined email (<strong>' + data.featureIds.length + ' features</strong>) to '
+            + 'Send this combined email (<strong>' + data.featureIds.length + ' feature' + (data.featureIds.length === 1 ? '' : 's') + '</strong>) to '
+            + '<strong>' + customEmails.length + ' custom address' + (customEmails.length === 1 ? '' : 'es') + '</strong> via Resend?'
+            + '</p>'
+            + _buildRecipientPreviewHtml(customContacts, customEmails.length)
+            + '</div>';
+    } else if (audId && audContacts && audContacts.length > 0) {
+        var emails = [];
+        for (var ci = 0; ci < audContacts.length; ci++) {
+            if (audContacts[ci].email) emails.push(audContacts[ci].email);
+        }
+        payload.to_email = emails.join(',');
+        payload.is_test = false;
+        confirmMsg = '<div style="text-align:left;">'
+            + '<p style="margin:0 0 10px 0;color:#ccc;font-size:14px;line-height:1.5;">'
+            + 'Send this combined email (<strong>' + data.featureIds.length + ' feature' + (data.featureIds.length === 1 ? '' : 's') + '</strong>) to '
             + '<strong>"' + escHtml(audName) + '"</strong> '
             + '(<strong>' + audContacts.length + ' contact' + (audContacts.length === 1 ? '' : 's') + '</strong>) via Resend?'
             + '</p>'
-            + '<ul style="margin:0;padding-left:18px;color:#ccc;font-size:13px;line-height:1.5;list-style:disc;">'
-            + rowsHtml
-            + '</ul>'
+            + _buildRecipientPreviewHtml(audContacts, audContacts.length)
             + '</div>';
     } else {
         showToast('Pick a segment or choose "Custom emails..." before sending', 'error');
