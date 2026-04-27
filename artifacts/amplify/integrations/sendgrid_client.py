@@ -738,17 +738,21 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     import re as _re_dbg
     _body_img_markers = [m.group(1).strip() for m in _re_dbg.finditer(r'\[image:\s*([^\]]+)\]', body or "")]
     _body_vid_markers = [m.group(1).strip() for m in _re_dbg.finditer(r'\[video:\s*([^\]]+)\]', body or "")]
+    _img_keys = list((images or {}).keys())
+    _vid_keys = list((videos or {}).keys())
+    _LOG_CAP = 8
     logger.info(
-        f"[email] send_email markers: image_markers={[repr(x) for x in _body_img_markers]} "
-        f"video_markers={[repr(x) for x in _body_vid_markers]} "
-        f"image_map_keys={[repr(k) for k in (images or {}).keys()]} "
-        f"video_map_keys={[repr(k) for k in (videos or {}).keys()]}"
+        f"[email] send_email markers: "
+        f"image_markers(n={len(_body_img_markers)})={[repr(x) for x in _body_img_markers[:_LOG_CAP]]} "
+        f"video_markers(n={len(_body_vid_markers)})={[repr(x) for x in _body_vid_markers[:_LOG_CAP]]} "
+        f"image_map_keys(n={len(_img_keys)})={[repr(k) for k in _img_keys[:_LOG_CAP]]} "
+        f"video_map_keys(n={len(_vid_keys)})={[repr(k) for k in _vid_keys[:_LOG_CAP]]}"
     )
     _missing = [m for m in _body_img_markers if m not in (images or {})]
     if _missing:
         logger.warning(
             f"[email] {len(_missing)} body image marker(s) NOT in image_map "
-            f"(will render as text placeholders): {[repr(x) for x in _missing]}"
+            f"(will render as text placeholders): {[repr(x) for x in _missing[:_LOG_CAP]]}"
         )
 
     hosted_images = _build_hosted_image_map(images)
