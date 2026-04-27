@@ -6468,7 +6468,11 @@ function onBatchFeatureUrlBlur(idx, e) {
     if (e && e.target) e.target.value = url;
     var open2 = document.getElementById('batch-furl-open-' + idx);
     if (open2) { open2.href = url; open2.classList.remove('disabled'); }
-    showToast('Feature URL saved', 'success');
+    // Sync any hyperlinks in this batch entry's body to the new URL so the
+    // generated draft never lingers on the corrected URL's predecessor.
+    var n = (typeof _rewriteBatchBodyHyperlinks === 'function')
+        ? _rewriteBatchBodyHyperlinks(idx, current, url) : 0;
+    showToast(n > 0 ? ('Feature URL saved \u2014 updated ' + n + ' hyperlink' + (n === 1 ? '' : 's') + ' in body') : 'Feature URL saved', 'success');
     _promptForBatchUrlOverrideReasonIfChanged(idx, fid, current, url);
 }
 
@@ -7505,51 +7509,127 @@ function _promptForBatchUrlOverrideReasonIfChanged(idx, fid, prevUrl, newUrl) {
 // made so the caller can surface a toast.
 function _escapeRegex(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
+// Pure helper: rewrite every kind of reference to oldUrl in `text` so the
+// body always points at the live feature URL. Handles markdown link hrefs,
+// HTML <a href="..."> attributes, and bare URL occurrences. Returns the
+// rewritten text (caller decides what to do with it).
+function _rewriteUrlReferences(text, oldUrl, newUrl) {
+    if (!text || !newUrl || oldUrl === newUrl) return text;
+    var out = text;
+    if (oldUrl) {
+        // 1) Markdown link hrefs: `](oldUrl)` -> `](newUrl)`.
+        var mdRe = new RegExp('(\\]\\()' + _escapeRegex(oldUrl) + '(\\))', 'g');
+        out = out.replace(mdRe, '$1' + newUrl + '$2');
+        // 2) HTML <a href="oldUrl"> (single or double quotes) — covers any
+        //    body that has been rendered to HTML rather than markdown.
+        var htmlReDouble = new RegExp('(href=")' + _escapeRegex(oldUrl) + '(")', 'g');
+        var htmlReSingle = new RegExp("(href=')" + _escapeRegex(oldUrl) + "(')", 'g');
+        out = out.replace(htmlReDouble, '$1' + newUrl + '$2').replace(htmlReSingle, '$1' + newUrl + '$2');
+        // 3) Bare occurrences (e.g. CTA tail "Check it out: https://old-url").
+        //    Use a capture-group prefix instead of lookbehind so older
+        //    Safari engines still get the rewrite. The prefix excludes
+        //    characters that would mean the URL is already inside a
+        //    markdown/HTML link container (`(`, `[`, `"`, `'`, `>`) and
+        //    URL-continuation characters that would mean we're matching
+        //    only a prefix of a longer URL (e.g. oldUrl is a substring of
+        //    a different real URL on the page). The suffix uses a
+        //    negative lookahead (universally supported) for the same
+        //    URL-continuation characters so `https://a.com` does NOT
+        //    rewrite the leading bytes of `https://a.com/foo` or
+        //    `https://a.com.au`.
+        var URL_CONT = "\\w\\-/.:?#&=~+%@";   // chars that could continue a URL
+        var bareSrc =
+            '(^|[^' + URL_CONT + '\\(\\["\'>])' +
+            _escapeRegex(oldUrl) +
+            '(?![' + URL_CONT + '])';
+        var bareRe = new RegExp(bareSrc, 'g');
+        out = out.replace(bareRe, '$1' + newUrl);
+    }
+    return out;
+}
+
+function _countOccurrences(haystack, needle) {
+    if (!haystack || !needle) return 0;
+    var re = new RegExp(_escapeRegex(needle), 'g');
+    var m = haystack.match(re);
+    return m ? m.length : 0;
+}
+
+// Refresh a markdown preview element (visible OR hidden) so the next time
+// the user toggles to it the link is already correct. Hidden previews used
+// to drift silently — only the visible one was being updated.
+function _refreshPreviewElement(previewEl, body, isEmail, batchIdx) {
+    if (!previewEl) return;
+    var opts = { isEmail: isEmail };
+    if (typeof batchIdx === 'number') opts.batchIdx = batchIdx;
+    previewEl.innerHTML = simpleMarkdown(body, opts);
+}
+
 function _rewriteBodyHyperlinks(oldUrl, newUrl) {
     if (!newUrl || oldUrl === newUrl) return 0;
-    if (!contentViewChannels) return 0;
     var total = 0;
-    var keys = Object.keys(contentViewChannels);
-    for (var i = 0; i < keys.length; i++) {
-        var chKey = keys[i];
-        var ta = document.getElementById('ta-' + chKey);
-        if (!ta) continue;
-        var before = ta.value;
-        var after = before;
-        // 1) Rewrite markdown links pointing at the previous feature URL.
-        if (oldUrl) {
-            var re = new RegExp('(\\]\\()' + _escapeRegex(oldUrl) + '(\\))', 'g');
-            after = after.replace(re, '$1' + newUrl + '$2');
-        }
-        // 2) Also rewrite bare occurrences of the previous URL (e.g. in
-        //    a CTA tail like "Check it out: https://old-url"), so the
-        //    body never lingers on the stale destination.
-        if (oldUrl && oldUrl !== newUrl) {
-            var bareRe = new RegExp('(?<![\\(\\[])' + _escapeRegex(oldUrl) + '(?![\\)\\]])', 'g');
-            try { after = after.replace(bareRe, newUrl); } catch (e) { /* lookbehind unsupported */ }
-        }
-        if (after !== before) {
-            // Count the actual replacements for the toast.
-            if (oldUrl) {
-                var occurRe = new RegExp(_escapeRegex(oldUrl), 'g');
-                var beforeMatches = before.match(occurRe);
-                var afterMatches = after.match(occurRe);
-                var beforeCount = beforeMatches ? beforeMatches.length : 0;
-                var afterCount = afterMatches ? afterMatches.length : 0;
-                total += Math.max(0, beforeCount - afterCount);
-            }
-            ta.value = after;
-            ta.dispatchEvent(new Event('input'));
-            // Refresh preview if it's currently visible.
-            var preview = document.getElementById('md-preview-' + chKey);
-            if (preview && preview.style.display === 'block') {
+
+    // 1) Per-channel cards in the content view.
+    if (contentViewChannels) {
+        var keys = Object.keys(contentViewChannels);
+        for (var i = 0; i < keys.length; i++) {
+            var chKey = keys[i];
+            var ta = document.getElementById('ta-' + chKey);
+            if (!ta) continue;
+            var before = ta.value;
+            var after = _rewriteUrlReferences(before, oldUrl, newUrl);
+            if (after !== before) {
+                total += Math.max(0, _countOccurrences(before, oldUrl) - _countOccurrences(after, oldUrl));
+                ta.value = after;
+                ta.dispatchEvent(new Event('input'));
+                // Refresh the preview whether or not it's currently visible
+                // so the user sees fresh links the moment they toggle to it.
                 var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
-                preview.innerHTML = simpleMarkdown(after, {isEmail: isEmail});
+                _refreshPreviewElement(document.getElementById('md-preview-' + chKey), after, isEmail);
+                try { autoSaveDraft(chKey); } catch (e) {}
             }
-            try { autoSaveDraft(chKey); } catch (e) {}
         }
     }
+
+    // 2) The combined-email composer body (separate from the per-channel
+    //    textareas above). Without this the combined draft kept showing the
+    //    old hyperlink even after the URL was corrected.
+    var combinedTa = document.getElementById('combined-email-body');
+    if (combinedTa) {
+        var cBefore = combinedTa.value;
+        var cAfter = _rewriteUrlReferences(cBefore, oldUrl, newUrl);
+        if (cAfter !== cBefore) {
+            total += Math.max(0, _countOccurrences(cBefore, oldUrl) - _countOccurrences(cAfter, oldUrl));
+            combinedTa.value = cAfter;
+            combinedTa.dispatchEvent(new Event('input'));
+            _refreshPreviewElement(document.getElementById('combined-email-preview'), cAfter, true);
+        }
+    }
+
     return total;
+}
+
+// Per-batch-entry rewrite. Scoped to one batch row so a URL change for
+// feature A doesn't accidentally rewrite feature B even if they happen to
+// share a URL. Returns the number of replacements made.
+function _rewriteBatchBodyHyperlinks(idx, oldUrl, newUrl) {
+    if (!newUrl || oldUrl === newUrl) return 0;
+    var ta = document.getElementById('batch-ta-' + idx);
+    if (!ta) return 0;
+    var before = ta.value;
+    var after = _rewriteUrlReferences(before, oldUrl, newUrl);
+    if (after === before) return 0;
+    ta.value = after;
+    ta.dispatchEvent(new Event('input'));
+    // Keep the in-memory batch source-of-truth in sync with the textarea so
+    // re-renders / draft snapshots use the corrected URL.
+    try {
+        if (window.prepBatchResults && window.prepBatchResults[idx]) {
+            window.prepBatchResults[idx].content = after;
+        }
+    } catch (e) {}
+    _refreshPreviewElement(document.getElementById('batch-md-preview-' + idx), after, false, idx);
+    return Math.max(0, _countOccurrences(before, oldUrl) - _countOccurrences(after, oldUrl));
 }
 
 function syncFeatureUrlInput() {
