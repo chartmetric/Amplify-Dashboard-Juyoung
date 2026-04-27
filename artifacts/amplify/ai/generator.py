@@ -9,6 +9,7 @@ from ai.channel_configs import CHANNEL_CONFIGS
 from ai.claude_client import generate_content
 from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import get_feedback_history
+from ai.feature_url_overrides import get_url_override_learning_context
 
 logger = logging.getLogger("amplify.generator")
 
@@ -424,6 +425,13 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
                 f"---"
             )
         feedback_learning_section = "\n".join(parts)
+
+    url_override_section = get_url_override_learning_context(limit=3)
+    if url_override_section:
+        feedback_learning_section = (
+            f"{feedback_learning_section}\n{url_override_section}"
+            if feedback_learning_section else url_override_section
+        )
 
     min_chars = config.get("min_chars")
     if min_chars:

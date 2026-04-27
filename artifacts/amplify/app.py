@@ -31,6 +31,12 @@ from ai.few_shot_examples import FEW_SHOT_EXAMPLES
 from ai.feedback_store import save_feedback, get_feedback_history, get_all_feedback, clear_feedback
 from ai.publish_store import mark_published, save_image as save_publish_image, get_image as get_publish_image, remove_image as remove_publish_image, get_feature_state, get_all_published, save_video as save_publish_video, save_video_url as save_publish_video_url, get_video_path, get_video_thumb_path, list_feature_videos, delete_video as delete_publish_video, cleanup_orphan_videos
 from ai.classification_overrides import save_override as save_classification_override, get_overrides as get_classification_overrides
+from ai.feature_url_overrides import (
+    save_url_override as save_feature_url_override,
+    get_url_overrides as get_feature_url_overrides,
+    get_url_override_for_feature,
+    get_url_override_for_title,
+)
 from ai.feature_sets import save_set as save_feature_set, get_sets as get_feature_sets, delete_set as delete_feature_set
 from datetime import datetime, timezone
 
@@ -810,6 +816,36 @@ def _get_enriched_features():
     return result["features"]
 
 
+def _apply_feature_url_overrides(features: list) -> None:
+    """For each feature, if a marketer has previously corrected its
+    Chartmetric URL, replace `chartmetric_url` with the corrected value
+    and attach a `chartmetric_url_override` block so the frontend can
+    render the human-corrected indicator + reason tooltip."""
+    if not features:
+        return
+    for f in features:
+        try:
+            fid = f.get("id", "")
+            entry = get_url_override_for_feature(fid)
+            if not entry:
+                # Fall back to a title-match override so brand-new feature
+                # IDs still benefit from prior corrections of the same feature.
+                entry = get_url_override_for_title(f.get("title", ""))
+            if not entry or not entry.get("new_url"):
+                continue
+            original_url = f.get("chartmetric_url") or entry.get("original_url") or ""
+            f["chartmetric_url"] = entry["new_url"]
+            f["chartmetric_url_override"] = {
+                "original_url": original_url,
+                "new_url": entry["new_url"],
+                "reason": entry.get("reason", ""),
+                "timestamp": entry.get("timestamp", ""),
+                "matched_by": "feature_id" if entry.get("feature_id") == fid else "title",
+            }
+        except Exception as e:
+            logger.warning(f"[url-override] failed to apply override to feature {f.get('id')}: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Email draft / artifact store.
 #
@@ -1351,6 +1387,7 @@ def classified_features():
 
     all_features = classified + skipped
     all_features = apply_manual_overrides(all_features)
+    _apply_feature_url_overrides(all_features)
 
     sort_by = request.args.get("sort_by", "importance")
     if sort_by == "recency":
@@ -1418,6 +1455,8 @@ def all_features_unclassified():
                 f["classification"] = {}
             f["classification"].update(overrides[fid])
             f["classification"]["manual_override"] = True
+
+    _apply_feature_url_overrides(features)
 
     cache_key = f"days_{days}"
     cached_entry = _pipeline_cache.get(cache_key)
@@ -1920,6 +1959,61 @@ def list_classification_overrides():
     Response: {"overrides": [...], "count": 5}
     """
     overrides = get_classification_overrides()
+    return jsonify({"overrides": overrides, "count": len(overrides)})
+
+
+@app.route("/api/feature-url/override", methods=["POST"])
+def add_feature_url_override():
+    """Save a human correction to a feature's Chartmetric URL so future
+    inference can learn from it. The new URL becomes the source of truth
+    for this feature across users (it is no longer just a per-user
+    localStorage value).
+
+    Category: Feedback Loop
+
+    Body:
+    {
+        "feature_id": "abc123",
+        "feature_title": "Genius Charts page",
+        "original_url": "https://app.chartmetric.com/charts/spotify",
+        "new_url": "https://app.chartmetric.com/charts/genius/top-tracks",
+        "reason": "Feature is about Genius charts, not Spotify"
+    }
+
+    Response: {"success": true, "entry": {...}}
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    feature_id = (data.get("feature_id") or "").strip()
+    feature_title = (data.get("feature_title") or "").strip()
+    original_url = (data.get("original_url") or "").strip()
+    new_url = (data.get("new_url") or "").strip()
+    reason = (data.get("reason") or "").strip()
+
+    if not feature_id:
+        return jsonify({"error": "feature_id is required"}), 400
+    if not new_url:
+        return jsonify({"error": "new_url is required"}), 400
+
+    entry = save_feature_url_override(feature_id, feature_title, original_url, new_url, reason)
+    return jsonify({
+        "success": True,
+        "message": "Feature URL correction saved and will improve future URL inference",
+        "entry": entry,
+    })
+
+
+@app.route("/api/feature-url/overrides")
+def list_feature_url_overrides():
+    """List all feature URL override history, most recent first.
+
+    Category: Feedback Loop
+
+    Response: {"overrides": [...], "count": 5}
+    """
+    overrides = get_feature_url_overrides()
     return jsonify({"overrides": overrides, "count": len(overrides)})
 
 

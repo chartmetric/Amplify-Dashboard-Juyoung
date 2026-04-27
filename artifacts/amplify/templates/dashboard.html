@@ -1013,6 +1013,16 @@
         }
         .feature-url-open:hover { background: rgba(45,140,240,0.18); border-color: #2d8cf0; }
         .feature-url-open.disabled { opacity: 0.35; pointer-events: none; }
+        .url-override-indicator {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 22px; height: 22px; border-radius: 50%;
+            background: rgba(0,201,167,0.12); color: #00C9A7;
+            border: 1px solid rgba(0,201,167,0.35);
+            font-size: 11px; cursor: help; flex-shrink: 0;
+            position: relative;
+        }
+        .url-override-indicator:hover { background: rgba(0,201,167,0.22); }
+        .url-override-indicator[data-empty="1"] { display: none; }
         .feature-url-hint {
             font-size: 11px; color: var(--text-muted); white-space: nowrap;
         }
@@ -2023,6 +2033,7 @@
                        placeholder="https://app.chartmetric.com/charts  (optional &mdash; AI links the CTA to this URL)"
                        autocomplete="off" spellcheck="false"
                        oninput="onFeatureUrlInput(event)" onblur="onFeatureUrlBlur(event)">
+                <span id="feature-url-override-indicator" class="url-override-indicator" data-empty="1" title="">&#9998;</span>
                 <a id="feature-url-open" class="feature-url-open disabled" target="_blank" rel="noopener noreferrer" title="Open in new tab">&#8599;</a>
             </div>
             <div class="attachments-list-dropdown" id="attachments-list-dropdown">
@@ -6435,6 +6446,7 @@ function onBatchFeatureUrlBlur(idx, e) {
     var open2 = document.getElementById('batch-furl-open-' + idx);
     if (open2) { open2.href = url; open2.classList.remove('disabled'); }
     showToast('Feature URL saved', 'success');
+    _promptForBatchUrlOverrideReasonIfChanged(idx, fid, current, url);
 }
 
 function promptBatchLink(idx) {
@@ -7194,6 +7206,167 @@ var contentViewFeatureLink = null;
 
 function _featureLinkKey(fid) { return 'ampFeatureLink:' + fid; }
 
+// --- Human-in-the-loop URL override helpers ---------------------------------
+// When a marketer changes a feature's Chartmetric URL, we POST the correction
+// to the server so future URL inference (and Claude prompts) can learn from
+// it. We also stamp `chartmetric_url_override` onto the in-memory feature
+// object so the "human-corrected" indicator survives until the next refresh.
+
+function _getFeatureUrlOverride(fid) {
+    if (!fid) return null;
+    var feat = (typeof findFeatureById === 'function') ? findFeatureById(fid) : null;
+    if (feat && feat.chartmetric_url_override) return feat.chartmetric_url_override;
+    return null;
+}
+
+function _stampFeatureUrlOverride(fid, originalUrl, newUrl, reason) {
+    if (!fid) return;
+    var feat = (typeof findFeatureById === 'function') ? findFeatureById(fid) : null;
+    if (!feat) return;
+    feat.chartmetric_url = newUrl;
+    feat.chartmetric_url_override = {
+        original_url: originalUrl || '',
+        new_url: newUrl,
+        reason: reason || '',
+        timestamp: new Date().toISOString(),
+        matched_by: 'feature_id'
+    };
+}
+
+function _saveFeatureUrlOverrideToServer(fid, title, originalUrl, newUrl, reason, onDone) {
+    if (!fid || !newUrl) { if (onDone) onDone(); return; }
+    var payload = {
+        feature_id: fid,
+        feature_title: title || '',
+        original_url: originalUrl || '',
+        new_url: newUrl,
+        reason: reason || ''
+    };
+    fetch('/api/feature-url/override', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(function(r) {
+        // Gate "success" handling on a real 2xx response — a 4xx/5xx that
+        // happens to return non-JSON would otherwise look like success.
+        return r.json().then(function(data) { return { ok: r.ok, data: data }; },
+                             function() { return { ok: r.ok, data: null }; });
+    })
+    .then(function(res) {
+        var data = res.data || {};
+        if (!res.ok || data.error) {
+            showToast('Could not save URL correction: ' + (data.error || 'request failed'), 'error');
+        } else {
+            _stampFeatureUrlOverride(fid, originalUrl, newUrl, reason);
+            if (typeof renderFeatureUrlOverrideIndicator === 'function') {
+                renderFeatureUrlOverrideIndicator();
+            }
+        }
+        if (onDone) onDone();
+    })
+    .catch(function(err) {
+        showToast('Could not save URL correction: ' + err.message, 'error');
+        if (onDone) onDone();
+    });
+}
+
+// Show an inline reason input next to the host element, mirroring the
+// classification override reason UX. opts: { host, fid, title, originalUrl,
+// newUrl, onSaved }
+function showUrlOverrideReasonInput(opts) {
+    if (!opts || !opts.host || !opts.fid || !opts.newUrl) return;
+    var host = opts.host;
+    var existing = host.querySelector('.override-reason-row');
+    if (existing) {
+        if (existing._outsideClickHandler) {
+            document.removeEventListener('click', existing._outsideClickHandler);
+        }
+        existing.remove();
+    }
+
+    var row = document.createElement('div');
+    row.className = 'override-reason-row';
+    row.innerHTML =
+        '<input type="text" class="override-reason-input" placeholder="Why was the previous URL wrong, and why is this one a better match? (optional, helps AI learn)">' +
+        '<button class="btn-save-reason">Save</button>';
+    host.appendChild(row);
+
+    var input = row.querySelector('.override-reason-input');
+    var saveBtn = row.querySelector('.btn-save-reason');
+    input.focus();
+
+    function finalize(reason) {
+        saveBtn.textContent = 'Saving...';
+        saveBtn.disabled = true;
+        _saveFeatureUrlOverrideToServer(opts.fid, opts.title, opts.originalUrl, opts.newUrl, reason, function() {
+            row.remove();
+            var confirm = document.createElement('div');
+            confirm.className = 'override-confirm';
+            confirm.textContent = '\u2713 AI will learn from this URL correction';
+            host.appendChild(confirm);
+            if (opts.onSaved) opts.onSaved(reason);
+        });
+    }
+
+    function cleanup() { document.removeEventListener('click', outsideClickHandler); }
+
+    function outsideClickHandler(e) {
+        if (row.contains(e.target)) return;
+        cleanup();
+        finalize(input.value.trim());
+    }
+
+    saveBtn.addEventListener('click', function(e) { e.stopPropagation(); cleanup(); finalize(input.value.trim()); });
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.stopPropagation(); cleanup(); finalize(input.value.trim()); return; }
+        if (e.key === 'Escape') {
+            e.stopPropagation();
+            if (input.value.trim() === '') { cleanup(); finalize(''); }
+            else { input.value = ''; }
+        }
+    });
+    row.addEventListener('click', function(e) { e.stopPropagation(); });
+
+    row._outsideClickHandler = outsideClickHandler;
+    setTimeout(function() { document.addEventListener('click', outsideClickHandler); }, 0);
+}
+
+function renderFeatureUrlOverrideIndicator() {
+    var ind = document.getElementById('feature-url-override-indicator');
+    if (!ind) return;
+    var fid = (contentViewFeature && contentViewFeature.id) || '';
+    var ov = _getFeatureUrlOverride(fid);
+    if (!ov) {
+        ind.setAttribute('data-empty', '1');
+        ind.removeAttribute('title');
+        return;
+    }
+    ind.removeAttribute('data-empty');
+    var tip = 'Human-corrected URL';
+    if (ov.original_url) tip += '\nOriginal: ' + ov.original_url;
+    if (ov.reason) tip += '\nReason: ' + ov.reason;
+    else tip += '\nNo reason provided';
+    ind.title = tip;
+}
+
+function renderBatchUrlOverrideIndicator(idx, fid) {
+    var ind = document.getElementById('batch-furl-ind-' + idx);
+    if (!ind) return;
+    var ov = _getFeatureUrlOverride(fid);
+    if (!ov) {
+        ind.setAttribute('data-empty', '1');
+        ind.removeAttribute('title');
+        return;
+    }
+    ind.removeAttribute('data-empty');
+    var tip = 'Human-corrected URL';
+    if (ov.original_url) tip += '\nOriginal: ' + ov.original_url;
+    if (ov.reason) tip += '\nReason: ' + ov.reason;
+    else tip += '\nNo reason provided';
+    ind.title = tip;
+}
+
 function persistFeatureLink(fid, url) {
     try {
         if (url) {
@@ -7205,12 +7378,28 @@ function persistFeatureLink(fid, url) {
 }
 
 function getPersistedFeatureLink(fid) {
+    // Server is the source of truth: a chartmetric_url that comes back
+    // from /api/features/* already reflects any human-saved correction
+    // (see _apply_feature_url_overrides in app.py), so it must win over
+    // any per-user localStorage value — otherwise a stale local cache
+    // would silently override a teammate's correction. localStorage is
+    // kept only as a fallback for offline / pre-server-sync writes.
+    var feat = findFeatureById(fid);
+    var serverUrl = (feat && feat.chartmetric_url) ? feat.chartmetric_url : '';
+    if (serverUrl) {
+        // Reconcile the local cache so subsequent reads stay consistent.
+        try {
+            var cached = localStorage.getItem(_featureLinkKey(fid));
+            if (cached !== serverUrl) {
+                localStorage.setItem(_featureLinkKey(fid), serverUrl);
+            }
+        } catch(e) {}
+        return serverUrl;
+    }
     try {
         var saved = localStorage.getItem(_featureLinkKey(fid));
         if (saved) return saved;
     } catch(e) {}
-    var feat = findFeatureById(fid);
-    if (feat && feat.chartmetric_url) return feat.chartmetric_url;
     return null;
 }
 
@@ -7239,6 +7428,53 @@ function promptFeatureLink() {
     showInsertLinkButtons();
     var n = _rewriteBodyHyperlinks(prevUrl, url);
     showToast(n > 0 ? ('Link stored — updated ' + n + ' hyperlink' + (n === 1 ? '' : 's') + ' in body') : 'Link stored!', 'success');
+    _promptForUrlOverrideReasonIfChanged(fid, prevUrl, url);
+}
+
+// Common helper: after a URL has been changed for a feature, ask the user
+// for an optional reason and POST the correction to the server so it can
+// be reused for future URL inference. Skips the prompt when nothing
+// actually changed or when there is no fid (e.g. ad-hoc batch items).
+function _promptForUrlOverrideReasonIfChanged(fid, prevUrl, newUrl) {
+    if (!fid || !newUrl) return;
+    if (prevUrl === newUrl) return;
+    var feat = (typeof findFeatureById === 'function') ? findFeatureById(fid) : null;
+    var title = feat ? (feat.title || '') : (contentViewFeature ? (contentViewFeature.title || '') : '');
+    var host = document.querySelector('.feature-url-row');
+    if (!host) {
+        // No visible host — still save without a reason so the AI learns.
+        _saveFeatureUrlOverrideToServer(fid, title, prevUrl || '', newUrl, '');
+        return;
+    }
+    showUrlOverrideReasonInput({
+        host: host,
+        fid: fid,
+        title: title,
+        originalUrl: prevUrl || '',
+        newUrl: newUrl
+    });
+}
+
+function _promptForBatchUrlOverrideReasonIfChanged(idx, fid, prevUrl, newUrl) {
+    if (!fid || !newUrl) return;
+    if (prevUrl === newUrl) return;
+    var feat = (typeof findFeatureById === 'function') ? findFeatureById(fid) : null;
+    var title = feat ? (feat.title || '') : '';
+    var host = document.getElementById('batch-furl-row-' + idx);
+    if (!host) {
+        _saveFeatureUrlOverrideToServer(fid, title, prevUrl || '', newUrl, '');
+        return;
+    }
+    showUrlOverrideReasonInput({
+        host: host,
+        fid: fid,
+        title: title,
+        originalUrl: prevUrl || '',
+        newUrl: newUrl,
+        onSaved: function() {
+            renderBatchUrlOverrideIndicator(idx, fid);
+        }
+    });
 }
 
 // Replace any existing markdown hyperlinks that pointed to oldUrl with
@@ -7308,6 +7544,9 @@ function syncFeatureUrlInput() {
             open.classList.add('disabled');
         }
     }
+    if (typeof renderFeatureUrlOverrideIndicator === 'function') {
+        renderFeatureUrlOverrideIndicator();
+    }
 }
 
 function _normalizeFeatureUrl(raw) {
@@ -7350,6 +7589,7 @@ function onFeatureUrlBlur(e) {
     showInsertLinkButtons();
     var n = _rewriteBodyHyperlinks(prevUrl, url);
     showToast(n > 0 ? ('Feature URL saved — updated ' + n + ' hyperlink' + (n === 1 ? '' : 's') + ' in body') : 'Feature URL saved', 'success');
+    _promptForUrlOverrideReasonIfChanged(fid, prevUrl, url);
 }
 
 function renderFeatureLinkPreview() {
@@ -10229,6 +10469,7 @@ function buildBatchItem(r, idx) {
                 ' autocomplete="off" spellcheck="false"' +
                 ' oninput="onBatchFeatureUrlInput(' + idx + ', event)"' +
                 ' onblur="onBatchFeatureUrlBlur(' + idx + ', event)">' +
+            '<span id="batch-furl-ind-' + idx + '" class="url-override-indicator" data-empty="1" title="">\u270E</span>' +
             '<a id="batch-furl-open-' + idx + '" class="feature-url-open ' + (getPersistedFeatureLink(batchFid) ? '' : 'disabled') + '"' +
                 ' href="' + escAttr(getPersistedFeatureLink(batchFid) || '#') + '"' +
                 ' target="_blank" rel="noopener noreferrer" title="Open in new tab">\u2197</a>' +
@@ -10253,6 +10494,9 @@ function buildBatchItem(r, idx) {
     setTimeout(function() { autoResizeTextarea(ta); }, 0);
     setupCardDragDrop(item, null, true, idx);
     ta.addEventListener('input', function() { autoResizeTextarea(this); });
+    if (typeof renderBatchUrlOverrideIndicator === 'function') {
+        setTimeout(function() { renderBatchUrlOverrideIndicator(idx, batchFid); }, 0);
+    }
 
     var scoreEl = item.querySelector('.batch-item-score');
     if (scoreEl && !batchScoreDisabled) {

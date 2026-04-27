@@ -253,7 +253,24 @@ def infer_chartmetric_url(title: str, description: str = "", min_score: float = 
     boost to tokens appearing in the URL path itself, a 2x boost to
     tokens in the feature name, and a large bigram bonus when a 2-word
     phrase from the input also appears in the URL path or feature name.
+
+    Before scoring, consult the human-in-the-loop URL override store: if
+    a marketer previously corrected the URL for an exact-title or
+    high-overlap-title match, short-circuit to their corrected URL so we
+    never re-infer a URL we already know is wrong for this feature.
     """
+    try:
+        from ai.feature_url_overrides import get_url_override_for_title
+        override = get_url_override_for_title(title or "")
+        if override and override.get("new_url"):
+            logger.info(
+                f"[sitemap] Using human-corrected URL for {title!r} -> {override['new_url']} "
+                f"(override from {override.get('timestamp', '?')})"
+            )
+            return override["new_url"]
+    except Exception as e:
+        logger.warning(f"[sitemap] URL override lookup failed: {e}")
+
     sitemap = _load_sitemap()
     if not sitemap:
         return None
