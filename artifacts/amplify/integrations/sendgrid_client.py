@@ -564,10 +564,8 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
             # "check it out", "learn more", ...) AND a URL was rewritten into
             # a full-width button. That collided with the AI prompt, which
             # tells the model to end the body with an INLINE hyperlink
-            # sentence ("Explore it on [the Spotify Playlists page](URL)."),
-            # and produced a duplicate button right above the explicit
-            # `[cta: text=Open in Chartmetric \u2192 | url=...]` block that
-            # the combined-email composer emits per section.
+            # sentence ("Explore it on [the Spotify Playlists page](URL).")
+            # and produced a duplicate button.
             #
             # Only treat the line as a button when the user/AI gave an
             # unambiguous button signal: a line that is JUST `[Label](url)`

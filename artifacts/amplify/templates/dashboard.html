@@ -7629,18 +7629,11 @@ function _rewriteBodyHyperlinks(oldUrl, newUrl) {
     return total;
 }
 
-// Re-render the batch entry's title element so its hyperlink (or lack of
-// one) tracks the current feature URL. The original render at item-build
-// time is `<a class="batch-item-title batch-item-title-link" href="...">`
-// when a URL exists or `<span class="batch-item-title">` when it doesn't,
-// and the href was previously frozen — typing a new URL into the row's
-// input did not update the linked title or its arrow.
-//
-// `url` MUST be passed explicitly by the caller (the freshly-typed value),
-// not re-read here via getPersistedFeatureLink — that helper is server-
-// first and would return the stale chartmetric_url cached on the feature
-// object until the server round-trip completes, leaving the title link
-// pointing at the previous URL right after a blur.
+// Re-render the batch entry's title element to keep it as plain text.
+// The feature URL is intentionally NOT exposed on the title — it lives
+// only in the dedicated Feature URL row's input + arrow. This helper is
+// still invoked from the URL input handlers so any legacy linked title
+// left over from an older render gets replaced with a plain span.
 function _refreshBatchItemTitleLink(idx, url) {
     var item = document.getElementById('batch-item-' + idx);
     if (!item) return;
@@ -7654,21 +7647,9 @@ function _refreshBatchItemTitleLink(idx, url) {
     if (label == null || label === '') {
         label = (existing.textContent || '').replace(/\s*\u2197\s*$/, '').trim();
     }
-    var replacement;
-    if (url) {
-        replacement = document.createElement('a');
-        replacement.className = 'batch-item-title batch-item-title-link';
-        replacement.href = url;
-        replacement.target = '_blank';
-        replacement.rel = 'noopener noreferrer';
-        replacement.title = 'Open feature URL';
-        replacement.onclick = function(ev) { ev.stopPropagation(); };
-        replacement.textContent = label + ' \u2197';
-    } else {
-        replacement = document.createElement('span');
-        replacement.className = 'batch-item-title';
-        replacement.textContent = label;
-    }
+    var replacement = document.createElement('span');
+    replacement.className = 'batch-item-title';
+    replacement.textContent = label;
     existing.replaceWith(replacement);
 }
 
@@ -10925,10 +10906,7 @@ function buildBatchItem(r, idx) {
     var batchScoreTitle = batchScoreDisabled ? 'title="Score cannot be edited \u2014 feature id not available"' : 'title="Click to change importance score"';
     var batchScoreHtml = renderBatchScoreBadge(batchFid, r);
 
-    var batchTitleLink = (typeof getPersistedFeatureLink === 'function') ? getPersistedFeatureLink(batchFid) : '';
-    var batchTitleHtml = batchTitleLink
-        ? '<a class="batch-item-title batch-item-title-link" href="' + escAttr(batchTitleLink) + '" target="_blank" rel="noopener noreferrer" title="Open feature URL" onclick="event.stopPropagation();">' + escHtml(r.feature_title || '') + ' \u2197</a>'
-        : '<span class="batch-item-title">' + escHtml(r.feature_title || '') + '</span>';
+    var batchTitleHtml = '<span class="batch-item-title">' + escHtml(r.feature_title || '') + '</span>';
     item.innerHTML =
         '<div class="batch-item-header">' +
             '<span class="batch-item-drag">\u2261</span>' +
@@ -11616,11 +11594,6 @@ function renderCombinedEmailComposer(items) {
         }
         bodyParts.push('');
         bodyParts.push(sectionContent);
-        var ctaUrl = (typeof getPersistedFeatureLink === 'function' && it.feature_id) ? getPersistedFeatureLink(it.feature_id) : '';
-        if (ctaUrl) {
-            bodyParts.push('');
-            bodyParts.push('[cta: text=Open in Chartmetric \u2192 | url=' + ctaUrl + ']');
-        }
         if (i < items.length - 1) {
             bodyParts.push('');
             bodyParts.push('---');

@@ -337,11 +337,6 @@ def publish_to_notion(
             header_text = header_text[:197] + "..."
 
         body_blocks = _content_to_blocks(content)
-        if feature_url and feature_url not in content:
-            body_blocks.append(_block(
-                "paragraph",
-                _rich_text(f"[Open in Chartmetric]({feature_url})"),
-            ))
 
         blocks: list[dict] = [
             {"object": "block", "type": "divider", "divider": {}},
