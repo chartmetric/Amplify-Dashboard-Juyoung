@@ -287,6 +287,84 @@ def _conversion_cta_label(url: str) -> str:
     return "Get started"
 
 
+_BENEFIT_TITLE_HEADING_RE = re.compile(r"^\s*#{1,6}\s+(.+?)\s*$", re.MULTILINE)
+_BENEFIT_TITLE_BOLD_RE = re.compile(r"^\*\*(.+?)\*\*\s*$")
+_BENEFIT_TITLE_SUBJECT_RE = re.compile(
+    r"^\s*Subject:\s*(.+?)(?:\r?\n\s*\r?\n|\r?\n|$)", re.IGNORECASE
+)
+_BENEFIT_TITLE_CTA_PREFIXES = (
+    "check it out", "try it", "explore", "learn more", "see ",
+    "get started", "click here", "discover", "head to", "head over",
+    "find out", "read more",
+)
+
+
+def extract_benefit_title(
+    content: str, channel_key: str, raw_title: str = ""
+) -> str | None:
+    """Pull a benefit-driven, marketer-ready headline from AI-generated content
+    so the batch card can show it instead of the raw Asana / Slack ticket
+    title. Returns None when no clean headline can be lifted (Twitter has no
+    headline format; some prose channels may not emit a heading; the AI may
+    have ignored prompt rules and reused the raw title — in all those cases
+    callers should fall back to the original feature title).
+
+    Strategy:
+      1. Skip the leading "Subject: ..." line for email channels.
+      2. Look for the first markdown heading (`# X`, `## X`, ...).
+      3. Otherwise look for a standalone bold line (`**X**` on its own line)
+         within the first few lines.
+      4. Reject anything too short (<2 words) or too long (>14 words),
+         containing a URL, looking like a CTA, or essentially identical
+         to the raw ticket title (case- and punctuation-insensitive).
+    """
+    if not content or channel_key == "twitter":
+        return None
+
+    text = content
+    sub_match = _BENEFIT_TITLE_SUBJECT_RE.match(text)
+    if sub_match:
+        text = text[sub_match.end():].lstrip()
+
+    headline = None
+    h_match = _BENEFIT_TITLE_HEADING_RE.search(text)
+    if h_match:
+        headline = h_match.group(1).strip()
+    else:
+        for line in text.split("\n", 8)[:5]:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            b_match = _BENEFIT_TITLE_BOLD_RE.match(stripped)
+            if b_match:
+                headline = b_match.group(1).strip()
+            break  # only consider the first non-empty line as a candidate
+
+    if not headline:
+        return None
+
+    headline = re.sub(r"\s+", " ", headline).strip().strip("\"'`*_")
+    if not headline:
+        return None
+
+    word_count = len(headline.split())
+    if word_count < 2 or word_count > 14:
+        return None
+    lower = headline.lower()
+    if "http://" in lower or "https://" in lower or "www." in lower:
+        return None
+    if lower.startswith(_BENEFIT_TITLE_CTA_PREFIXES):
+        return None
+
+    if raw_title:
+        norm_a = re.sub(r"[^a-z0-9]+", "", lower)
+        norm_b = re.sub(r"[^a-z0-9]+", "", raw_title.lower())
+        if norm_a and norm_a == norm_b:
+            return None
+
+    return headline
+
+
 def _auto_append_cta_link(content: str, channel_key: str, feature_url: str | None) -> str:
     """Make sure the Feature URL ends up in the rendered draft.
 

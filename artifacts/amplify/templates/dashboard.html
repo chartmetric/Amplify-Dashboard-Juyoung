@@ -11232,6 +11232,16 @@ function batchRegenItem(idx) {
         var ta = document.getElementById('batch-ta-' + idx);
         if (ta) { ta.value = newContent; autoResizeTextarea(ta); ta.dispatchEvent(new Event('input')); }
         prepBatchResults[idx].content = newContent;
+        // Refresh the visible card title with the AI-extracted benefit-driven
+        // headline returned by the backend. Falls back to leaving the title
+        // alone if the backend didn't ship one (older response shape) or if
+        // the value is identical.
+        if (data.feature_title && data.feature_title !== prepBatchResults[idx].feature_title) {
+            prepBatchResults[idx].feature_title = data.feature_title;
+            if (typeof _refreshBatchItemTitleLink === 'function') {
+                _refreshBatchItemTitleLink(idx, '');
+            }
+        }
         prepBatchRegenFeedback[idx] = feedback;
         if (feedbackInput) feedbackInput.value = '';
         if (prepBatchApproved[idx]) {

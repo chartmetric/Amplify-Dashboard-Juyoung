@@ -3399,6 +3399,14 @@ def generate_single_endpoint():
             skip_cache=True,
             mode=mode,
         )
+        # Surface the AI-crafted headline as the card title so the per-card
+        # Regenerate button updates the visible title alongside the body —
+        # matches the behavior of the batch endpoint above.
+        from ai.generator import extract_benefit_title
+        raw_title = feature.get("title", "")
+        extracted = extract_benefit_title(result.get("content", ""), channel, raw_title)
+        result["feature_title"] = extracted or raw_title
+        result["raw_feature_title"] = raw_title
         _inc_generate(1)
         return jsonify(result)
     except Exception as e:
@@ -3602,10 +3610,18 @@ def generate_batch_single_channel_endpoint():
         config = CHANNEL_CONFIGS[channel]
         print(f"[generate/batch-single] Generating {channel} for {len(features)} features (mode: {mode or 'default'})", flush=True)
 
+        from ai.generator import extract_benefit_title
+
         def gen_one(feature):
             result = generate_for_channel(feature, channel, custom_instructions=custom_instructions or None, mode=mode)
             result["feature_id"] = feature.get("id", "")
-            result["feature_title"] = feature.get("title", "")
+            raw_title = feature.get("title", "")
+            # Surface a benefit-driven, marketer-ready headline (lifted from the
+            # generated content) as the visible card title. Falls back to the
+            # raw ticket title when no clean headline can be extracted.
+            extracted = extract_benefit_title(result.get("content", ""), channel, raw_title)
+            result["feature_title"] = extracted or raw_title
+            result["raw_feature_title"] = raw_title
             return result
 
         results = []
