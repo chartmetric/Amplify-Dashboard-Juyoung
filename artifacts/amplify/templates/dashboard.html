@@ -6162,7 +6162,16 @@ function _renderBatchAttachMenu(btn, idx, view) {
             var kind = this.getAttribute('data-rm-kind');
             if (kind === 'image') {
                 if (typeof removeBatchImage === 'function') removeBatchImage(idx);
-                else if (window.prepBatchImages) { delete window.prepBatchImages[idx]; if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments(); }
+                else if (window.prepBatchImages) {
+                    // Also clear the per-feature localStorage tier so a
+                    // deleted image never re-populates on the next load.
+                    try {
+                        var _delFid = ((prepBatchResults || [])[idx] || {}).feature_id || '';
+                        if (_delFid && typeof persistFeatureImage === 'function') persistFeatureImage(_delFid, null);
+                    } catch (_e) {}
+                    delete window.prepBatchImages[idx];
+                    if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
+                }
             } else if (kind === 'video') {
                 var vidx = parseInt(this.getAttribute('data-rm-vidx'), 10);
                 var arr = (window.prepBatchVideos || {})[idx] || [];
@@ -9861,6 +9870,26 @@ function _restoreBatchAutoSave() {
     if (typeof _restoreBatchAttachmentsFromStorage === 'function') {
         _restoreBatchAttachmentsFromStorage();
     }
+    // Tier-3 fallback: per-feature images live in localStorage under
+    // ampFeatureImage:<fid> and survive tab close / new iframe contexts
+    // where sessionStorage is wiped. Mirror the fallback the batch-
+    // generation success handler does so a GIF the user uploaded keeps
+    // showing up after a hard refresh, while honoring deletions
+    // (removeBatchImage clears this same key, so a user-removed image
+    // stays gone and never re-populates here).
+    try {
+        if (typeof getPersistedFeatureImage === 'function') {
+            window.prepBatchImages = window.prepBatchImages || {};
+            for (var pi = 0; pi < results.length; pi++) {
+                var pfid = results[pi] && results[pi].feature_id;
+                if (!pfid || window.prepBatchImages[pi]) continue;
+                var persistedImg = getPersistedFeatureImage(pfid);
+                if (persistedImg && persistedImg.dataUrl && persistedImg.name) {
+                    window.prepBatchImages[pi] = persistedImg;
+                }
+            }
+        }
+    } catch (_e) {}
     var ageStr = _formatAutoSaveAge(payload.ts ? (Date.now() - payload.ts) : 0);
     var label = 'Restored your previous batch (' + results.length + ' feature' + (results.length === 1 ? '' : 's')
         + ', saved ' + ageStr + ') \u2014 <a href="#" onclick="_resumeRestoredBatch();return false;" style="color:#00C9A7;text-decoration:underline;font-weight:600;">Resume</a>';
