@@ -154,6 +154,7 @@ IMPORTANT RULES:
 - Reference specific Chartmetric features/pages by name when relevant (e.g., 'Artist Page', 'Track Page', 'Playlist tab')
 - Never fabricate data points or statistics \u2014 only reference data if it's in the feature context
 - ABSOLUTELY NEVER use the em dash character (\u2014) in any generated content. This is a hard rule with zero exceptions. Use periods, commas, or semicolons instead. Rewrite sentences to avoid needing dashes entirely. Also never use en dashes (\u2013). Only use regular hyphens (-) for compound words.
+- HEADLINE / TITLE HANDLING: The "Internal Feature Name" provided in FEATURE CONTEXT is the raw Asana / Slack ticket title (e.g., "Introduce New Playlist Scores on Spotify Playlist List 2", "Add X to Y", "Refactor Z"). It is engineering-speak, not marketing copy. NEVER reuse it verbatim as the headline / title / header line for any channel. Always craft a fresh, benefit-driven, user-facing headline derived from the Description (which is usually the cleaner, marketer-ready summary) and the actual user impact. Drop internal verbs like "Introduce", "Add", "Implement", "Refactor"; drop ticket-suffix noise like trailing numbers ("2"), "v2", or "(WIP)". Lead with what the user can now do, not what was built. The Internal Feature Name is provided only as context for what the feature is.
 - LINK HANDLING:
   - When a Feature URL is provided, embed it according to the channel's rules below. When no Feature URL is provided ("Not provided"), write a natural verbal CTA phrase instead and never invent a URL.
   - Never paste any URL other than the supplied Feature URL.
@@ -165,7 +166,7 @@ IMPORTANT RULES:
   - Resend email channels (email_short, email_medium, email_long, email_standalone, email_standalone_digest): End the body with an inline hyperlink CTA sentence in the form "Check it out on [page/tab name](URL)" / "Try it on [page/tab name](URL)" / "Explore it in [page/tab name](URL)". The markdown link MUST wrap the destination's page/tab name (e.g., `[any Artist Page's YouTube tab](URL)`, `[the new Genius Charts page](URL)`, `[the Sync tab](URL)`) — never wrap the verbal CTA phrase itself ("Check it out", "Try it now", etc.) and never paste the bare URL. Place this sentence on its own final line so it reads as the closing CTA. Never emit `[cta: ...]` button syntax. Never repeat the URL twice."""
 
 USER_PROMPT_TEMPLATE = """FEATURE CONTEXT:
-Title: {title}
+Internal Feature Name (raw ticket title — do NOT use verbatim as a headline; craft a fresh benefit-driven headline from the Description below): {title}
 Description: {description}
 Release Status: {release_status}
 Release Date: {release_date}

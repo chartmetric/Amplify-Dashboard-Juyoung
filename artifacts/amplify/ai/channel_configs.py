@@ -24,9 +24,9 @@ CHANNEL_CONFIGS = {
         "description": "Product update block for the Chartmetric newsletter",
         "max_chars": 350,
         "tone": "Benefit-first, empowering, direct. Lead with what the user can NOW do, not what was built. Second person ('you'). Warm but concise.",
-        "format_rules": "Structure: Bold feature name as header line, then MAXIMUM 3 SHORT sentences total (including the CTA sentence). Keep it scannable — most users won't read more than 3 sentences. First sentence: lead with user benefit (start with a verb or 'you'). Second sentence: one key detail. Third sentence: CTA like 'Check it out on any Artist Page.' No HTML tags. Assume a screenshot will follow the text block. Do NOT include subject lines — this is a section within a larger newsletter, not a standalone email. STRICT RULE: Never exceed 3 sentences after the header.",
+        "format_rules": "Structure: Bold benefit-driven headline as header line (4-8 words; NEVER reuse the raw Internal Feature Name verbatim — craft a fresh user-facing headline from the Description), then MAXIMUM 3 SHORT sentences total (including the CTA sentence). Keep it scannable — most users won't read more than 3 sentences. First sentence: lead with user benefit (start with a verb or 'you'). Second sentence: one key detail. Third sentence: CTA like 'Check it out on any Artist Page.' No HTML tags. Assume a screenshot will follow the text block. Do NOT include subject lines — this is a section within a larger newsletter, not a standalone email. STRICT RULE: Never exceed 3 sentences after the header.",
         "audience": "Existing Chartmetric users — artists, managers, labels, publishers who use the platform daily and scan newsletters quickly",
-        "example_output_format": "**[Feature Name]**\n[1 benefit sentence]. [1 detail sentence]. [CTA sentence].",
+        "example_output_format": "**[Benefit-driven headline you craft, NOT the raw feature name]**\n[1 benefit sentence]. [1 detail sentence]. [CTA sentence].",
         "enabled": True,
     },
     "email_standalone": {
@@ -121,9 +121,9 @@ CHANNEL_CONFIGS = {
         "description": "Feature summary block for monthly product meeting notes",
         "max_chars": 600,
         "tone": "Concise, factual, scannable. Like a quick update in a meeting doc. Get to the point in 2-3 sentences.",
-        "format_rules": "Structure: Bold feature name as a heading, then 2-3 sentences covering what changed and why it matters to users. Include a relevant link if available. End with key contributors (first names only, e.g. 'Hanby' not 'Hanby Choi'). That's it. No separate sections for Overview, User Impact, Technical Notes. Keep it tight and scannable.",
+        "format_rules": "Structure: Bold benefit-driven headline as the heading (4-8 words; NEVER reuse the raw Internal Feature Name verbatim — rephrase it as a clean, user-facing one-liner derived from the Description), then 2-3 sentences covering what changed and why it matters to users. Include a relevant link if available. End with key contributors (first names only, e.g. 'Hanby' not 'Hanby Choi'). That's it. No separate sections for Overview, User Impact, Technical Notes. Keep it tight and scannable.",
         "audience": "Chartmetric leadership and cross-functional team in a monthly product review meeting",
-        "example_output_format": "### **[Feature Name]**\n\n[2-3 sentence summary of what changed and user impact]. [Link if relevant]\n\nKey Contributors: [first names only]",
+        "example_output_format": "### **[Benefit-driven headline you craft, NOT the raw feature name]**\n\n[2-3 sentence summary of what changed and user impact]. [Link if relevant]\n\nKey Contributors: [first names only]",
         "enabled": True,
     },
     "article_hmc": {
