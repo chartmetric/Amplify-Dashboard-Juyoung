@@ -6459,6 +6459,7 @@ function onBatchFeatureUrlBlur(idx, e) {
             // it back to a plain span now that there isn't one. Pass an
             // empty url so the helper renders the no-link span variant.
             if (typeof _refreshBatchItemTitleLink === 'function') _refreshBatchItemTitleLink(idx, '');
+            if (typeof _scheduleBatchAutoSave === 'function') _scheduleBatchAutoSave();
             showToast('Feature URL cleared', 'success');
         }
         return;
@@ -7682,6 +7683,7 @@ function _rewriteBatchBodyHyperlinks(idx, oldUrl, newUrl) {
         }
     } catch (e) {}
     _refreshPreviewElement(document.getElementById('batch-md-preview-' + idx), after, false, idx);
+    if (typeof _scheduleBatchAutoSave === 'function') _scheduleBatchAutoSave();
     return Math.max(0, _countOccurrences(before, oldUrl) - _countOccurrences(after, oldUrl));
 }
 
@@ -9749,8 +9751,136 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             loadEmailDraft(initId);
         }, 300);
+    } else {
+        // No deep-linked artifact — try to bring back any in-progress
+        // batch the user had going before the page reload so they don't
+        // lose work to a tab close, browser refresh, or a server restart.
+        setTimeout(_restoreBatchAutoSave, 200);
     }
 });
+
+// ---------------------------------------------------------------------------
+// Batch auto-save. The server-side email_drafts API below requires the
+// marketer to click "Save as draft". That left a sharp edge: typing a body,
+// editing a feature URL, or attaching media in step 3 was all in-memory,
+// so a tab close, browser crash, or a server restart destroyed the work.
+// This block writes the same snapshot shape used by /api/email-drafts to
+// localStorage on every meaningful mutation (debounced) so we can rehydrate
+// the in-memory batch state on the next page load. Heavy attachments
+// (images / videos / links) keep going through the existing
+// _persistBatchAttachments path into sessionStorage to stay under the
+// localStorage quota.
+// ---------------------------------------------------------------------------
+var _BATCH_AUTOSAVE_KEY = 'amplify:batchAutoSave:v1';
+var _BATCH_AUTOSAVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+var _BATCH_AUTOSAVE_DEBOUNCE_MS = 600;
+var _batchAutoSaveTimer = null;
+
+function _autoSaveBatchSnapshotNow() {
+    try {
+        if (typeof _collectCombinedDraftSnapshot !== 'function') return;
+        // Don't ever overwrite a saved snapshot with empty in-memory state
+        // — that would amount to silently deleting the user's draft after
+        // a navigation that resets prepBatchResults but before restore.
+        if (!prepBatchResults || !prepBatchResults.length) return;
+        var snap = _collectCombinedDraftSnapshot();
+        // Strip heavy attachments — those are serialized separately via
+        // _persistBatchAttachments into sessionStorage and would blow the
+        // localStorage quota for image-heavy batches.
+        snap.imagesByFeatureId = {};
+        snap.videosByFeatureId = {};
+        snap.linksByFeatureId = {};
+        var payload = { v: 1, ts: Date.now(), snap: snap };
+        localStorage.setItem(_BATCH_AUTOSAVE_KEY, JSON.stringify(payload));
+    } catch (e) { /* QuotaExceededError or serialization issue — silent */ }
+}
+
+function _scheduleBatchAutoSave() {
+    if (_batchAutoSaveTimer) clearTimeout(_batchAutoSaveTimer);
+    _batchAutoSaveTimer = setTimeout(_autoSaveBatchSnapshotNow, _BATCH_AUTOSAVE_DEBOUNCE_MS);
+}
+
+function _clearBatchAutoSave() {
+    if (_batchAutoSaveTimer) { clearTimeout(_batchAutoSaveTimer); _batchAutoSaveTimer = null; }
+    try { localStorage.removeItem(_BATCH_AUTOSAVE_KEY); } catch (e) {}
+}
+
+function _formatAutoSaveAge(ms) {
+    if (!ms || ms < 60000) return 'just now';
+    var m = Math.round(ms / 60000);
+    if (m < 60) return m + ' minute' + (m === 1 ? '' : 's') + ' ago';
+    var h = Math.round(m / 60);
+    if (h < 24) return h + ' hour' + (h === 1 ? '' : 's') + ' ago';
+    var d = Math.round(h / 24);
+    return d + ' day' + (d === 1 ? '' : 's') + ' ago';
+}
+
+function _restoreBatchAutoSave() {
+    // Skip when a deep-linked server-side draft is loading — that path
+    // (loadEmailDraft) hydrates from /api/email-drafts and would clobber
+    // anything we restored here.
+    if (window._initialArtifactId) return false;
+    if (prepBatchResults && prepBatchResults.length) return false;
+    var raw;
+    try { raw = localStorage.getItem(_BATCH_AUTOSAVE_KEY); } catch (e) { return false; }
+    if (!raw) return false;
+    var payload;
+    try { payload = JSON.parse(raw); } catch (e) { _clearBatchAutoSave(); return false; }
+    if (!payload || !payload.snap) return false;
+    if (payload.ts && (Date.now() - payload.ts) > _BATCH_AUTOSAVE_TTL_MS) {
+        _clearBatchAutoSave();
+        return false;
+    }
+    var snap = payload.snap;
+    var results = snap.results || [];
+    if (!results.length) return false;
+    // Mirror the relevant subset of loadEmailDraft's hydration — we don't
+    // touch _currentDraftId / _setArtifactUrl / popstate state, since this
+    // is a local-only resume and not a server-side artifact load.
+    prepChannel = snap.channel || prepChannel;
+    prepBatchResults = results;
+    prepSelectedIds = {};
+    prepBatchApproved = {};
+    prepBatchPublished = {};
+    prepBatchInitialDrafts = {};
+    prepBatchRegenFeedback = {};
+    var approvedByFid = snap.approvedByFeatureId || {};
+    var initByFid = snap.initialDraftsByFeatureId || {};
+    for (var i = 0; i < results.length; i++) {
+        var fid = results[i] && results[i].feature_id;
+        if (!fid) continue;
+        prepSelectedIds[fid] = true;
+        if (approvedByFid[fid]) prepBatchApproved[i] = true;
+        if (initByFid[fid] !== undefined) prepBatchInitialDrafts[i] = initByFid[fid];
+    }
+    window.prepBatchEmailSubject = snap.emailSubjects || {};
+    window.prepBatchModeOverride = snap.modeOverride || null;
+    window._restoredCombined = snap.combined || null;
+    // Attachments come back from sessionStorage once prepBatchResults has
+    // feature_ids in place — the helper looks them up by index/fid.
+    if (typeof _restoreBatchAttachmentsFromStorage === 'function') {
+        _restoreBatchAttachmentsFromStorage();
+    }
+    var ageStr = _formatAutoSaveAge(payload.ts ? (Date.now() - payload.ts) : 0);
+    var label = 'Restored your previous batch (' + results.length + ' feature' + (results.length === 1 ? '' : 's')
+        + ', saved ' + ageStr + ') \u2014 <a href="#" onclick="_resumeRestoredBatch();return false;" style="color:#00C9A7;text-decoration:underline;font-weight:600;">Resume</a>';
+    setTimeout(function() { showToast(label, 'success'); }, 500);
+    return true;
+}
+
+function _resumeRestoredBatch() {
+    var overlay = document.getElementById('prep-overlay');
+    if (overlay) {
+        overlay.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+    }
+    prepGoToStep(3);
+    if (typeof _rebuildBatchListFromState === 'function') _rebuildBatchListFromState();
+    if (window._restoredCombined) {
+        prepGoToStep(4);
+        setTimeout(_applyRestoredCombinedFields, 80);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Email drafts (server-side persistence of the combined-preview screen).
@@ -10132,6 +10262,7 @@ function _restoreBatchAttachmentsFromStorage() {
 function startBatchFresh() {
     if (!confirm('Clear all attached images, videos, links, and saved subjects for this channel and regenerate from scratch?')) return;
     _clearBatchAttachmentsStorage();
+    if (typeof _clearBatchAutoSave === 'function') _clearBatchAutoSave();
     window.prepBatchModeOverride = null;
     startBatchGeneration();
 }
@@ -10614,6 +10745,9 @@ function startBatchGeneration() {
                 if (r && r.feature_id && r.content) markGeneratedChannels(r.feature_id, [apiChannel]);
             });
         } catch (_e) {}
+        // Snapshot the freshly-generated batch immediately so a reload
+        // before the user touches anything still resumes correctly.
+        if (typeof _scheduleBatchAutoSave === 'function') _scheduleBatchAutoSave();
         var restoredCount = _restoreBatchAttachmentsFromStorage();
         var memRestored = 0;
         var mem = window._batchMemBackup || { images: {}, videos: {}, links: {} };
@@ -10809,6 +10943,15 @@ function buildBatchItem(r, idx) {
             badge.textContent = len + '/' + max;
             badge.className = 'char-count-badge ' + (len <= max ? 'ok' : 'over');
         }
+        // Mirror the typed content back into the source-of-truth array so
+        // the autosave snapshot picks up edits even before any approve /
+        // regen / blur action that would otherwise sync the two.
+        try {
+            if (window.prepBatchResults && window.prepBatchResults[idx]) {
+                window.prepBatchResults[idx].content = this.value;
+            }
+        } catch (_e) {}
+        if (typeof _scheduleBatchAutoSave === 'function') _scheduleBatchAutoSave();
     });
     setTimeout(function() { autoResizeTextarea(ta); }, 0);
     setupCardDragDrop(item, null, true, idx);
@@ -11117,6 +11260,7 @@ function batchApproveItem(idx) {
         prepBatchResults[idx].approved_content = ta ? ta.value : currentContent;
         updateBatchItemStatus(idx);
         updateBatchApprovalCount();
+        if (typeof _scheduleBatchAutoSave === 'function') _scheduleBatchAutoSave();
         showToast('Approved!');
     })
     .catch(function(err) {
@@ -11197,6 +11341,7 @@ function batchUndoApprove(idx) {
     prepBatchPublished[idx] = false;
     updateBatchItemStatus(idx);
     updateBatchApprovalCount();
+    if (typeof _scheduleBatchAutoSave === 'function') _scheduleBatchAutoSave();
 }
 
 function updateBatchApprovalCount() {
@@ -12107,6 +12252,10 @@ function publishCombinedEmail() {
                 prepBatchPublished[idx] = true;
                 updateBatchItemStatus(idx);
             }
+            // Successful publish — drop the local autosave so the next
+            // page load doesn't surface a "Resume previous batch" prompt
+            // for an artifact the user already shipped.
+            if (typeof _clearBatchAutoSave === 'function') _clearBatchAutoSave();
             // Persist this artifact and mark it published so it appears
             // under "My Artifacts > Published" with a Resend button later.
             (function _persistAsPublished() {
