@@ -559,26 +559,26 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
             if pending_chip_html:
                 body_html += pending_chip_html
                 pending_chip_html = ""
-            cta_phrases = ["try it here", "try it now", "check it out", "learn more", "get started", "see it in action", "see the chart", "see it now", "explore now", "explore", "see how"]
+            # Auto-promotion to a green CTA button is intentionally narrow.
+            # Previously any paragraph that contained a verb phrase ("explore",
+            # "check it out", "learn more", ...) AND a URL was rewritten into
+            # a full-width button. That collided with the AI prompt, which
+            # tells the model to end the body with an INLINE hyperlink
+            # sentence ("Explore it on [the Spotify Playlists page](URL)."),
+            # and produced a duplicate button right above the explicit
+            # `[cta: text=Open in Chartmetric \u2192 | url=...]` block that
+            # the combined-email composer emits per section.
+            #
+            # Only treat the line as a button when the user/AI gave an
+            # unambiguous button signal: a line that is JUST `[Label](url)`
+            # (optionally with a trailing period). Any prose-with-link stays
+            # as a normal paragraph, and explicit `[cta: ...]` blocks still
+            # render as buttons via the earlier branch.
             standalone_link = re.match(r'^\[([^\]]+)\]\((https?://[^)]+)\)\s*\.?$', stripped)
-            is_cta = standalone_link is not None or any(p in stripped.lower() for p in cta_phrases)
-            if is_cta and ("http" in stripped):
-                md_link = re.search(r'\[([^\]]+)\]\((https?://[^)]+)\)', stripped)
-                bare_url = re.search(r'(https?://\S+)', stripped)
-                if md_link:
-                    url = _esc(md_link.group(2))
-                    link_text = md_link.group(1).strip()
-                    rest = (stripped[:md_link.start()] + stripped[md_link.end():]).strip().rstrip('.').rstrip(':').strip()
-                    label = _esc(link_text or rest or "Try it now")
-                    if rest:
-                        body_html += f'<p style="margin:0 0 4px 0;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(rest)}</p>'
-                    body_html += f'<div style="text-align:center;margin:24px 0;"><a href="{url}" style="display:inline-block;background:#00C9A7;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:700;font-size:15px;">{label}</a></div>'
-                elif bare_url:
-                    url = _esc(bare_url.group(1).rstrip(').,;'))
-                    label = _esc(re.sub(r'https?://\S+', '', stripped).strip().rstrip(':').strip() or "Try it now")
-                    body_html += f'<div style="text-align:center;margin:24px 0;"><a href="{url}" style="display:inline-block;background:#00C9A7;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:700;font-size:15px;">{label}</a></div>'
-                else:
-                    body_html += f'<p style="margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(stripped)}</p>'
+            if standalone_link is not None:
+                url = _esc(standalone_link.group(2))
+                label = _esc(standalone_link.group(1).strip() or "Try it now")
+                body_html += f'<div style="text-align:center;margin:24px 0;"><a href="{url}" style="display:inline-block;background:#00C9A7;color:#ffffff;text-decoration:none;padding:12px 32px;border-radius:6px;font-weight:700;font-size:15px;">{label}</a></div>'
             else:
                 body_html += f'<p style="margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.6;">{_inline_markdown(stripped)}</p>'
 
