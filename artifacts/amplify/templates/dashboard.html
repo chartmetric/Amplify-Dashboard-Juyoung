@@ -6455,6 +6455,10 @@ function onBatchFeatureUrlBlur(idx, e) {
             persistFeatureLink(fid, null);
             var open = document.getElementById('batch-furl-open-' + idx);
             if (open) { open.removeAttribute('href'); open.classList.add('disabled'); }
+            // Title was rendered as a hyperlink when there was a URL; flip
+            // it back to a plain span now that there isn't one. Pass an
+            // empty url so the helper renders the no-link span variant.
+            if (typeof _refreshBatchItemTitleLink === 'function') _refreshBatchItemTitleLink(idx, '');
             showToast('Feature URL cleared', 'success');
         }
         return;
@@ -6468,6 +6472,12 @@ function onBatchFeatureUrlBlur(idx, e) {
     if (e && e.target) e.target.value = url;
     var open2 = document.getElementById('batch-furl-open-' + idx);
     if (open2) { open2.href = url; open2.classList.remove('disabled'); }
+    // Sync the linked feature title at the top of the batch row so its
+    // arrow-link points at the new URL (or appears for the first time when
+    // a previously empty URL got filled in). Pass the freshly-typed url
+    // explicitly — see the comment on _refreshBatchItemTitleLink for why
+    // re-reading it from the persistence layer here would be stale.
+    if (typeof _refreshBatchItemTitleLink === 'function') _refreshBatchItemTitleLink(idx, url);
     // Sync any hyperlinks in this batch entry's body to the new URL so the
     // generated draft never lingers on the corrected URL's predecessor.
     var n = (typeof _rewriteBatchBodyHyperlinks === 'function')
@@ -7607,6 +7617,49 @@ function _rewriteBodyHyperlinks(oldUrl, newUrl) {
     }
 
     return total;
+}
+
+// Re-render the batch entry's title element so its hyperlink (or lack of
+// one) tracks the current feature URL. The original render at item-build
+// time is `<a class="batch-item-title batch-item-title-link" href="...">`
+// when a URL exists or `<span class="batch-item-title">` when it doesn't,
+// and the href was previously frozen — typing a new URL into the row's
+// input did not update the linked title or its arrow.
+//
+// `url` MUST be passed explicitly by the caller (the freshly-typed value),
+// not re-read here via getPersistedFeatureLink — that helper is server-
+// first and would return the stale chartmetric_url cached on the feature
+// object until the server round-trip completes, leaving the title link
+// pointing at the previous URL right after a blur.
+function _refreshBatchItemTitleLink(idx, url) {
+    var item = document.getElementById('batch-item-' + idx);
+    if (!item) return;
+    var existing = item.querySelector('.batch-item-title');
+    if (!existing) return;
+    // Prefer the canonical title from prepBatchResults so we don't lose
+    // fidelity to whitespace/casing of the rendered label, and so an
+    // intentional trailing arrow in the title itself wouldn't get stripped.
+    var r = (window.prepBatchResults || [])[idx] || {};
+    var label = r.feature_title;
+    if (label == null || label === '') {
+        label = (existing.textContent || '').replace(/\s*\u2197\s*$/, '').trim();
+    }
+    var replacement;
+    if (url) {
+        replacement = document.createElement('a');
+        replacement.className = 'batch-item-title batch-item-title-link';
+        replacement.href = url;
+        replacement.target = '_blank';
+        replacement.rel = 'noopener noreferrer';
+        replacement.title = 'Open feature URL';
+        replacement.onclick = function(ev) { ev.stopPropagation(); };
+        replacement.textContent = label + ' \u2197';
+    } else {
+        replacement = document.createElement('span');
+        replacement.className = 'batch-item-title';
+        replacement.textContent = label;
+    }
+    existing.replaceWith(replacement);
 }
 
 // Per-batch-entry rewrite. Scoped to one batch row so a URL change for
