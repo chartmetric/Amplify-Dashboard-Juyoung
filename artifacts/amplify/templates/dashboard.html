@@ -10298,8 +10298,18 @@ function prepGoToStep(step) {
     if (step === 3) {
         if (prepBatchResults.length === 0) startBatchGeneration();
         else {
-            document.getElementById('batch-actions-top').style.display = 'flex';
-            document.getElementById('batch-bottom-bar').style.display = 'flex';
+            // We already have results in memory (e.g. user navigated back from
+            // step 4, or restored a draft). Rebuild the card list into
+            // #batch-results-list — without this, the action bars show but the
+            // body stays empty and the user thinks the screen is broken.
+            var _list = document.getElementById('batch-results-list');
+            var _hasCards = _list && _list.children && _list.children.length > 0;
+            if (!_hasCards && typeof _rebuildBatchListFromState === 'function') {
+                _rebuildBatchListFromState();
+            } else {
+                document.getElementById('batch-actions-top').style.display = 'flex';
+                document.getElementById('batch-bottom-bar').style.display = 'flex';
+            }
         }
         renderBatchEmailSubjectRow();
     }
