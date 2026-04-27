@@ -2204,7 +2204,7 @@
             <div class="batch-actions-top" id="batch-actions-top" style="display:none;">
                 <button class="btn-quick" onclick="batchApproveAll()">Approve All</button>
                 <span class="batch-approved-count" id="batch-approved-count">0/0 approved</span>
-                <button class="btn-quick" onclick="startBatchFresh()" title="Discard saved attachments and regenerate" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--text-muted);">Start fresh</button>
+                <button class="btn-quick" onclick="regenerateAllBatch()" title="Regenerate AI text for every feature. Your attachments (images, videos, links) and saved subjects are preserved." style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--text-muted);">Regenerate all</button>
             </div>
             <div class="batch-results-list" id="batch-results-list"></div>
             <div class="batch-bottom-bar" id="batch-bottom-bar" style="display:none;">
@@ -10288,11 +10288,21 @@ function _restoreBatchAttachmentsFromStorage() {
     return restoredCount;
 }
 
-function startBatchFresh() {
-    if (!confirm('Clear all attached images, videos, links, and saved subjects for this channel and regenerate from scratch?')) return;
-    _clearBatchAttachmentsStorage();
-    if (typeof _clearBatchAutoSave === 'function') _clearBatchAutoSave();
-    window.prepBatchModeOverride = null;
+function regenerateAllBatch() {
+    // Re-run AI generation for every feature in the current batch while
+    // preserving attachments (images, videos, links) and saved subjects.
+    // startBatchGeneration() already snapshots attachments by feature_id
+    // into _batchMemBackup before the API call and restores them after,
+    // and the sessionStorage / per-feature localStorage tiers are also
+    // re-applied — so we only need to trigger the regeneration here.
+    // We do NOT clear _clearBatchAutoSave() so the user's draft survives
+    // a failed regeneration (the new results will overwrite the snapshot
+    // on success anyway).
+    if (!prepBatchResults || !prepBatchResults.length) {
+        startBatchGeneration();
+        return;
+    }
+    if (!confirm('Regenerate AI text for all ' + prepBatchResults.length + ' features? Your attachments (images, videos, links) and saved subjects will be preserved.')) return;
     startBatchGeneration();
 }
 
