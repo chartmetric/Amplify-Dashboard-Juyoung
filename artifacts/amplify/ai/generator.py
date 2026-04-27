@@ -159,7 +159,23 @@ IMPORTANT RULES:
   1. TITLE (line 1) — bolded with **...** (or `# ` heading for the HMC article). A punchy noun phrase that names the capability. Aim for 5-7 words. Answers "What is it?". Examples: "Smarter Playlist Discovery on Spotify", "Full Analytics on Your Shortlists", "Real-Time Playlist Scoring".
   2. SUBTITLE (line 2, directly under the title — no blank line between them) — PLAIN text (no bold, no italic, no bullet, no '#'). One short line that reframes the title from the user's perspective: what they can now DO or FIND. Same energy as the title, conversational, no jargon. Answers "Why should I care?". Examples: "Find playlists people actually listen to", "See exactly who listens, where, and why", "Stop guessing which playlists matter".
   Then a BLANK LINE, then the body content.
-  HARD RULE: the subtitle is NOT a definition of the title and is NOT the title rephrased. Title = the capability. Subtitle = the user benefit. They must feel equally alive. Bad subtitle: "A new tool to discover playlists" (definition). Good subtitle: "Find playlists people actually listen to" (user benefit).
+  HARD RULES — read carefully, the AI keeps breaking these:
+    a) The subtitle MUST contain DIFFERENT WORDS from the title. It is NEVER acceptable to repeat the title text on the subtitle line. If the title is "Smarter Playlist Discovery on Spotify", the subtitle must NOT be "Smarter Playlist Discovery on Spotify" or any cosmetic rewording of those same words.
+    b) The subtitle is NOT a definition of the title and NOT a paraphrase of the title. Title = WHAT the capability is. Subtitle = WHAT THE USER CAN DO with it. Different angle, different vocabulary.
+    c) The subtitle should usually start with a user-facing verb ("Find...", "See...", "Spot...", "Stop guessing...", "Understand...", "Get...") OR a noun phrase that names the user's outcome ("Fewer dead-end pitches", "More playlists you can actually pitch to").
+    d) Concrete WRONG / RIGHT pairs:
+       WRONG  →  **Smarter Playlist Discovery on Spotify**
+                 Smarter Playlist Discovery on Spotify
+       RIGHT  →  **Smarter Playlist Discovery on Spotify**
+                 Find playlists people actually listen to.
+       WRONG  →  **Full Analytics on Your Shortlists**
+                 Full analytics for your shortlists.
+       RIGHT  →  **Full Analytics on Your Shortlists**
+                 Spot the strongest tracks before your A&R meeting.
+       WRONG  →  **Data Assistant Now Available to All Premium Users**
+                 The Data Assistant is now available to all premium users.
+       RIGHT  →  **Data Assistant Now Available to All Premium Users**
+                 Ask your music questions in plain English and get answers.
   Channels WITHOUT this pattern: twitter (single block, no headline), linkedin (trend-hook open), did_you_know (single fact line).
 - LINK HANDLING:
   - When a Feature URL is provided, embed it according to the channel's rules below. When no Feature URL is provided ("Not provided"), write a natural verbal CTA phrase instead and never invent a URL.
@@ -369,6 +385,99 @@ def extract_benefit_title(
             return None
 
     return headline
+
+
+_TITLE_LINE_PATTERNS = (
+    re.compile(r"^\s*\*\*(.+?)\*\*\s*$"),
+    re.compile(r"^\s*#{1,6}\s+(.+?)\s*$"),
+)
+
+
+def _normalize_for_compare(s: str) -> str:
+    """Lowercase + strip non-alphanumeric so 'Foo Bar!' == '**foo-bar**'."""
+    return re.sub(r"[^a-z0-9]+", "", s.lower())
+
+
+def _strip_title_markup(line: str) -> str | None:
+    """If `line` is a recognized title line (`**X**` or `# X`), return X (with
+    surrounding markdown markers stripped). Otherwise return None."""
+    if not line:
+        return None
+    for pat in _TITLE_LINE_PATTERNS:
+        m = pat.match(line)
+        if m:
+            inner = m.group(1).strip()
+            inner = re.sub(r"^[*_`#\s]+|[*_`#\s]+$", "", inner)
+            return inner or None
+    return None
+
+
+def dedupe_title_subtitle(content: str, channel_key: str) -> str:
+    """Safety net: if the AI emitted a subtitle that is identical (or
+    alphanumeric-equivalent) to the title, drop the duplicate subtitle line.
+    Skip channels that don't use the title+subtitle pattern.
+
+    Examples handled:
+      "**Foo Bar**\nFoo Bar\n\nbody"        -> "**Foo Bar**\n\nbody"
+      "**Foo Bar**\nfoo bar.\n\nbody"       -> "**Foo Bar**\n\nbody"
+      "### **Foo Bar**\nFoo Bar\nbody"      -> "### **Foo Bar**\nbody"
+      "# Foo Bar\nFoo Bar\n\nbody"          -> "# Foo Bar\n\nbody"
+    """
+    if not content:
+        return content
+    if channel_key in {"twitter", "linkedin", "did_you_know"}:
+        return content
+
+    text = content
+    sub_match = _BENEFIT_TITLE_SUBJECT_RE.match(text)
+    prefix = ""
+    if sub_match:
+        prefix = text[:sub_match.end()]
+        text = text[sub_match.end():]
+
+    # For HMC, skip the optional `meta_description: ...` line(s) at the top.
+    meta_prefix = ""
+    if channel_key == "article_hmc":
+        m = re.match(r"^(\s*meta_description:[^\n]*\n+)", text, re.IGNORECASE)
+        if m:
+            meta_prefix = m.group(1)
+            text = text[m.end():]
+
+    # Find first non-empty line (the title candidate) and the line directly
+    # after it (the subtitle candidate). We only strip if they are adjacent
+    # with no blank line between them — that's the title+subtitle layout.
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    if i >= len(lines) - 1:
+        return content
+
+    title_text = _strip_title_markup(lines[i])
+    if not title_text:
+        return content
+
+    j = i + 1
+    if j >= len(lines):
+        return content
+    subtitle_line = lines[j]
+    if not subtitle_line.strip():
+        return content  # blank line between -> not the subtitle slot
+
+    subtitle_clean = re.sub(r"^[*_`#\s]+|[*_`#\s\.\!\?]+$", "", subtitle_line.strip())
+    if not subtitle_clean:
+        return content
+
+    if _normalize_for_compare(subtitle_clean) != _normalize_for_compare(title_text):
+        return content
+
+    logger.info(
+        f"[{channel_key}] Stripping duplicate subtitle line that mirrors title: "
+        f"{subtitle_line.strip()!r}"
+    )
+    new_lines = lines[:j] + lines[j + 1:]
+    new_text = "\n".join(new_lines)
+    return prefix + meta_prefix + new_text
 
 
 def _auto_append_cta_link(content: str, channel_key: str, feature_url: str | None) -> str:
@@ -597,6 +706,8 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
                 logger.info(f"[{channel_key}] Expanded to {measured} prose chars.")
             else:
                 logger.warning(f"[{channel_key}] Expand retry failed; keeping original short draft.")
+
+        content = dedupe_title_subtitle(content, channel_key)
 
         cta_url = feature_data.get("feature_url") or feature_data.get("chartmetric_url")
         content_before_cta = content
