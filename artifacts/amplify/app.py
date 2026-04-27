@@ -2382,10 +2382,18 @@ def _build_video_map(feature_id):
     vids = list_feature_videos(feature_id)
     if not vids:
         return {}
-    base = os.environ.get("REPLIT_DEV_DOMAIN", "")
-    scheme = "https" if base else "http"
-    if not base:
-        base = "localhost:5000"
+    # Use the same base-URL resolution as the email renderer so links in
+    # delivered emails always point at the public production host. Falling
+    # back to `localhost:5000` here would silently ship a broken video to
+    # every recipient — log loudly if that ever happens so we notice.
+    from integrations.sendgrid_client import _get_base_url
+    base_url = _get_base_url().rstrip("/")
+    if base_url.startswith("http://localhost"):
+        logger.warning(
+            "[publish/video] _build_video_map: no REPLIT_DEPLOYMENT_URL or "
+            "REPLIT_DEV_DOMAIN set — outgoing video links will point at "
+            f"{base_url!r} and will not be reachable from recipients."
+        )
     fallback_thumb = "https://via.placeholder.com/640x360/222222/999999?text=Video"
     video_map = {}
     for v in vids:
@@ -2401,8 +2409,8 @@ def _build_video_map(feature_id):
                 }
             else:
                 video_map[fname] = {
-                    "thumb_url": f"{scheme}://{base}/api/videos/{vid_id}/thumb" if has_thumb else fallback_thumb,
-                    "video_url": f"{scheme}://{base}/api/videos/{vid_id}",
+                    "thumb_url": f"{base_url}/api/videos/{vid_id}/thumb" if has_thumb else fallback_thumb,
+                    "video_url": f"{base_url}/api/videos/{vid_id}",
                 }
     return video_map
 
@@ -2497,7 +2505,13 @@ def publish_email():
                 mark_published(fid, channel)
         elif feature_id:
             mark_published(feature_id, channel)
-    status_code = 200 if result.get("success") else 500
+    if not result.get("success") and (result.get("missing_images") or result.get("missing_videos")):
+        # Unresolved [image:]/[video:] markers — return 400 so the UI
+        # treats it as a user-fixable validation error, not a server
+        # crash, and surfaces the names of the offending markers.
+        status_code = 400
+    else:
+        status_code = 200 if result.get("success") else 500
     _dt = (_time.time() - _t0) * 1000
     if result.get("success"):
         logger.info(f"[publish/email] OK method={result.get('method')!r} count={result.get('count')} id={result.get('message_id','')!r} dt={_dt:.0f}ms")

@@ -112,6 +112,31 @@ def _get_base_url() -> str:
     return "http://localhost:5000"
 
 
+class MediaResolutionError(Exception):
+    """Raised when an `[image: ...]` or `[video: ...]` marker in an email
+    body cannot be resolved to a real hosted asset at send time.
+
+    The send must be blocked instead of shipping a broken `<img>` or video
+    placeholder. The frontend uses ``missing_images`` / ``missing_videos``
+    to surface an editor-visible error pointing at the offending names.
+    """
+
+    def __init__(self, missing_images: list, missing_videos: list):
+        self.missing_images = list(missing_images or [])
+        self.missing_videos = list(missing_videos or [])
+        parts = []
+        if self.missing_images:
+            parts.append(
+                "image(s): " + ", ".join(repr(x) for x in self.missing_images)
+            )
+        if self.missing_videos:
+            parts.append(
+                "video(s): " + ", ".join(repr(x) for x in self.missing_videos)
+            )
+        msg = "Cannot send email — unresolved media marker(s): " + "; ".join(parts)
+        super().__init__(msg)
+
+
 def _build_hosted_image_map(images: dict) -> dict:
     """Persist inline data: images so the email can reference a stable URL.
 
@@ -358,12 +383,22 @@ def _composited_external_thumb_url(remote_thumb_url: str) -> str:
         return remote_thumb_url
 
 
-def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None, from_name: str = None, videos: dict = None) -> str:
+def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None, from_name: str = None, videos: dict = None, strict: bool = False) -> str:
+    """Render an email body to HTML.
+
+    When ``strict`` is True, raise ``MediaResolutionError`` if any
+    ``[image: ...]`` or ``[video: ...]`` marker in the body cannot be
+    resolved to a hosted asset. The send path uses strict=True so a
+    broken email never goes out; the preview path uses strict=False so
+    the editor can still see what's missing.
+    """
     _ = from_name
     import re
     safe_subject = _esc(subject)
     image_map = images or {}
     video_map = videos or {}
+    missing_images: list = []
+    missing_videos: list = []
 
     banner_month = _current_month_year()
     banner_title = "Product Updates"
@@ -459,10 +494,15 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
                 thumb_url = vid_info.get("thumb_url", "")
                 vid_link = vid_info.get("video_url", "")
             else:
-                body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Video: {_esc(vid_ref)}]</p>'
+                missing_videos.append(vid_ref)
+                body_html += f'<p style="margin:0 0 12px 0;color:#b91c1c;font-size:13px;font-weight:600;">[Video: {_esc(vid_ref)}] &mdash; not attached</p>'
                 continue
             if not thumb_url or not vid_link:
-                body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Video: {_esc(vid_ref)}]</p>'
+                # Entry exists but is incomplete (missing thumb_url or
+                # video_url). Treat the same as a missing marker so strict
+                # mode blocks send instead of shipping a placeholder line.
+                missing_videos.append(vid_ref)
+                body_html += f'<p style="margin:0 0 12px 0;color:#b91c1c;font-size:13px;font-weight:600;">[Video: {_esc(vid_ref)}] &mdash; thumbnail or link unavailable</p>'
                 continue
             esc_link = _esc(vid_link)
             esc_thumb = _esc(thumb_url)
@@ -492,7 +532,8 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
                 img_src = image_map[img_name]
                 body_html += f'<div style="margin:16px 0;"><img src="{_esc(img_src)}" alt="{_esc(img_name)}" style="max-width:100%;height:auto;border-radius:6px;display:block;"></div>'
             else:
-                body_html += f'<p style="margin:0 0 12px 0;color:#999999;font-size:13px;font-style:italic;">[Image: {_esc(img_name)}]</p>'
+                missing_images.append(img_name)
+                body_html += f'<p style="margin:0 0 12px 0;color:#b91c1c;font-size:13px;font-weight:600;">[Image: {_esc(img_name)}] &mdash; not attached</p>'
         elif re.match(r'^#{1,3}\s+', stripped):
             close_list()
             first_text_done = True
@@ -544,6 +585,13 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
     close_list()
     if pending_chip_html:
         body_html += pending_chip_html
+
+    if strict and (missing_images or missing_videos):
+        logger.warning(
+            f"[email] strict render rejected send: missing_images={missing_images!r} "
+            f"missing_videos={missing_videos!r}"
+        )
+        raise MediaResolutionError(missing_images, missing_videos)
 
     safe_banner_title = _esc(banner_title)
     safe_banner_month = _esc(banner_month)
@@ -705,7 +753,26 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
 
     hosted_images = _build_hosted_image_map(images)
     bcc_list = [e.strip() for e in (bcc_email or "").split(",") if e.strip()] if bcc_email else None
-    html_content = render_email_html(final_subject, body, images=hosted_images, from_name=from_name, videos=videos)
+    try:
+        html_content = render_email_html(
+            final_subject, body, images=hosted_images, from_name=from_name,
+            videos=videos, strict=True,
+        )
+    except MediaResolutionError as _mre:
+        logger.warning(
+            f"[email] BLOCKED send: {_mre} (recipients={recipients_str!r})"
+        )
+        return {
+            "success": False,
+            "error": str(_mre),
+            "missing_images": _mre.missing_images,
+            "missing_videos": _mre.missing_videos,
+            "hint": (
+                "Re-attach the missing media in the editor before sending. "
+                "Each [image: name] / [video: name] marker must point at an "
+                "attachment with the exact same name."
+            ),
+        }
 
     # Log every <img> tag in the rendered HTML so we can verify exactly what
     # URLs the email recipient (and Gmail's image proxy) will fetch.

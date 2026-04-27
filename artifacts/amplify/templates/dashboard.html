@@ -4962,8 +4962,17 @@ function enterContentView(feature) {
                 if (s.image && !contentViewFeatureImage) {
                     contentViewFeatureImage = s.image;
                     if (s.image.name && s.image.dataUrl) {
-                        if (!contentViewImageMap['_feature']) contentViewImageMap['_feature'] = {};
-                        contentViewImageMap['_feature'][s.image.name] = s.image.dataUrl;
+                        // Make the restored feature image available on every
+                        // channel's image map. Previously this stored under a
+                        // dead `_feature` key that nothing read at send time,
+                        // so an email sent right after a draft restore would
+                        // ship `[Image: name]` text placeholders instead of
+                        // the actual `<img>`.
+                        for (var _ki = 0; _ki < orderedKeys.length; _ki++) {
+                            var _ck = orderedKeys[_ki];
+                            if (!contentViewImageMap[_ck]) contentViewImageMap[_ck] = {};
+                            contentViewImageMap[_ck][s.image.name] = s.image.dataUrl;
+                        }
                     }
                 }
             });
@@ -5011,6 +5020,20 @@ function enterContentView(feature) {
             if (localFeatImg && !contentViewFeatureImage) {
                 contentViewFeatureImage = localFeatImg;
                 renderFeatureImagePreview();
+            }
+            // Make sure the feature image is available on every channel's
+            // image map so a send right after a page reload doesn't ship a
+            // broken image. Without this the body still has `[image: name]`
+            // but contentViewImageMap[chKey] is empty, and the email goes
+            // out with a `[Image: name]` text placeholder.
+            if (contentViewFeatureImage && contentViewFeatureImage.name && contentViewFeatureImage.dataUrl) {
+                for (var _ki = 0; _ki < keys.length; _ki++) {
+                    var _ck = keys[_ki];
+                    if (!contentViewImageMap[_ck]) contentViewImageMap[_ck] = {};
+                    if (!contentViewImageMap[_ck][contentViewFeatureImage.name]) {
+                        contentViewImageMap[_ck][contentViewFeatureImage.name] = contentViewFeatureImage.dataUrl;
+                    }
+                }
             }
             var localFeatLink = getPersistedFeatureLink(fid);
             if (localFeatLink) {
@@ -7711,6 +7734,129 @@ function restoreImageIncludes(fid, keys) {
 
 var contentViewImageMap = {};
 var imageUndoStack = [];
+
+// ---- Email media resolution helpers ----------------------------------------
+// Every `[image: name]` / `[video: name]` marker in the email body MUST point
+// at a real attachment when we send. The send path used to ship a broken
+// `<img src="...">` to recipients whenever the marker name didn't line up
+// with the hosted-images map key — these helpers make the contract explicit:
+//
+//   _collectImageMapForBody(body, chKey, batchIdx?) ->
+//       returns a `{markerName: dataUrl|httpUrl}` map containing an entry
+//       for every non-URL marker in `body`, sourced from any image we have
+//       on hand (per-channel map, feature image, batch attachment,
+//       localStorage). HTTP URLs are passed through unchanged.
+//
+//   _validateMediaResolved(body, imageMap, videoMap?) ->
+//       returns { ok, missingImages, missingVideos }. Send paths must
+//       call this and abort with an editor-visible toast on `!ok`.
+function _extractMediaMarkers(body) {
+    var imgs = [], vids = [];
+    if (!body) return { images: imgs, videos: vids };
+    var imgRe = /\[image:\s*([^\]\n]+)\]/g;
+    var vidRe = /\[video:\s*([^\]\n]+)\]/g;
+    var m;
+    while ((m = imgRe.exec(body)) !== null) imgs.push(m[1].trim());
+    while ((m = vidRe.exec(body)) !== null) vids.push(m[1].trim());
+    return { images: imgs, videos: vids };
+}
+
+function _isHttpRef(s) {
+    return !!(s && /^https?:\/\//i.test(String(s).trim()));
+}
+
+function _collectImageMapForBody(body, chKey, batchIdx) {
+    // Gather every candidate image keyed by its filename so we can resolve
+    // body markers to a hosted asset without missing any.
+    var candidates = {};
+    function add(name, dataUrl) {
+        if (!name || !dataUrl) return;
+        if (!candidates[name]) candidates[name] = dataUrl;
+    }
+    if (chKey && contentViewImageMap && contentViewImageMap[chKey]) {
+        var chMap = contentViewImageMap[chKey];
+        for (var k in chMap) if (chMap.hasOwnProperty(k)) add(k, chMap[k]);
+    }
+    if (typeof contentViewFeatureImage !== 'undefined' && contentViewFeatureImage) {
+        add(contentViewFeatureImage.name, contentViewFeatureImage.dataUrl);
+    }
+    if (typeof contentViewFeature !== 'undefined' && contentViewFeature && contentViewFeature.id
+        && typeof getPersistedFeatureImage === 'function') {
+        var lf = getPersistedFeatureImage(contentViewFeature.id);
+        if (lf) add(lf.name, lf.dataUrl);
+    }
+    if (window.prepBatchImages) {
+        if (typeof batchIdx === 'number' && window.prepBatchImages[batchIdx]) {
+            var bi = window.prepBatchImages[batchIdx];
+            add(bi.name, bi.dataUrl);
+        } else {
+            for (var i in window.prepBatchImages) {
+                if (window.prepBatchImages.hasOwnProperty(i)) {
+                    var b = window.prepBatchImages[i];
+                    if (b) add(b.name, b.dataUrl);
+                }
+            }
+        }
+    }
+    var resolved = {};
+    var markers = _extractMediaMarkers(body).images;
+    for (var mi = 0; mi < markers.length; mi++) {
+        var name = markers[mi];
+        if (_isHttpRef(name)) continue; // renderer handles raw URLs
+        if (candidates[name]) resolved[name] = candidates[name];
+    }
+    return resolved;
+}
+
+function _validateMediaResolved(body, imageMap, knownVideoNames) {
+    var markers = _extractMediaMarkers(body);
+    var missingImages = [];
+    var missingVideos = [];
+    var imap = imageMap || {};
+    for (var i = 0; i < markers.images.length; i++) {
+        var n = markers.images[i];
+        if (_isHttpRef(n)) continue;
+        if (!imap[n]) missingImages.push(n);
+    }
+    if (knownVideoNames) {
+        var known = {};
+        for (var k = 0; k < knownVideoNames.length; k++) known[knownVideoNames[k]] = true;
+        for (var v = 0; v < markers.videos.length; v++) {
+            var vn = markers.videos[v];
+            if (_isHttpRef(vn)) continue;
+            if (!known[vn]) missingVideos.push(vn);
+        }
+    }
+    return {
+        ok: missingImages.length === 0 && missingVideos.length === 0,
+        missingImages: missingImages,
+        missingVideos: missingVideos,
+    };
+}
+
+function _formatMissingMediaMessage(missingImages, missingVideos) {
+    var parts = [];
+    if (missingImages && missingImages.length) {
+        parts.push('image(s): ' + missingImages.map(function(n) { return '"' + n + '"'; }).join(', '));
+    }
+    if (missingVideos && missingVideos.length) {
+        parts.push('video(s): ' + missingVideos.map(function(n) { return '"' + n + '"'; }).join(', '));
+    }
+    return 'Cannot send — re-attach missing ' + parts.join(' and ')
+        + '. Each marker must match an attached file name exactly.';
+}
+
+function _knownVideoNamesForChannel(chKey) {
+    // The per-feature email path doesn't track video names client-side
+    // (the server builds the video map from the videos table). Return an
+    // empty array unless the page has cached one.
+    var byCh = (window.contentViewVideos || {})[chKey];
+    if (!byCh) return null;
+    var names = [];
+    for (var k in byCh) if (byCh.hasOwnProperty(k)) names.push(k);
+    return names;
+}
+// ---------------------------------------------------------------------------
 var resendAudiences = null;
 var selectedAudience = {};
 var audienceContacts = {};
@@ -8631,8 +8777,24 @@ function doPublishToChannel(chKey) {
             var templateVal = templateSel ? templateSel.value : '';
             if (templateVal) payload.template_id = templateVal;
         }
-        var imgMap = contentViewImageMap[chKey];
-        if (imgMap && Object.keys(imgMap).length > 0) {
+        // Resolve every `[image: name]` marker in the body to a real
+        // attachment before sending. If anything can't be resolved we
+        // surface it in the editor instead of shipping a broken email.
+        var imgMap = _collectImageMapForBody(content, chKey);
+        if (contentViewImageMap[chKey]) {
+            // Keep the per-channel map in sync so subsequent previews
+            // and re-sends within the same session see the same data.
+            for (var _mk in imgMap) {
+                if (imgMap.hasOwnProperty(_mk)) contentViewImageMap[chKey][_mk] = imgMap[_mk];
+            }
+        }
+        var _validation = _validateMediaResolved(content, imgMap, _knownVideoNamesForChannel(chKey));
+        if (!_validation.ok) {
+            publishingInFlight[chKey] = false;
+            showToast(_formatMissingMediaMessage(_validation.missingImages, _validation.missingVideos), 'error');
+            return;
+        }
+        if (Object.keys(imgMap).length > 0) {
             payload.images = imgMap;
         }
         var bccInputEl = document.getElementById('bcc-emails-' + chKey);
@@ -8684,6 +8846,15 @@ function doPublishToChannel(chKey) {
     .then(function(data) {
         publishingInFlight[chKey] = false;
         if (!data.success) {
+            if (isEmail && (
+                (data.missing_images && data.missing_images.length) ||
+                (data.missing_videos && data.missing_videos.length)
+            )) {
+                showToast(_formatMissingMediaMessage(
+                    data.missing_images || [], data.missing_videos || []
+                ), 'error');
+                return;
+            }
             var errMsg = data.hint || data.error || 'Unknown error';
             showToast('Send failed: ' + errMsg, 'error');
             return;
@@ -9011,7 +9182,22 @@ function publishAllApproved() {
                         : ((typeof getPersistedFeatureLink === 'function' && fid) ? getPersistedFeatureLink(fid) : '');
                     if (_featLink) payload.feature_url = _featLink;
                 }
-                else if (isEmail) { payload.channel = chKey; payload.is_test = true; var si = document.getElementById('subject-' + chKey); var sv = si ? si.value.trim() : ''; if (sv) payload.subject = sv; var imgMap = contentViewImageMap[chKey]; if (imgMap && Object.keys(imgMap).length > 0) payload.images = imgMap; }
+                else if (isEmail) {
+                    payload.channel = chKey;
+                    payload.is_test = true;
+                    var si = document.getElementById('subject-' + chKey);
+                    var sv = si ? si.value.trim() : '';
+                    if (sv) payload.subject = sv;
+                    var imgMap = _collectImageMapForBody(content, chKey);
+                    var _v = _validateMediaResolved(content, imgMap, _knownVideoNamesForChannel(chKey));
+                    if (!_v.ok) {
+                        results[chKey] = { status: 'failed', error: _formatMissingMediaMessage(_v.missingImages, _v.missingVideos) };
+                        pending--;
+                        if (pending <= 0) showPublishSummary(results);
+                        return;
+                    }
+                    if (Object.keys(imgMap).length > 0) payload.images = imgMap;
+                }
                 else if (isInapp) { payload.feature_title = contentViewFeature ? (contentViewFeature.title || '') : ''; payload.category = contentViewFeature ? (contentViewFeature.category || '') : ''; }
                 else { if (contentViewFeatureImage && contentViewImageInclude[chKey] && contentViewFeatureImage.dataUrl) payload.image = contentViewFeatureImage.dataUrl.split(',')[1]; }
 
@@ -11003,15 +11189,29 @@ function _buildCombinedEmailPayload() {
     var bodyEl = document.getElementById('combined-email-body');
     var subject = subjectEl ? subjectEl.value.trim() : '';
     var body = bodyEl ? bodyEl.value : '';
-    var imageMap = {};
     var featureIds = [];
+    // Index batch images both by their declared placeholder (set in
+    // renderCombinedEmailComposer when the AI inlined a marker) and by
+    // their actual filename, so the resolver finds them no matter which
+    // form the body uses.
+    var candidates = {};
     for (var i = 0; i < items.length; i++) {
         var it = items[i];
         if (it.feature_id) featureIds.push(it.feature_id);
         var img = (window.prepBatchImages || {})[it.idx];
-        if (img && img.dataUrl && it.imagePlaceholder) {
-            imageMap[it.imagePlaceholder] = img.dataUrl;
+        if (img && img.dataUrl) {
+            if (it.imagePlaceholder) candidates[it.imagePlaceholder] = img.dataUrl;
+            if (img.name) candidates[img.name] = img.dataUrl;
         }
+    }
+    // Now build the actual map keyed by exactly what's in the body so
+    // the renderer can look each marker up by name.
+    var imageMap = {};
+    var markers = _extractMediaMarkers(body).images;
+    for (var mi = 0; mi < markers.length; mi++) {
+        var name = markers[mi];
+        if (_isHttpRef(name)) continue;
+        if (candidates[name]) imageMap[name] = candidates[name];
     }
     return {
         subject: subject,
@@ -11639,6 +11839,15 @@ function publishCombinedEmail() {
     if (!data) { showToast('No items to publish', 'error'); return; }
     if (!data.subject) { showToast('Subject is required', 'error'); return; }
     if (!data.body.trim()) { showToast('Body is empty', 'error'); return; }
+    // Block send when any `[image: name]` / `[video: name]` marker in the
+    // body has nothing behind it — recipients used to get a broken-image
+    // icon in this case. The send-time validator only catches missing
+    // images (videos for the combined path are tracked server-side).
+    var _cVal = _validateMediaResolved(data.body, data.imageMap, null);
+    if (!_cVal.ok) {
+        showToast(_formatMissingMediaMessage(_cVal.missingImages, _cVal.missingVideos), 'error');
+        return;
+    }
 
     var audSel = document.getElementById('combined-email-audience');
     var audId = audSel ? audSel.value : '';
@@ -11741,6 +11950,13 @@ function publishCombinedEmail() {
             combinedEmailPublishInFlight = false;
             if (btn) { btn.disabled = false; btn.textContent = 'Publish Email \uD83D\uDCE7'; }
             if (!resp.success) {
+                if ((resp.missing_images && resp.missing_images.length) ||
+                    (resp.missing_videos && resp.missing_videos.length)) {
+                    showToast(_formatMissingMediaMessage(
+                        resp.missing_images || [], resp.missing_videos || []
+                    ), 'error');
+                    return;
+                }
                 showToast('Send failed: ' + (resp.hint || resp.error || 'Unknown error'), 'error');
                 return;
             }
