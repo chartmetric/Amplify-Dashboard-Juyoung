@@ -2874,20 +2874,21 @@ def save_image_endpoint():
     data_url = data.get("dataUrl", "")
     image_url = data.get("url", "")
     is_url = bool(data.get("isUrl")) or (image_url and not data_url)
+    is_gif = bool(data.get("isGif"))
     filename = data.get("name", "image.png")
     file_size = data.get("size", 0)
     if not feature_id:
         return jsonify({"success": False, "error": "feature_id required"}), 400
     if is_url and image_url:
         try:
-            save_publish_image(feature_id, channel, image_url, filename or image_url, file_size)
+            save_publish_image(feature_id, channel, image_url, filename or image_url, file_size, is_gif=is_gif)
         except ValueError as e:
             return jsonify({"success": False, "error": str(e)}), 400
         return jsonify({"success": True, "kind": "url"}), 200
     if not data_url:
         return jsonify({"success": False, "error": "dataUrl or url required"}), 400
     try:
-        save_publish_image(feature_id, channel, data_url, filename, file_size)
+        save_publish_image(feature_id, channel, data_url, filename, file_size, is_gif=is_gif)
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
     return jsonify({"success": True, "kind": "data"}), 200
@@ -3067,6 +3068,7 @@ def publish_image_meta(feature_id):
         "exists": True,
         "name": img.get("name", "image"),
         "dataUrl": img.get("dataUrl"),
+        "isGif": bool(img.get("is_gif", False)),
     })
 
 

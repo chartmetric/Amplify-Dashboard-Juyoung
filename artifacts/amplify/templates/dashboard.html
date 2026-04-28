@@ -6037,6 +6037,106 @@ function promptBatchImageUrl(idx) {
     showToast('Image URL attached', 'success');
 }
 
+// GIF URLs need different handling than image URLs:
+//   * Drive/Dropbox "share" rewrites point at HTML viewer pages, not raw bytes,
+//     so an animated .gif served through them won't render in <img>. We skip
+//     those rewrites for GIF URLs and trust the link the marketer pasted.
+//   * The attachment must carry isGif=true so the "this channel may not
+//     animate GIFs" warning fires for channels that can't animate.
+function _looksLikeGifUrl(u) {
+    if (!u) return false;
+    var s = String(u).split('?')[0].split('#')[0].toLowerCase();
+    if (/\.gif$/.test(s)) return true;
+    // Common animated-GIF hosts that serve direct media on /media/
+    if (/media\.giphy\.com\/media\//.test(u) || /media[0-9]*\.tenor\.com\//.test(u)) return true;
+    return false;
+}
+
+function _normalizeGifUrl(raw) {
+    if (!raw) return '';
+    var url = String(raw).trim();
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    return url;
+}
+
+function promptFeatureGifUrl() {
+    var raw = prompt('Paste a direct .gif URL (must end in .gif so it animates in email):', '');
+    if (raw === null) return;
+    var url = _normalizeGifUrl(raw);
+    if (!url) { showToast('No URL entered', 'warning'); return; }
+    if (!_looksLikeGifUrl(url)) {
+        if (!confirm('That URL does not look like a direct .gif link. Many sharing pages (Google Drive, Dropbox, Giphy share links) return a webpage and will not animate in email. Use it anyway?')) return;
+    }
+    var imgData = { name: url, dataUrl: url, url: url, isUrl: true, isGif: true, size: 0 };
+    contentViewFeatureImage = imgData;
+    if (typeof renderFeatureImagePreview === 'function') renderFeatureImagePreview();
+    if (typeof showImageToggles === 'function') showImageToggles();
+    var allChKeys = Object.keys(contentViewChannels || {});
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    var unsupported = [];
+    for (var ci = 0; ci < allChKeys.length; ci++) {
+        var chk = allChKeys[ci];
+        if (typeof contentViewImageInclude !== 'undefined') contentViewImageInclude[chk] = true;
+        if (typeof addImageMarkerToChannel === 'function') addImageMarkerToChannel(chk);
+        if (!window.contentViewImageMap) window.contentViewImageMap = {};
+        if (!contentViewImageMap[chk]) contentViewImageMap[chk] = {};
+        contentViewImageMap[chk][imgData.name] = imgData.dataUrl;
+        if (fid && typeof persistImageInclude === 'function') persistImageInclude(fid, chk, true);
+        if (typeof autoSaveDraft === 'function') autoSaveDraft(chk);
+        if (typeof GIF_ANIMATED_CHANNELS !== 'undefined' && !GIF_ANIMATED_CHANNELS[chk]) unsupported.push(chk);
+    }
+    if (typeof updateChannelMediaPickers === 'function') updateChannelMediaPickers();
+    if (fid) {
+        if (typeof persistFeatureImage === 'function') persistFeatureImage(fid, imgData);
+        fetch('/api/publish/image', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ feature_id: fid, url: url, name: url, isUrl: true, isGif: true })
+        }).catch(function() {});
+    }
+    showToast('GIF URL attached', 'success');
+    if (unsupported.length > 0) {
+        showToast('Some channels may not animate GIFs and will show a static frame.', 'warning');
+    }
+}
+
+function promptBatchGifUrl(idx) {
+    var raw = prompt('Paste a direct .gif URL (must end in .gif so it animates in email):', '');
+    if (raw === null) return;
+    var url = _normalizeGifUrl(raw);
+    if (!url) { showToast('No URL entered', 'warning'); return; }
+    if (!_looksLikeGifUrl(url)) {
+        if (!confirm('That URL does not look like a direct .gif link. Many sharing pages (Google Drive, Dropbox, Giphy share links) return a webpage and will not animate in email. Use it anyway?')) return;
+    }
+    var imgData = { name: url, dataUrl: url, url: url, isUrl: true, isGif: true, size: 0 };
+    if (!window.prepBatchImages) window.prepBatchImages = {};
+    window.prepBatchImages[idx] = imgData;
+    var fid = _getBatchFeatureId(idx);
+    if (fid && typeof unmarkAttachmentRemoved === 'function') unmarkAttachmentRemoved(fid, 'images', url);
+    if (fid && typeof persistFeatureImage === 'function') persistFeatureImage(fid, imgData);
+    if (fid) {
+        fetch('/api/publish/image', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ feature_id: fid, url: url, name: url, isUrl: true, isGif: true })
+        }).catch(function() {});
+    }
+    var ta = document.getElementById('batch-ta-' + idx);
+    if (ta) {
+        var stripped = (ta.value || '').replace(/\n?\[image:\s*[^\]]+\]/g, '').replace(/\s+$/, '');
+        ta.value = stripped + '\n[image: ' + url + ']';
+        var pv = document.getElementById('batch-md-preview-' + idx);
+        if (pv && typeof simpleMarkdown === 'function') {
+            pv.innerHTML = simpleMarkdown(_stripLeadingTitleLine(ta.value, _batchHeaderTitle(idx)), {batchIdx: idx});
+        }
+        if (typeof autoResizeTextarea === 'function') autoResizeTextarea(ta);
+    }
+    if (typeof refreshBatchMediaButton === 'function') refreshBatchMediaButton(idx);
+    if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
+    showToast('GIF URL attached', 'success');
+}
+
 function triggerFeatureGifPicker() {
     var input = document.createElement('input');
     input.type = 'file'; input.accept = 'image/gif,.gif';
@@ -6126,7 +6226,7 @@ function _renderAttachMenu(btn, view) {
                 '<span style="font-size:16px;">&#128190;</span> Upload GIF file</div>' +
             '<div class="attach-menu-item" data-action="paste-gif" style="' + itemStyle + '">' +
                 '<span style="font-size:16px;">&#128203;</span> Paste GIF from clipboard</div>' +
-            '<div class="attach-menu-item" data-action="image-url" style="' + itemStyle + '">' +
+            '<div class="attach-menu-item" data-action="gif-url" style="' + itemStyle + '">' +
                 '<span style="font-size:16px;">&#128279;</span> GIF URL <span style="' + hintStyle + '">Direct .gif link</span></div>';
     } else if (view === 'video') {
         html =
@@ -6162,6 +6262,7 @@ function _renderAttachMenu(btn, view) {
             else if (action === 'image-url') promptFeatureImageUrl();
             else if (action === 'upload-gif') triggerFeatureGifPicker();
             else if (action === 'paste-gif') pasteFeatureGifFromClipboard();
+            else if (action === 'gif-url') promptFeatureGifUrl();
             else if (action === 'upload-video') triggerVideoFilePicker();
             else if (action === 'video-url') promptVideoUrl();
         };
@@ -6271,7 +6372,7 @@ function _renderBatchAttachMenu(btn, idx, view) {
                 '<span style="font-size:16px;">&#128190;</span> Upload GIF file</div>' +
             '<div class="attach-menu-item" data-action="paste-gif" style="' + itemStyle + '">' +
                 '<span style="font-size:16px;">&#128203;</span> Paste GIF from clipboard</div>' +
-            '<div class="attach-menu-item" data-action="image-url" style="' + itemStyle + '">' +
+            '<div class="attach-menu-item" data-action="gif-url" style="' + itemStyle + '">' +
                 '<span style="font-size:16px;">&#128279;</span> GIF URL <span style="' + hintStyle + '">Direct .gif link</span></div>';
     } else if (view === 'video') {
         html =
@@ -6357,6 +6458,7 @@ function _renderBatchAttachMenu(btn, idx, view) {
             else if (action === 'image-url') promptBatchImageUrl(idx);
             else if (action === 'upload-gif') triggerBatchImagePicker(idx, true);
             else if (action === 'paste-gif') pasteBatchImageFromClipboard(idx, true);
+            else if (action === 'gif-url') promptBatchGifUrl(idx);
             else if (action === 'upload-video') triggerBatchVideoPicker(idx);
             else if (action === 'video-url') promptBatchVideoUrl(idx);
         };
@@ -11183,7 +11285,7 @@ function startBatchGeneration() {
                         // (or the card's Remove action), don't restore it
                         // from the publish_store on this rebuild.
                         if (typeof isAttachmentRemoved === 'function' && isAttachmentRemoved(_fid, 'images', meta.name)) return;
-                        var imgData = { name: meta.name, dataUrl: meta.dataUrl };
+                        var imgData = { name: meta.name, dataUrl: meta.dataUrl, isGif: !!meta.isGif };
                         window.prepBatchImages[_idx] = imgData;
                         try { if (typeof persistFeatureImage === 'function') persistFeatureImage(_fid, imgData); } catch(_e) {}
                         try { if (typeof refreshBatchMediaButton === 'function') refreshBatchMediaButton(_idx); } catch(_e) {}

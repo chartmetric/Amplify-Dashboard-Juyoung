@@ -151,7 +151,7 @@ def get_all_published():
 MAX_IMAGE_SIZE = 25 * 1024 * 1024
 
 
-def save_image(feature_id, channel, data_url, filename, file_size):
+def save_image(feature_id, channel, data_url, filename, file_size, is_gif=False):
     _ensure_dirs()
 
     if len(data_url) > MAX_IMAGE_SIZE:
@@ -167,12 +167,12 @@ def save_image(feature_id, channel, data_url, filename, file_size):
         f.write(data_url)
     os.replace(tmp_img, img_path)
 
-    meta = {"name": str(filename)[:200], "size": int(file_size) if file_size else 0}
+    meta = {"name": str(filename)[:200], "size": int(file_size) if file_size else 0, "is_gif": bool(is_gif)}
     with open(tmp_meta, "w") as f:
         json.dump(meta, f)
     os.replace(tmp_meta, meta_path)
 
-    logger.info(f"[publish_store] Saved feature-level image for {feature_id} ({filename}, dataUrl={len(data_url)} bytes, declared={file_size})")
+    logger.info(f"[publish_store] Saved feature-level image for {feature_id} ({filename}, dataUrl={len(data_url)} bytes, declared={file_size}, is_gif={bool(is_gif)})")
     return True
 
 
@@ -184,7 +184,12 @@ def _load_image_files(img_path, meta_path):
             data_url = f.read()
         with open(meta_path, "r") as f:
             meta = json.load(f)
-        return {"dataUrl": data_url, "name": meta.get("name", "image.png"), "size": meta.get("size", 0)}
+        return {
+            "dataUrl": data_url,
+            "name": meta.get("name", "image.png"),
+            "size": meta.get("size", 0),
+            "is_gif": bool(meta.get("is_gif", False)),
+        }
     except Exception as e:
         logger.error(f"[publish_store] Error loading image files: {e}")
         return None
