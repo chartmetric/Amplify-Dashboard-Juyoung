@@ -144,6 +144,8 @@
         .custom-dropdown-item { padding: 8px 14px; font-size: 13px; color: var(--text-muted); cursor: pointer; white-space: nowrap; background: var(--bg-card); transition: background-color 0.15s; }
         .custom-dropdown-item:hover { background: var(--border); color: var(--text-primary); }
         .custom-dropdown-item.active { color: var(--accent); background: var(--dd-active-bg); }
+        .custom-dropdown-item.is-downloading,
+        .btn-download-combined-email.is-downloading { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
         .toggle-label {
             display: flex; align-items: center; gap: 8px; cursor: pointer;
             font-size: 13px; color: var(--text-muted); user-select: none;
@@ -9006,7 +9008,7 @@ function updateChannelStatus(chKey) {
                         '<div class="custom-dropdown-menu">' +
                         '<div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Resend Email &#x1F4E7;</div>' +
                         '<div class="custom-dropdown-item" onclick="previewEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview HTML &#x2197;</div>' +
-                        '<div class="custom-dropdown-item" onclick="downloadEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Download HTML &#x2B07;</div>' +
+                        '<div class="custom-dropdown-item' + (emailHtmlDownloadInFlight[chKey] ? ' is-downloading' : '') + '" data-action="download-email-html" data-channel="' + chKey + '" onclick="downloadEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Download HTML &#x2B07;</div>' +
                         '</div>';
                 } else if (chKey === 'inapp') {
                     ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">Republish or Preview</span><span class="dd-arrow">&#9650;</span></button>' +
@@ -9090,7 +9092,7 @@ function updateChannelStatus(chKey) {
                         '<div class="custom-dropdown-menu">' +
                         '<div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">' + (prevPubbed ? 'Resend' : 'Send') + ' Email &#x1F4E7;</div>' +
                         '<div class="custom-dropdown-item" onclick="previewEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview HTML &#x2197;</div>' +
-                        '<div class="custom-dropdown-item" onclick="downloadEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Download HTML &#x2B07;</div>' +
+                        '<div class="custom-dropdown-item' + (emailHtmlDownloadInFlight[chKey] ? ' is-downloading' : '') + '" data-action="download-email-html" data-channel="' + chKey + '" onclick="downloadEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Download HTML &#x2B07;</div>' +
                         '</div>';
                 } else if (chKey === 'inapp') {
                     var prevPubbed = contentViewPublished[chKey];
@@ -9400,6 +9402,17 @@ var emailHtmlDownloadInFlight = {};
 // fighting each other.
 var emailHtmlPreviewInFlight = {};
 
+// Visually dim/undim every "Download HTML" dropdown item for a channel
+// while a download is in flight. Mirrors the in-flight debounce so the
+// button stops looking clickable if the user reopens the dropdown.
+function _setEmailDownloadDimmed(chKey, dimmed) {
+    var sel = '.custom-dropdown-item[data-action="download-email-html"][data-channel="' + chKey + '"]';
+    var items = document.querySelectorAll(sel);
+    for (var i = 0; i < items.length; i++) {
+        items[i].classList.toggle('is-downloading', !!dimmed);
+    }
+}
+
 function downloadEmailHtml(chKey) {
     if (emailHtmlDownloadInFlight[chKey]) return;
     var ta = document.getElementById('ta-' + chKey);
@@ -9414,10 +9427,12 @@ function downloadEmailHtml(chKey) {
     }
 
     emailHtmlDownloadInFlight[chKey] = true;
+    _setEmailDownloadDimmed(chKey, true);
     var loadingToast = _showLoadingToast('Preparing email HTML\u2026');
     function _finish() {
         loadingToast.dismiss();
         emailHtmlDownloadInFlight[chKey] = false;
+        _setEmailDownloadDimmed(chKey, false);
     }
 
     // Mirror previewEmailHtml: in Resend-template mode, the preview shows
@@ -13124,10 +13139,13 @@ function downloadCombinedEmail() {
     var templateId = templateSel ? templateSel.value : '';
 
     combinedEmailDownloadInFlight = true;
+    var combinedDownloadBtn = document.querySelector('.btn-download-combined-email');
+    if (combinedDownloadBtn) combinedDownloadBtn.classList.add('is-downloading');
     var loadingToast = _showLoadingToast('Preparing email HTML\u2026');
     function _finish() {
         loadingToast.dismiss();
         combinedEmailDownloadInFlight = false;
+        if (combinedDownloadBtn) combinedDownloadBtn.classList.remove('is-downloading');
     }
 
     // Mirror previewCombinedEmail: in Resend-template mode, the live
