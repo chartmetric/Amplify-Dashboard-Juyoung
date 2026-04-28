@@ -2264,6 +2264,7 @@
                 <button class="btn-preview-all-batch" onclick="batchPreviewAllOnX()" style="background:transparent;color:#1DA1F2;border:1.5px solid #1DA1F2;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Preview on X &#x2197;</button>
                 <button class="btn-publish-combined-email" onclick="publishCombinedEmail()" style="display:none;background:#00C9A7;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Publish Email &#x1F4E7;</button>
                 <button class="btn-preview-combined-email" onclick="previewCombinedEmail()" style="display:none;background:transparent;color:#00C9A7;border:1.5px solid #00C9A7;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Preview HTML &#x2197;</button>
+                <button class="btn-download-combined-email" onclick="downloadCombinedEmail()" style="display:none;background:transparent;color:#00C9A7;border:1.5px solid #00C9A7;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Download HTML &#x2B07;</button>
                 <button class="btn-copy-all" onclick="copyAllCombined()">Copy All Combined</button>
                 <button class="btn-save-draft" onclick="saveCombinedAsDraft()" style="background:transparent;color:#a78bfa;border:1.5px solid #a78bfa;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">&#128190; Save as Draft</button>
                 <button class="btn-done" onclick="exitPrepWorkflow()">Done - Back to Dashboard</button>
@@ -8963,6 +8964,7 @@ function updateChannelStatus(chKey) {
                         '<div class="custom-dropdown-menu">' +
                         '<div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Resend Email &#x1F4E7;</div>' +
                         '<div class="custom-dropdown-item" onclick="previewEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview HTML &#x2197;</div>' +
+                        '<div class="custom-dropdown-item" onclick="downloadEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Download HTML &#x2B07;</div>' +
                         '</div>';
                 } else if (chKey === 'inapp') {
                     ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">Republish or Preview</span><span class="dd-arrow">&#9650;</span></button>' +
@@ -9046,6 +9048,7 @@ function updateChannelStatus(chKey) {
                         '<div class="custom-dropdown-menu">' +
                         '<div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">' + (prevPubbed ? 'Resend' : 'Send') + ' Email &#x1F4E7;</div>' +
                         '<div class="custom-dropdown-item" onclick="previewEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Preview HTML &#x2197;</div>' +
+                        '<div class="custom-dropdown-item" onclick="downloadEmailHtml(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">Download HTML &#x2B07;</div>' +
                         '</div>';
                 } else if (chKey === 'inapp') {
                     var prevPubbed = contentViewPublished[chKey];
@@ -9299,6 +9302,123 @@ function fetchResendTemplatePreviewHtml(templateId, subject, retryHandlerName, o
 // Last-fired retry handler for new-window single/combined popup previews.
 // Reused by Retry button -> window.opener call.
 window._lastSinglePreviewRetry = null;
+
+// Helpers for "Download HTML": produce a sensible filename from the
+// subject + current date, and trigger a client-side .html download from
+// in-memory HTML so we don't need a backend route just to set
+// Content-Disposition.
+function _slugifyEmailSubject(subject) {
+    var s = String(subject || '').toLowerCase().trim();
+    if (!s) return '';
+    s = s.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (s.length > 60) s = s.slice(0, 60).replace(/-+$/, '');
+    return s;
+}
+
+function _buildEmailDownloadFilename(subject) {
+    var d = new Date();
+    var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+    var ymd = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate());
+    var slug = _slugifyEmailSubject(subject);
+    if (slug) return 'amplify-email-' + slug + '-' + ymd + '.html';
+    var hm = pad(d.getHours()) + pad(d.getMinutes());
+    return 'amplify-email-' + ymd + '-' + hm + '.html';
+}
+
+function _triggerHtmlDownload(html, filename) {
+    try {
+        var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function() {
+            try { document.body.removeChild(a); } catch (e) {}
+            try { URL.revokeObjectURL(url); } catch (e) {}
+        }, 0);
+        return true;
+    } catch (e) {
+        showToast('Download failed: ' + (e && e.message ? e.message : 'Could not save file'), 'error');
+        return false;
+    }
+}
+
+function downloadEmailHtml(chKey) {
+    var ta = document.getElementById('ta-' + chKey);
+    var content = ta ? ta.value : '';
+    if (!content) { showToast('No content to download', 'error'); return; }
+    var subjectInput = document.getElementById('subject-' + chKey);
+    var subject = (subjectInput ? subjectInput.value.trim() : '') || 'Chartmetric Product Update';
+    var templateId = '';
+    if (chKey === 'email_standalone') {
+        var templateSel = document.getElementById('template-' + chKey);
+        if (templateSel && templateSel.value) templateId = templateSel.value;
+    }
+
+    // Mirror previewEmailHtml: in Resend-template mode, the preview shows
+    // the template's HTML (fetched from the dedicated template preview
+    // endpoint), not the locally rendered email. Download the same
+    // payload so what users save matches what they just previewed.
+    if (templateId) {
+        fetch('/api/resend/templates/' + encodeURIComponent(templateId) + '/preview')
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function(data) {
+            if (!data || !data.success) {
+                var msg = (data && data.error && data.error.message) ? data.error.message : 'Could not fetch template';
+                throw new Error(msg);
+            }
+            var html = data.html || '';
+            if (!html) { showToast('Download failed: template has no HTML body', 'error'); return; }
+            if (_triggerHtmlDownload(html, _buildEmailDownloadFilename(subjectInput ? subjectInput.value.trim() : ''))) {
+                showToast('Email HTML downloaded \uD83D\uDCBE');
+            }
+        })
+        .catch(function(err) {
+            showToast('Download failed: ' + (err && err.message ? err.message : 'render error'), 'error');
+        });
+        return;
+    }
+
+    var payload = { content: content, subject: subject };
+    var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
+    if (fid) payload.feature_id = fid;
+    if (chKey === 'email_standalone') {
+        var fromNameInput = document.getElementById('fromname-' + chKey);
+        if (fromNameInput && fromNameInput.value.trim()) {
+            payload.from_name = fromNameInput.value.trim();
+        }
+    }
+    var imgMap = contentViewImageMap[chKey];
+    if (imgMap && Object.keys(imgMap).length > 0) {
+        payload.images = imgMap;
+    }
+    fetch('/api/publish/email/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+    })
+    .then(function(html) {
+        if (!html) { showToast('Download failed: empty response', 'error'); return; }
+        var subjectInput2 = document.getElementById('subject-' + chKey);
+        var liveSubject = subjectInput2 ? subjectInput2.value.trim() : '';
+        if (_triggerHtmlDownload(html, _buildEmailDownloadFilename(liveSubject))) {
+            showToast('Email HTML downloaded \uD83D\uDCBE');
+        }
+    })
+    .catch(function(err) {
+        showToast('Download failed: ' + (err && err.message ? err.message : 'render error'), 'error');
+    });
+}
 
 function previewEmailHtml(chKey) {
     var ta = document.getElementById('ta-' + chKey);
@@ -12092,11 +12212,13 @@ function renderCombinedPreview() {
     var previewBtn = document.querySelector('.btn-preview-all-batch');
     var emailPubBtn = document.querySelector('.btn-publish-combined-email');
     var emailPrevBtn = document.querySelector('.btn-preview-combined-email');
+    var emailDownloadBtn = document.querySelector('.btn-download-combined-email');
     var isPublishable = !!PUBLISHABLE_CHANNELS[prepChannel];
     if (publishBtn) publishBtn.style.display = (isPublishable && !isEmailCh) ? '' : 'none';
     if (previewBtn) previewBtn.style.display = (isPublishable && !isEmailCh) ? '' : 'none';
     if (emailPubBtn) emailPubBtn.style.display = isSendableEmail ? '' : 'none';
     if (emailPrevBtn) emailPrevBtn.style.display = isSendableEmail ? '' : 'none';
+    if (emailDownloadBtn) emailDownloadBtn.style.display = isSendableEmail ? '' : 'none';
 
     var items = [];
     var list = document.getElementById('batch-results-list');
@@ -12878,6 +13000,69 @@ function previewCombinedEmail() {
         if (w) { w.document.write(html); w.document.close(); }
     })
     .catch(function(err) { showToast('Preview failed: ' + err.message, 'error'); });
+}
+
+function downloadCombinedEmail() {
+    var data = _buildCombinedEmailPayload();
+    if (!data) { showToast('No items to download', 'error'); return; }
+    var fromNameEl = document.getElementById('combined-email-fromname');
+    var fromName = fromNameEl ? fromNameEl.value.trim() : 'Chartmetric';
+    var templateSel = document.getElementById('combined-email-template');
+    var templateId = templateSel ? templateSel.value : '';
+
+    // Mirror previewCombinedEmail: in Resend-template mode, the live
+    // preview shows the template's HTML, not the locally rendered
+    // digest. Download the same payload so what users save matches
+    // what they just previewed.
+    if (templateId) {
+        fetch('/api/resend/templates/' + encodeURIComponent(templateId) + '/preview')
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function(resp) {
+            if (!resp || !resp.success) {
+                var msg = (resp && resp.error && resp.error.message) ? resp.error.message : 'Could not fetch template';
+                throw new Error(msg);
+            }
+            var html = resp.html || '';
+            if (!html) { showToast('Download failed: template has no HTML body', 'error'); return; }
+            if (_triggerHtmlDownload(html, _buildEmailDownloadFilename(data.subject))) {
+                showToast('Email HTML downloaded \uD83D\uDCBE');
+            }
+        })
+        .catch(function(err) {
+            showToast('Download failed: ' + (err && err.message ? err.message : 'render error'), 'error');
+        });
+        return;
+    }
+
+    var payload = {
+        content: data.body,
+        subject: data.subject,
+        from_name: fromName,
+        feature_ids: data.featureIds
+    };
+    if (Object.keys(data.imageMap).length > 0) payload.images = data.imageMap;
+
+    fetch('/api/publish/email/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+    })
+    .then(function(html) {
+        if (!html) { showToast('Download failed: empty response', 'error'); return; }
+        if (_triggerHtmlDownload(html, _buildEmailDownloadFilename(data.subject))) {
+            showToast('Email HTML downloaded \uD83D\uDCBE');
+        }
+    })
+    .catch(function(err) {
+        showToast('Download failed: ' + (err && err.message ? err.message : 'render error'), 'error');
+    });
 }
 
 var combinedEmailPublishInFlight = false;
