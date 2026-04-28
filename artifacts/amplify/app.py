@@ -4165,6 +4165,204 @@ def test_review():
     return render_template("review.html")
 
 
+# Allowlist of upstream hosts our /api/thumb endpoint will fetch from.
+# Restricting to known thumbnail/CDN hosts prevents the route from being
+# turned into an open proxy that can be abused to mask the server's IP
+# against arbitrary third-party sites.
+_THUMB_PROXY_ALLOWED_HOSTS = (
+    "drive.google.com",
+    "lh3.googleusercontent.com",
+    "lh4.googleusercontent.com",
+    "lh5.googleusercontent.com",
+    "lh6.googleusercontent.com",
+    "cdn.loom.com",
+    "img.youtube.com",
+    "i.ytimg.com",
+    "vumbnail.com",
+)
+_THUMB_PROXY_MAX_BYTES = 2 * 1024 * 1024  # 2 MB hard cap per upstream fetch
+_THUMB_PROXY_TTL_SECONDS = 60 * 60  # 1 hour
+_THUMB_PROXY_CACHE_MAX_ENTRIES = 128  # ~256MB worst case, ~10MB realistic
+_THUMB_PROXY_MAX_REDIRECTS = 5
+_thumb_proxy_cache: dict = {}
+_thumb_proxy_cache_lock = threading.Lock()
+
+
+def _thumb_proxy_cache_get(key: str):
+    now = time.time()
+    with _thumb_proxy_cache_lock:
+        entry = _thumb_proxy_cache.get(key)
+        if not entry:
+            return None
+        bytes_, mime, expires_at = entry
+        if expires_at < now:
+            _thumb_proxy_cache.pop(key, None)
+            return None
+        return bytes_, mime
+
+
+def _thumb_proxy_cache_put(key: str, bytes_: bytes, mime: str) -> None:
+    expires_at = time.time() + _THUMB_PROXY_TTL_SECONDS
+    with _thumb_proxy_cache_lock:
+        # Drop oldest entries when at capacity to keep memory bounded.
+        # Strict LRU isn't required for a thumbnail cache, FIFO is fine.
+        if len(_thumb_proxy_cache) >= _THUMB_PROXY_CACHE_MAX_ENTRIES:
+            try:
+                oldest_key = next(iter(_thumb_proxy_cache))
+                _thumb_proxy_cache.pop(oldest_key, None)
+            except StopIteration:
+                pass
+        _thumb_proxy_cache[key] = (bytes_, mime, expires_at)
+
+
+@app.route("/api/thumb")
+def api_thumb():
+    """Server-side image proxy for video/image thumbnails.
+
+    Browsers can't reliably fetch Google Drive thumbnail URLs directly:
+    Drive often serves an HTML auth page (or 302 to one) when the
+    request lacks a Google session cookie, so the in-app preview
+    silently shows a broken image. Our server has no such restriction
+    and gets the actual bytes for any publicly shared file. This proxy
+    fetches a thumbnail from an allowlisted host and streams the raw
+    bytes back to the browser with cache-friendly headers, so the
+    preview reliably renders.
+
+    Category: Media
+
+    Query params:
+        url: Absolute http(s) URL of the thumbnail. Must point at an
+             allowlisted host (Drive, Loom CDN, YouTube/Vimeo
+             thumbnail endpoints).
+
+    Response:
+        200: image bytes with the upstream Content-Type
+        302: redirect back to the original URL when fetch fails (so the
+             browser can still try direct, falling back to its own
+             broken-image handling).
+        400: missing/invalid url, host not allowlisted.
+    """
+    from urllib.parse import urlparse
+    from flask import Response, redirect
+    import requests as req_lib
+
+    raw = (request.args.get("url") or "").strip()
+    if not raw:
+        return jsonify({"error": "url is required"}), 400
+    try:
+        parsed = urlparse(raw)
+    except Exception:
+        return jsonify({"error": "invalid url"}), 400
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return jsonify({"error": "invalid url"}), 400
+    host = parsed.hostname.lower()
+    if host not in _THUMB_PROXY_ALLOWED_HOSTS:
+        return jsonify({"error": "host not allowed"}), 400
+
+    cached = _thumb_proxy_cache_get(raw)
+    if cached:
+        cached_bytes, cached_mime = cached
+        resp = Response(cached_bytes, mimetype=cached_mime)
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        resp.headers["X-Thumb-Cache"] = "hit"
+        return resp
+
+    # Manually follow redirects so we can re-validate each hop against
+    # the host allowlist. requests.get(allow_redirects=True) would
+    # initially aim at an allowlisted host but then silently follow a
+    # 30x to an arbitrary internal/external target before our MIME
+    # check ran, which is an SSRF risk. Drive's /thumbnail endpoint
+    # legitimately redirects to lh3.googleusercontent.com, which is
+    # also allowlisted, so a single hop is normal here.
+    current_url = raw
+    upstream = None
+    try:
+        for _hop in range(_THUMB_PROXY_MAX_REDIRECTS + 1):
+            try:
+                hop_parsed = urlparse(current_url)
+            except Exception:
+                logger.info("thumb proxy invalid redirect url: %s", current_url)
+                return redirect(raw, code=302)
+            if hop_parsed.scheme not in ("http", "https") or not hop_parsed.hostname:
+                logger.info("thumb proxy invalid redirect target: %s", current_url)
+                return redirect(raw, code=302)
+            hop_host = hop_parsed.hostname.lower()
+            if hop_host not in _THUMB_PROXY_ALLOWED_HOSTS:
+                logger.info(
+                    "thumb proxy refused redirect to non-allowed host %s",
+                    hop_host,
+                )
+                return redirect(raw, code=302)
+            try:
+                upstream = req_lib.get(
+                    current_url,
+                    timeout=8,
+                    allow_redirects=False,
+                    stream=True,
+                    headers={
+                        # A real browser User-Agent helps a few CDNs return the
+                        # actual image instead of a stripped-down response.
+                        "User-Agent": "Mozilla/5.0 (compatible; AmplifyThumbProxy/1.0)",
+                        "Accept": "image/*,*/*;q=0.8",
+                    },
+                )
+            except Exception as exc:
+                logger.warning("thumb proxy fetch failed for %s: %s", current_url, exc)
+                return redirect(raw, code=302)
+            if upstream.status_code in (301, 302, 303, 307, 308):
+                next_url = upstream.headers.get("Location") or ""
+                try:
+                    upstream.close()
+                except Exception:
+                    pass
+                upstream = None
+                if not next_url:
+                    return redirect(raw, code=302)
+                # Resolve relative redirects against the previous hop.
+                from urllib.parse import urljoin
+                current_url = urljoin(current_url, next_url)
+                continue
+            break
+        else:
+            # Hit the redirect cap without a terminal response.
+            return redirect(raw, code=302)
+
+        if upstream is None or upstream.status_code != 200:
+            status = upstream.status_code if upstream is not None else "no-response"
+            logger.info("thumb proxy upstream returned %s for %s", status, current_url)
+            return redirect(raw, code=302)
+        mime = (upstream.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        # Drive sometimes serves an HTML error/auth page with status 200.
+        # Treat anything that isn't an image as a failed fetch and let the
+        # browser fall back to the direct URL (which will likely also
+        # show a broken image, but that's the truthful state).
+        if not mime.startswith("image/"):
+            logger.info("thumb proxy upstream returned non-image %s for %s", mime, raw)
+            return redirect(raw, code=302)
+        chunks = []
+        total = 0
+        for chunk in upstream.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > _THUMB_PROXY_MAX_BYTES:
+                logger.info("thumb proxy aborted oversize fetch for %s", raw)
+                return redirect(raw, code=302)
+            chunks.append(chunk)
+        body = b"".join(chunks)
+    finally:
+        try:
+            upstream.close()
+        except Exception:
+            pass
+
+    _thumb_proxy_cache_put(raw, body, mime)
+    resp = Response(body, mimetype=mime)
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    resp.headers["X-Thumb-Cache"] = "miss"
+    return resp
+
+
 @app.route("/api/docs")
 def api_docs():
     """Auto-generated API documentation page.

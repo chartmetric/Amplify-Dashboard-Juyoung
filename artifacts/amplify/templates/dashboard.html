@@ -5423,10 +5423,14 @@ function simpleMarkdown(text, opts) {
                 );
             } else if (window.contentViewVideos && window.contentViewVideos[vidRef]) {
                 var vid = window.contentViewVideos[vidRef];
+                // Route Drive thumbs through the server proxy so they
+                // load in the browser even without a Google session
+                // cookie. Other hosts pass through unchanged.
+                var vidThumbBrowserSrc = _browserThumb(vid.thumb_url || '');
                 result.push(
                     '<div style="margin:8px 0;text-align:center;">' +
                     '<a href="' + escHtml(vid.video_url) + '" target="_blank" rel="noopener noreferrer" style="display:inline-block;position:relative;text-decoration:none;">' +
-                    '<img src="' + escHtml(vid.thumb_url) + '" alt="Video thumbnail" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;display:block;" onerror="this.style.display=\'none\'">' +
+                    '<img src="' + escHtml(vidThumbBrowserSrc) + '" alt="Video thumbnail" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;display:block;" onerror="this.style.display=\'none\'">' +
                     '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;background:rgba(0,0,0,0.7);border-radius:50%;display:flex;align-items:center;justify-content:center;">' +
                     '<span style="width:0;height:0;border-style:solid;border-width:10px 0 10px 18px;border-color:transparent transparent transparent #fff;margin-left:3px;display:inline-block;"></span>' +
                     '</span>' +
@@ -5436,9 +5440,13 @@ function simpleMarkdown(text, opts) {
             } else if (batchIdx !== null && findBatchVideo(vidRef)) {
                 var bvid = findBatchVideo(vidRef);
                 var poster = bvid.dataUrl || bvid.video_url || bvid.url || bvid.thumb_url || '';
+                // The poster attribute is what the browser shows before the
+                // video first paints. For Drive-hosted posters we route
+                // through /api/thumb so it actually loads.
+                var bvidPoster = bvid.thumb_url ? _browserThumb(bvid.thumb_url) : '';
                 result.push(
                     '<div class="inline-attach-wrap" style="margin:8px 0;text-align:center;position:relative;display:inline-block;max-width:100%;">' +
-                    '<video src="' + escHtml(poster) + '"' + (bvid.thumb_url ? ' poster="' + escHtml(bvid.thumb_url) + '"' : '') + ' preload="metadata" muted playsinline style="max-width:100%;max-height:220px;border-radius:8px;display:block;background:#000;" onclick="event.stopPropagation();this.paused?this.play():this.pause();"></video>' +
+                    '<video src="' + escHtml(poster) + '"' + (bvidPoster ? ' poster="' + escHtml(bvidPoster) + '"' : '') + ' preload="metadata" muted playsinline style="max-width:100%;max-height:220px;border-radius:8px;display:block;background:#000;" onclick="event.stopPropagation();this.paused?this.play():this.pause();"></video>' +
                     '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;background:rgba(0,0,0,0.55);border-radius:50%;display:flex;align-items:center;justify-content:center;pointer-events:none;">' +
                     '<span style="width:0;height:0;border-style:solid;border-width:10px 0 10px 18px;border-color:transparent transparent transparent #fff;margin-left:3px;display:inline-block;"></span>' +
                     '</span>' +
@@ -6381,7 +6389,10 @@ function _renderBatchAttachMenu(btn, idx, view) {
             }
             attachedHtml += '<div style="' + headerStyle + '">Attached to this feature</div>';
             if (hasImg) {
-                var imgThumbSrc = img.dataUrl || img.url || '';
+                // Local data: URLs and our own /api/* responses load directly;
+                // Drive-hosted images go through the server proxy so they
+                // actually render in the browser.
+                var imgThumbSrc = img.dataUrl || _browserThumb(img.url || '');
                 attachedHtml +=
                     '<div style="' + rowStyle + '">' +
                         _attachThumbHtml(imgThumbSrc, '&#128247;') +
@@ -6392,7 +6403,11 @@ function _renderBatchAttachMenu(btn, idx, view) {
             }
             for (var vi = 0; vi < vids.length; vi++) {
                 var vname = (vids[vi] && (vids[vi].name || vids[vi].url)) || 'video';
-                var vposter = (vids[vi] && (vids[vi].thumb_url || vids[vi].dataUrl)) || '';
+                // Drive video posters need the proxy to actually load in the
+                // browser; local dataUrl posters and Loom CDN images load
+                // directly (Loom serves with permissive CORS headers).
+                var vposterRaw = (vids[vi] && (vids[vi].thumb_url || vids[vi].dataUrl)) || '';
+                var vposter = vposterRaw ? _browserThumb(vposterRaw) : '';
                 attachedHtml +=
                     '<div style="' + rowStyle + '">' +
                         _attachThumbHtml(vposter, '&#127910;') +
@@ -7040,7 +7055,9 @@ function renderVideoPreview(data) {
     if (!preview) return;
     var vidName = data.filename || data.video_id || 'video';
     var vidUrl = data.video_url || '';
-    var thumbUrl = data.thumb_url || '';
+    // Drive-hosted posters need to go through the server proxy to load
+    // in the browser; other hosts pass through unchanged.
+    var thumbUrl = _browserThumb(data.thumb_url || '');
     var vidId = data.video_id || '';
     var _existing = preview.querySelectorAll('.video-preview-item');
     for (var _e = 0; _e < _existing.length; _e++) {
@@ -13793,6 +13810,34 @@ function stripMarkdownLinks(text) {
     return text.replace(/\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '$2');
 }
 
+// Wrap a thumbnail URL so it loads reliably in the browser. Most CDNs
+// serve their thumbnails cross-origin without auth (Loom, YouTube,
+// Vimeo) and can be embedded directly. Google Drive's thumbnail
+// endpoint, however, often serves an HTML auth page when the request
+// doesn't carry a Google session cookie - which is the common case in
+// our app and produces a broken-image icon. Routing those URLs through
+// our /api/thumb server proxy lets the server fetch the actual bytes
+// (any publicly shared file is returned anonymously) and stream them
+// back to the browser with proper image headers. URLs we don't need
+// to proxy are returned unchanged so external CDNs still benefit from
+// browser caching against their canonical hostnames.
+function _browserThumb(url) {
+    if (!url) return '';
+    if (typeof url !== 'string') return url;
+    if (url.charAt(0) === '/' || url.indexOf('data:') === 0 || url.indexOf('blob:') === 0) return url;
+    // Parse the host out of the URL rather than matching against the
+    // whole string. The earlier regex used `(^|\.)drive\.google\.com`
+    // which never matched `https://drive.google.com/...` because the
+    // character before the host is `/`, not start-of-string or `.`.
+    var host = '';
+    var m = url.match(/^https?:\/\/([^\/?#]+)/i);
+    if (m) host = m[1].toLowerCase().split('@').pop().split(':')[0];
+    if (host === 'drive.google.com' || /^lh[3-6]\.googleusercontent\.com$/.test(host)) {
+        return '/api/thumb?url=' + encodeURIComponent(url);
+    }
+    return url;
+}
+
 function getVideoThumbnail(url) {
     var ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
     if (ytMatch) return 'https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg';
@@ -13805,6 +13850,9 @@ function getVideoThumbnail(url) {
     if (loomMatch) return 'https://cdn.loom.com/sessions/thumbnails/' + loomMatch[1] + '-with-play.jpg';
     // Google Drive serves a poster via the thumbnail endpoint regardless
     // of file type. Match the same URL shapes _normalizeVideoUrl accepts.
+    // The Drive URL itself is wrapped with _browserThumb so the in-app
+    // preview hits our server-side proxy instead of Drive's auth-gated
+    // endpoint directly.
     var driveId = null;
     var drvA = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
     if (drvA) driveId = drvA[1];
@@ -13816,7 +13864,7 @@ function getVideoThumbnail(url) {
         var drvC = url.match(/[?&]id=([A-Za-z0-9_-]+)/);
         if (drvC && /drive\.google\.com/.test(url)) driveId = drvC[1];
     }
-    if (driveId) return 'https://drive.google.com/thumbnail?id=' + driveId + '&sz=w1600';
+    if (driveId) return _browserThumb('https://drive.google.com/thumbnail?id=' + driveId + '&sz=w1600');
     return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" fill="%23222"><rect width="320" height="180" rx="8" fill="%23e0e0e0"/><text x="160" y="95" text-anchor="middle" font-family="sans-serif" font-size="14" fill="%23999">Video</text></svg>');
 }
 
