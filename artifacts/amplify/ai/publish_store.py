@@ -6,6 +6,7 @@ import tempfile
 import logging
 import base64
 import subprocess
+import time
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,317 @@ VALID_CHANNELS = {"twitter", "email_newsletter", "email_short", "email_medium", 
 _SAFE_RE = re.compile(r"[^a-zA-Z0-9_\-.]")
 
 MAX_VIDEO_SIZE = 50 * 1024 * 1024
+
+
+# ---------------------------------------------------------------------------
+# Cross-instance video persistence (Postgres mirror).
+#
+# Replit's autoscale deployments give each container an ephemeral, per-instance
+# filesystem - files written under VIDEOS_DIR vanish on container recycle and
+# are not shared between concurrent autoscale instances. The drafts subsystem
+# already mirrors to Postgres for the same reason; we apply the same pattern
+# here so uploaded videos (bytes + thumbnail + metadata) survive deploys and
+# are visible from any instance.
+#
+# When DATABASE_URL is unset (local dev without a database) every helper
+# becomes a no-op and the store falls back to the legacy disk-only behavior.
+# ---------------------------------------------------------------------------
+_VIDEOS_DB_URL = os.environ.get("DATABASE_URL", "").strip()
+_videos_db_initialized = False
+
+
+def _videos_db_conn():
+    """Open a short-lived psycopg2 connection or return None when unavailable."""
+    if not _VIDEOS_DB_URL:
+        return None
+    try:
+        import psycopg2  # type: ignore
+        return psycopg2.connect(_VIDEOS_DB_URL, connect_timeout=5)
+    except Exception as e:
+        logger.warning(f"[publish_store] DB connect failed: {e}")
+        return None
+
+
+def _ensure_videos_table(conn) -> bool:
+    """Create the published_videos table on first use; idempotent."""
+    global _videos_db_initialized
+    if _videos_db_initialized:
+        return True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS published_videos (
+                    video_id TEXT PRIMARY KEY,
+                    feature_id TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    ext TEXT NOT NULL DEFAULT '',
+                    size BIGINT NOT NULL DEFAULT 0,
+                    has_thumb BOOLEAN NOT NULL DEFAULT FALSE,
+                    is_url BOOLEAN NOT NULL DEFAULT FALSE,
+                    external_url TEXT,
+                    external_thumb_url TEXT,
+                    video_data BYTEA,
+                    thumb_data BYTEA,
+                    created_at DOUBLE PRECISION NOT NULL
+                )
+                """
+            )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS published_videos_feature_idx "
+                "ON published_videos(feature_id)"
+            )
+            conn.commit()
+        _videos_db_initialized = True
+        return True
+    except Exception as e:
+        logger.warning(f"[publish_store] CREATE TABLE published_videos failed: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _meta_from_row(row) -> dict:
+    """Map a published_videos row to the on-disk-style meta dict."""
+    return {
+        "video_id": row[0],
+        "feature_id": row[1],
+        "filename": row[2],
+        "ext": row[3] or "",
+        "size": int(row[4] or 0),
+        "has_thumb": bool(row[5]),
+        "is_url": bool(row[6]),
+        "external_url": row[7] or "",
+        "external_thumb_url": row[8] or "",
+    }
+
+
+def _db_upsert_video(meta: dict, video_bytes: bytes | None, thumb_bytes: bytes | None) -> None:
+    """Insert or update a video row. Silently no-op when DB is unavailable."""
+    conn = _videos_db_conn()
+    if conn is None:
+        return
+    try:
+        if not _ensure_videos_table(conn):
+            return
+        import psycopg2  # type: ignore
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO published_videos (
+                    video_id, feature_id, filename, ext, size, has_thumb,
+                    is_url, external_url, external_thumb_url,
+                    video_data, thumb_data, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (video_id) DO UPDATE SET
+                    feature_id = EXCLUDED.feature_id,
+                    filename = EXCLUDED.filename,
+                    ext = EXCLUDED.ext,
+                    size = EXCLUDED.size,
+                    has_thumb = EXCLUDED.has_thumb,
+                    is_url = EXCLUDED.is_url,
+                    external_url = EXCLUDED.external_url,
+                    external_thumb_url = EXCLUDED.external_thumb_url,
+                    video_data = COALESCE(EXCLUDED.video_data, published_videos.video_data),
+                    thumb_data = COALESCE(EXCLUDED.thumb_data, published_videos.thumb_data)
+                """,
+                (
+                    meta.get("video_id"),
+                    meta.get("feature_id"),
+                    str(meta.get("filename") or "")[:200],
+                    meta.get("ext") or "",
+                    int(meta.get("size") or 0),
+                    bool(meta.get("has_thumb")),
+                    bool(meta.get("is_url")),
+                    meta.get("external_url") or None,
+                    meta.get("external_thumb_url") or None,
+                    psycopg2.Binary(video_bytes) if video_bytes else None,
+                    psycopg2.Binary(thumb_bytes) if thumb_bytes else None,
+                    time.time(),
+                ),
+            )
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"[publish_store] DB upsert video failed for {meta.get('video_id')}: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _db_load_video_row(video_id: str, include_bytes: bool):
+    """Fetch a single video row. include_bytes controls whether BYTEA is read."""
+    conn = _videos_db_conn()
+    if conn is None:
+        return None
+    try:
+        if not _ensure_videos_table(conn):
+            return None
+        cols = ("video_id, feature_id, filename, ext, size, has_thumb, "
+                "is_url, external_url, external_thumb_url")
+        if include_bytes:
+            cols += ", video_data, thumb_data"
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT {cols} FROM published_videos WHERE video_id = %s", (video_id,))
+            return cur.fetchone()
+    except Exception as e:
+        logger.warning(f"[publish_store] DB load video {video_id} failed: {e}")
+        return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _db_list_feature_videos(feature_id: str) -> list:
+    """Return meta dicts for every DB-stored video belonging to feature_id."""
+    conn = _videos_db_conn()
+    if conn is None:
+        return []
+    try:
+        if not _ensure_videos_table(conn):
+            return []
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT video_id, feature_id, filename, ext, size, has_thumb, "
+                "is_url, external_url, external_thumb_url "
+                "FROM published_videos WHERE feature_id = %s",
+                (feature_id,),
+            )
+            return [_meta_from_row(r) for r in cur.fetchall()]
+    except Exception as e:
+        logger.warning(f"[publish_store] DB list videos for {feature_id} failed: {e}")
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _db_delete_video(video_id: str) -> bool:
+    """Delete a video row from Postgres.
+
+    Returns True when the delete completed successfully OR when there's no DB
+    configured (disk-only mode treats deletes as trivially successful).
+    Returns False when a DB is configured but the delete failed - callers
+    must NOT proceed to remove the disk copy in that case, or a subsequent
+    list/get call would rehydrate the "deleted" video from the surviving
+    DB row.
+    """
+    conn = _videos_db_conn()
+    if conn is None:
+        # No DB configured -> nothing to delete on the DB side.
+        return True
+    try:
+        if not _ensure_videos_table(conn):
+            return False
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM published_videos WHERE video_id = %s", (video_id,))
+            conn.commit()
+        return True
+    except Exception as e:
+        logger.warning(f"[publish_store] DB delete video {video_id} failed: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _atomic_write_bytes(path: str, data: bytes) -> bool:
+    """Write `data` to `path` atomically using a temp file + os.replace.
+
+    Concurrent readers on autoscale instances must never observe a partial
+    file - hydration races (two requests hitting a fresh container at once)
+    would otherwise let one request see a half-written video and serve a
+    truncated response. os.replace is atomic on the same filesystem.
+    """
+    try:
+        d = os.path.dirname(path) or "."
+        fd, tmp = tempfile.mkstemp(dir=d, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            os.replace(tmp, path)
+            return True
+        except Exception:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except Exception:
+                pass
+            raise
+    except Exception as e:
+        logger.warning(f"[publish_store] atomic write failed for {path}: {e}")
+        return False
+
+
+def _atomic_write_text(path: str, text: str) -> bool:
+    return _atomic_write_bytes(path, text.encode("utf-8"))
+
+
+def _hydrate_video_to_disk(video_id: str, want_video: bool, want_thumb: bool) -> dict | None:
+    """Fetch a video from Postgres and write meta + bytes back to local disk.
+
+    Used as a transparent rescue when the local instance was scaled up after
+    the original upload (the file lives in DB but not on this container's
+    filesystem). Returns the meta dict on success, or None if the video
+    isn't in the DB (or DB is unavailable). All writes are atomic so a
+    concurrent reader can never observe a partial file.
+    """
+    row = _db_load_video_row(video_id, include_bytes=want_video or want_thumb)
+    if not row:
+        return None
+    meta = _meta_from_row(row)
+    vdir = _video_dir(video_id)
+    try:
+        os.makedirs(vdir, exist_ok=True)
+    except Exception as e:
+        logger.warning(f"[publish_store] hydrate mkdir failed for {video_id}: {e}")
+        return None
+    meta_path = os.path.join(vdir, "meta.json")
+    if not os.path.exists(meta_path):
+        _atomic_write_text(meta_path, json.dumps(meta))
+    if want_video and not meta.get("is_url"):
+        ext = meta.get("ext") or ".mp4"
+        video_path = os.path.join(vdir, "video" + ext)
+        if not os.path.exists(video_path):
+            video_data = row[9] if len(row) > 9 else None
+            if video_data:
+                data = bytes(video_data)
+                if _atomic_write_bytes(video_path, data):
+                    logger.info(f"[publish_store] Hydrated video {video_id} from DB ({len(data)} bytes)")
+    if want_thumb and meta.get("has_thumb"):
+        thumb_path = os.path.join(vdir, "thumb.jpg")
+        if not os.path.exists(thumb_path) or os.path.getsize(thumb_path) == 0:
+            thumb_data = row[10] if len(row) > 10 else None
+            if thumb_data:
+                tdata = bytes(thumb_data)
+                if _atomic_write_bytes(thumb_path, tdata):
+                    logger.info(f"[publish_store] Hydrated thumb {video_id} from DB ({len(tdata)} bytes)")
+    return meta
+
+
+def _read_file_bytes(path: str) -> bytes | None:
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except Exception:
+        return None
 
 
 def _ensure_dirs():
@@ -444,6 +756,7 @@ def save_video_url(feature_id, url, filename, thumb_url=None):
     }
     with open(os.path.join(vdir, "meta.json"), "w") as f:
         json.dump(meta, f)
+    _db_upsert_video(meta, video_bytes=None, thumb_bytes=None)
     logger.info(f"[publish_store] Saved video URL {video_id} for feature {feature_id} ({url})")
     return video_id
 
@@ -547,6 +860,13 @@ def save_video(feature_id, data_url, filename):
     with open(os.path.join(vdir, "meta.json"), "w") as f:
         json.dump(meta, f)
 
+    # Mirror to Postgres so the video survives autoscale container recycles
+    # and is visible from any instance. Best-effort: failures are logged but
+    # don't break the upload (the disk copy is still the primary source).
+    video_bytes = _read_file_bytes(video_path)
+    thumb_bytes = _read_file_bytes(thumb_path) if thumb_ok else None
+    _db_upsert_video(meta, video_bytes=video_bytes, thumb_bytes=thumb_bytes)
+
     logger.info(f"[publish_store] Saved video {video_id} for feature {feature_id} ({filename}, {len(raw)} bytes, thumb={thumb_ok})")
     return video_id
 
@@ -554,20 +874,37 @@ def save_video(feature_id, data_url, filename):
 def get_video_path(video_id):
     vdir = _video_dir(video_id)
     meta_path = os.path.join(vdir, "meta.json")
-    if not os.path.exists(meta_path):
-        return None, None
-    with open(meta_path) as f:
-        meta = json.load(f)
+    meta = None
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except Exception:
+            meta = None
+    if meta is None:
+        # Disk miss: try to rehydrate from Postgres (autoscale can recycle the
+        # container or route the request to a fresh instance, leaving local disk
+        # empty even though the upload succeeded earlier).
+        meta = _hydrate_video_to_disk(video_id, want_video=True, want_thumb=False)
+        if meta is None:
+            return None, None
     ext = meta.get("ext", ".mp4")
     video_path = os.path.join(vdir, "video" + ext)
     if not os.path.exists(video_path):
-        return None, None
+        # Meta is on disk but bytes aren't: pull just the bytes from DB.
+        hydrated = _hydrate_video_to_disk(video_id, want_video=True, want_thumb=False)
+        if hydrated is None or not os.path.exists(video_path):
+            return None, None
     return video_path, meta
 
 
 def get_video_thumb_path(video_id):
     vdir = _video_dir(video_id)
     thumb_path = os.path.join(vdir, "thumb.jpg")
+    if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
+        return thumb_path
+    # Disk miss: try DB hydration before giving up.
+    _hydrate_video_to_disk(video_id, want_video=False, want_thumb=True)
     if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
         return thumb_path
     return None
@@ -582,17 +919,34 @@ def delete_video(feature_id, video_id):
     import shutil
     vdir = _video_dir(video_id)
     meta_path = os.path.join(vdir, "meta.json")
-    if not os.path.exists(meta_path):
-        raise ValueError("Video not found")
-    try:
-        with open(meta_path) as f:
-            meta = json.load(f)
-    except Exception as e:
-        raise ValueError(f"Could not read video metadata: {e}")
+    meta = None
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except Exception as e:
+            raise ValueError(f"Could not read video metadata: {e}")
+    else:
+        # Hydrate from DB so we can verify ownership even if the local disk
+        # has been recycled since the upload.
+        meta = _hydrate_video_to_disk(video_id, want_video=False, want_thumb=False)
+        if meta is None:
+            raise ValueError("Video not found")
     owner = meta.get("feature_id")
     if owner != feature_id:
         raise ValueError("Video does not belong to this feature")
-    shutil.rmtree(vdir)
+    # Delete from the durable store FIRST. If we removed disk first and the
+    # DB delete then failed, the next list_feature_videos call would rehydrate
+    # the "deleted" video back onto disk from the surviving DB row.
+    if not _db_delete_video(video_id):
+        raise RuntimeError("Could not delete video from durable store; please retry")
+    if os.path.isdir(vdir):
+        try:
+            shutil.rmtree(vdir)
+        except Exception as e:
+            # DB row is gone, so no rehydration risk. Local stragglers will be
+            # pruned by the existing cleanup_orphan_videos maintenance routine.
+            logger.warning(f"[publish_store] Disk cleanup failed for {video_id}: {e}")
     logger.info(f"[publish_store] Deleted video {video_id} for feature {feature_id}")
     return True
 
@@ -724,18 +1078,36 @@ def cleanup_orphan_videos(known_feature_ids, dry_run=False):
 
 def list_feature_videos(feature_id):
     _ensure_dirs()
-    results = []
-    if not os.path.exists(VIDEOS_DIR):
-        return results
-    for entry in os.listdir(VIDEOS_DIR):
-        meta_path = os.path.join(VIDEOS_DIR, entry, "meta.json")
-        if not os.path.exists(meta_path):
-            continue
-        try:
-            with open(meta_path) as f:
-                meta = json.load(f)
-            if meta.get("feature_id") == feature_id:
-                results.append(meta)
-        except Exception:
-            pass
-    return results
+    by_id: dict = {}
+    if os.path.exists(VIDEOS_DIR):
+        for entry in os.listdir(VIDEOS_DIR):
+            meta_path = os.path.join(VIDEOS_DIR, entry, "meta.json")
+            if not os.path.exists(meta_path):
+                continue
+            try:
+                with open(meta_path) as f:
+                    meta = json.load(f)
+                if meta.get("feature_id") == feature_id:
+                    vid = meta.get("video_id") or entry
+                    by_id[vid] = meta
+            except Exception:
+                pass
+    # Layer in DB-stored videos (cross-instance / post-recycle visibility).
+    # Disk metadata wins on conflict because it reflects the most recent local
+    # write, but DB rows surface videos this instance never saw.
+    for meta in _db_list_feature_videos(feature_id):
+        vid = meta.get("video_id")
+        if vid and vid not in by_id:
+            # Materialize meta.json on disk so subsequent serve_video / thumb
+            # calls find it without a second DB lookup.
+            try:
+                vdir = _video_dir(vid)
+                os.makedirs(vdir, exist_ok=True)
+                meta_path = os.path.join(vdir, "meta.json")
+                if not os.path.exists(meta_path):
+                    with open(meta_path, "w") as f:
+                        json.dump(meta, f)
+            except Exception as e:
+                logger.warning(f"[publish_store] list hydrate meta failed for {vid}: {e}")
+            by_id[vid] = meta
+    return list(by_id.values())
