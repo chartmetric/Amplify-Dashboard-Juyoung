@@ -5289,6 +5289,42 @@ function togglePreview(chKey) {
     }
 }
 
+// Strip the leading title line from preview content when it duplicates
+// the title already shown in the card header. Card header shows the
+// extracted title; the body content also begins with that same title
+// (bolded or as a heading), which would render it twice.
+// Recognized leading-title patterns: **Title**, # Title (1-6 #), or a
+// bare first non-empty line. Match is case/whitespace-insensitive.
+function _stripLeadingTitleLine(content, headerTitle) {
+    if (!content || !headerTitle) return content;
+    var normHeader = String(headerTitle).trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!normHeader) return content;
+    var lines = String(content).split('\n');
+    var i = 0;
+    while (i < lines.length && lines[i].trim() === '') i++;
+    if (i >= lines.length) return content;
+    var first = lines[i];
+    var stripped, m;
+    if ((m = first.match(/^\s*\*\*(.+?)\*\*\s*$/))) stripped = m[1];
+    else if ((m = first.match(/^\s*#{1,6}\s+(.+?)\s*$/))) stripped = m[1];
+    else stripped = first.trim();
+    var normFirst = stripped.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (normFirst !== normHeader) return content;
+    lines.splice(i, 1);
+    if (i < lines.length && lines[i].trim() === '') lines.splice(i, 1);
+    return lines.join('\n');
+}
+
+// Lookup current feature_title for a batch idx (used by preview renders).
+function _batchHeaderTitle(idx) {
+    try {
+        if (window.prepBatchResults && window.prepBatchResults[idx]) {
+            return window.prepBatchResults[idx].feature_title || '';
+        }
+    } catch (_e) {}
+    return '';
+}
+
 function simpleMarkdown(text, opts) {
     var isEmail = opts && opts.isEmail;
     var batchIdx = opts && (opts.batchIdx !== undefined && opts.batchIdx !== null) ? opts.batchIdx : null;
@@ -5914,7 +5950,7 @@ function promptBatchImageUrl(idx) {
         ta.value = stripped + '\n[image: ' + url + ']';
         var pv = document.getElementById('batch-md-preview-' + idx);
         if (pv && typeof simpleMarkdown === 'function') {
-            pv.innerHTML = simpleMarkdown(ta.value, {batchIdx: idx});
+            pv.innerHTML = simpleMarkdown(_stripLeadingTitleLine(ta.value, _batchHeaderTitle(idx)), {batchIdx: idx});
         }
         if (typeof autoResizeTextarea === 'function') autoResizeTextarea(ta);
     }
@@ -7606,7 +7642,10 @@ function _refreshPreviewElement(previewEl, body, isEmail, batchIdx) {
     if (!previewEl) return;
     var opts = { isEmail: isEmail };
     if (typeof batchIdx === 'number') opts.batchIdx = batchIdx;
-    previewEl.innerHTML = simpleMarkdown(body, opts);
+    var renderBody = (typeof batchIdx === 'number')
+        ? _stripLeadingTitleLine(body, _batchHeaderTitle(batchIdx))
+        : body;
+    previewEl.innerHTML = simpleMarkdown(renderBody, opts);
 }
 
 function _rewriteBodyHyperlinks(oldUrl, newUrl) {
@@ -10961,7 +11000,7 @@ function startBatchGeneration() {
                                     ta2.value = newContent;
                                     var pv = document.getElementById('batch-md-preview-' + _idx);
                                     if (pv && typeof simpleMarkdown === 'function') {
-                                        pv.innerHTML = simpleMarkdown(newContent, {batchIdx: _idx});
+                                        pv.innerHTML = simpleMarkdown(_stripLeadingTitleLine(newContent, _batchHeaderTitle(_idx)), {batchIdx: _idx});
                                     }
                                 }
                             }
@@ -11083,7 +11122,7 @@ function buildBatchItem(r, idx) {
                     '<button type="button" class="batch-microsyntax-btn" title="Divider" onmousedown="event.preventDefault();" onclick="insertBatchMicrosyntax(' + idx + ', \'divider\')"><code>&mdash;</code></button>' +
                 '</div>' : '') +
             '<textarea class="channel-textarea" id="batch-ta-' + idx + '" data-idx="' + idx + '" data-max="' + maxChars + '" style="display:none;">' + escHtml(content) + '</textarea>' +
-            '<div class="md-preview" id="batch-md-preview-' + idx + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(content, {batchIdx: idx}) + '</div>' +
+            '<div class="md-preview" id="batch-md-preview-' + idx + '" style="display:block;cursor:pointer;" title="Click to edit">' + simpleMarkdown(_stripLeadingTitleLine(content, r.feature_title), {batchIdx: idx}) + '</div>' +
         '</div>' +
         '<div class="img-preview-wrap" id="batch-img-wrap-' + idx + '" style="display:none;"></div>' +
         '<div class="batch-item-loading" id="batch-loading-' + idx + '" style="display:none;"><div class="spinner"></div><span>Regenerating...</span></div>' +
@@ -11315,7 +11354,7 @@ function switchToBatchPreview(idx) {
     var preview = document.getElementById('batch-md-preview-' + idx);
     if (!ta || !preview) return;
     reconcileBatchAttachmentState(idx);
-    preview.innerHTML = simpleMarkdown(ta.value, {batchIdx: idx});
+    preview.innerHTML = simpleMarkdown(_stripLeadingTitleLine(ta.value, _batchHeaderTitle(idx)), {batchIdx: idx});
     preview.style.display = 'block';
     ta.style.display = 'none';
 }
