@@ -5791,6 +5791,11 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
             try {
                 var _bfid = ((prepBatchResults || [])[batchIdx] || {}).feature_id || '';
                 if (_bfid) {
+                    // User just re-attached this image: clear it from the
+                    // "removed" blacklist so future restores will see it.
+                    if (typeof unmarkAttachmentRemoved === 'function' && imgData.name) {
+                        unmarkAttachmentRemoved(_bfid, 'images', imgData.name);
+                    }
                     if (typeof persistFeatureImage === 'function') persistFeatureImage(_bfid, imgData);
                     fetch('/api/publish/image', {
                         method: 'POST',
@@ -5866,6 +5871,59 @@ function persistFeatureImage(fid, imgData) {
             localStorage.removeItem(_featureImageKey(fid));
         }
     } catch(e) {}
+}
+
+// Per-feature "user removed this attachment" blacklist. The server keeps a
+// copy of every uploaded image/video so it can be restored after a refresh
+// (see the "/api/publish/image/meta" + "/api/features/<fid>/videos" loops
+// that run when Step 3 is rebuilt). Without this list, removing an item via
+// the inline X on a batch card only cleared in-memory + sessionStorage, and
+// the next page load happily re-fetched the deleted media from the server
+// and stitched it back into the textarea via _reattachAttachmentsToContent.
+// Persisted in localStorage as { images: { name: 1 }, videos: { name: 1 } }
+// keyed by feature id so the user's removal decision survives reloads.
+function _removedAttachmentsKey(fid) {
+    return 'ampRemovedAttachments:' + fid;
+}
+
+function _getRemovedAttachments(fid) {
+    var empty = { images: {}, videos: {} };
+    if (!fid) return empty;
+    try {
+        var raw = localStorage.getItem(_removedAttachmentsKey(fid));
+        if (!raw) return empty;
+        var obj = JSON.parse(raw) || {};
+        return { images: obj.images || {}, videos: obj.videos || {} };
+    } catch (e) { return empty; }
+}
+
+function markAttachmentRemoved(fid, kind, name) {
+    if (!fid || !name) return;
+    if (kind !== 'images' && kind !== 'videos') return;
+    var rec = _getRemovedAttachments(fid);
+    rec[kind][name] = 1;
+    try { localStorage.setItem(_removedAttachmentsKey(fid), JSON.stringify(rec)); } catch (e) {}
+}
+
+function unmarkAttachmentRemoved(fid, kind, name) {
+    if (!fid || !name) return;
+    if (kind !== 'images' && kind !== 'videos') return;
+    var rec = _getRemovedAttachments(fid);
+    if (!rec[kind][name]) return;
+    delete rec[kind][name];
+    try {
+        if (Object.keys(rec.images).length === 0 && Object.keys(rec.videos).length === 0) {
+            localStorage.removeItem(_removedAttachmentsKey(fid));
+        } else {
+            localStorage.setItem(_removedAttachmentsKey(fid), JSON.stringify(rec));
+        }
+    } catch (e) {}
+}
+
+function isAttachmentRemoved(fid, kind, name) {
+    if (!fid || !name) return false;
+    var rec = _getRemovedAttachments(fid);
+    return !!rec[kind][name];
 }
 
 function getPersistedFeatureImage(fid) {
@@ -5955,6 +6013,7 @@ function promptBatchImageUrl(idx) {
     if (!window.prepBatchImages) window.prepBatchImages = {};
     window.prepBatchImages[idx] = imgData;
     var fid = _getBatchFeatureId(idx);
+    if (fid && typeof unmarkAttachmentRemoved === 'function') unmarkAttachmentRemoved(fid, 'images', url);
     if (fid && typeof persistFeatureImage === 'function') persistFeatureImage(fid, imgData);
     if (fid) {
         fetch('/api/publish/image', {
@@ -6366,6 +6425,11 @@ function handleBatchVideoFile(file, idx) {
         window.prepBatchVideos[idx].push({
             dataUrl: dataUrl, name: file.name, size: file.size
         });
+        // User just re-attached this video: clear it from the "removed"
+        // blacklist so future restores will see it again.
+        if (fid && typeof unmarkAttachmentRemoved === 'function') {
+            unmarkAttachmentRemoved(fid, 'videos', file.name);
+        }
         if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
         var ta = document.getElementById('batch-ta-' + idx);
         if (ta) {
@@ -6455,6 +6519,9 @@ function promptBatchVideoUrl(idx) {
     for (var i = 0; i < arr.length; i++) { if (arr[i] && arr[i].name === url) { dup = true; break; } }
     if (!dup) {
         arr.push({ name: url, url: url, video_url: url, thumb_url: thumb, is_url: true });
+        // User just re-attached this video URL: clear it from the
+        // "removed" blacklist so future restores will see it again.
+        if (typeof unmarkAttachmentRemoved === 'function') unmarkAttachmentRemoved(fid, 'videos', url);
         if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     }
     var ta = document.getElementById('batch-ta-' + idx);
@@ -6652,6 +6719,13 @@ function removeBatchVideoByName(idx, name) {
     for (var k = arr.length - 1; k >= 0; k--) {
         if (arr[k] && arr[k].name === name) arr.splice(k, 1);
     }
+    // Persist the user's "remove" decision per feature so the Step 3
+    // server-restore loops won't quietly fetch the same media back from
+    // the publish_store on the next refresh / batch rebuild.
+    try {
+        var _bfid = ((prepBatchResults || [])[idx] || {}).feature_id || '';
+        if (_bfid) markAttachmentRemoved(_bfid, 'videos', name);
+    } catch (_e) {}
     if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     var ta = document.getElementById('batch-ta-' + idx);
     if (ta) {
@@ -6660,6 +6734,7 @@ function removeBatchVideoByName(idx, name) {
         ta.dispatchEvent(new Event('input'));
         switchToBatchPreview(idx);
     }
+    if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
 }
 
 function removeBatchImageInline(idx) {
@@ -6668,6 +6743,10 @@ function removeBatchImageInline(idx) {
     try {
         var _bfid = ((prepBatchResults || [])[idx] || {}).feature_id || '';
         if (_bfid && typeof persistFeatureImage === 'function') persistFeatureImage(_bfid, null);
+        // Persist the user's "remove" decision per feature so the Step 3
+        // server-restore loop won't quietly fetch this image back from
+        // /api/publish/image/meta on the next refresh.
+        if (_bfid && name) markAttachmentRemoved(_bfid, 'images', name);
     } catch(_e) {}
     if (window.prepBatchImages) delete window.prepBatchImages[idx];
     if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
@@ -8560,9 +8639,14 @@ function renderBatchImagePreview(idx) {
 }
 
 function removeBatchImage(idx) {
+    var _existingImg = (window.prepBatchImages || {})[idx];
+    var _existingName = _existingImg ? _existingImg.name : null;
     try {
         var _bfid = ((prepBatchResults || [])[idx] || {}).feature_id || '';
         if (_bfid && typeof persistFeatureImage === 'function') persistFeatureImage(_bfid, null);
+        // See removeBatchImageInline for the rationale on persisting the
+        // user's removal decision into the per-feature blacklist.
+        if (_bfid && _existingName) markAttachmentRemoved(_bfid, 'images', _existingName);
     } catch(_e) {}
     if (window.prepBatchImages) delete window.prepBatchImages[idx];
     if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
@@ -11082,6 +11166,11 @@ function startBatchGeneration() {
                     .then(function(meta) {
                         if (!meta || !meta.exists || !meta.dataUrl || !meta.name) return;
                         if (window.prepBatchImages[_idx]) return;
+                        // Honor the per-feature blacklist: if the user
+                        // explicitly removed this image via the inline X
+                        // (or the card's Remove action), don't restore it
+                        // from the publish_store on this rebuild.
+                        if (typeof isAttachmentRemoved === 'function' && isAttachmentRemoved(_fid, 'images', meta.name)) return;
                         var imgData = { name: meta.name, dataUrl: meta.dataUrl };
                         window.prepBatchImages[_idx] = imgData;
                         try { if (typeof persistFeatureImage === 'function') persistFeatureImage(_fid, imgData); } catch(_e) {}
@@ -11117,6 +11206,10 @@ function startBatchGeneration() {
                         arr.forEach(function(v) { if (v && v.name) seen[v.name] = 1; });
                         vlist.forEach(function(v) {
                             if (!v || !v.filename || seen[v.filename]) return;
+                            // Honor the per-feature blacklist: if the
+                            // user removed this video via the inline X,
+                            // don't pull it back from the publish_store.
+                            if (typeof isAttachmentRemoved === 'function' && isAttachmentRemoved(_fid, 'videos', v.filename)) return;
                             arr.push({ name: v.filename, url: v.video_url, thumb_url: v.thumb_url });
                             seen[v.filename] = 1;
                         });
