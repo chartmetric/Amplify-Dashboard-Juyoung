@@ -6344,18 +6344,47 @@ function _renderBatchAttachMenu(btn, idx, view) {
         var img = (window.prepBatchImages || {})[idx];
         var vids = (window.prepBatchVideos || {})[idx] || [];
         var lks = (window.prepBatchLinks || {})[idx] || [];
-        var hasAny = (img && img.dataUrl) || vids.length > 0 || lks.length > 0;
+        // URL-attached images (e.g. a Drive thumbnail link) often have no
+        // dataUrl baked in - they only carry a `url`. Treating them as
+        // "no image" used to suppress the entire attached row, so the
+        // user couldn't see or remove them from this menu.
+        var hasImg = img && (img.dataUrl || img.url);
+        var hasAny = hasImg || vids.length > 0 || lks.length > 0;
         if (hasAny) {
             var rowStyle = 'padding:8px 16px;display:flex;align-items:center;gap:10px;font-size:12px;color:#e0e0e0;';
             var nameStyle = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            // Tiny preview thumb shown on the left of each media row so the
+            // user can see what's actually attached (especially helpful for
+            // URL-attached Drive/Dropbox images where the "name" is a long
+            // URL with no visual cue). We render a placeholder square FIRST
+            // and lay the <img> on top; if the external host (e.g. Drive
+            // without an auth session) refuses to serve the bytes inline,
+            // the onerror handler hides just the broken <img> so the
+            // placeholder icon remains as a stable visual cue rather than
+            // collapsing to badge-only.
+            var thumbBoxStyle = 'position:relative;width:28px;height:28px;border-radius:4px;flex-shrink:0;background:#15171c;border:1px solid #2a2d35;display:flex;align-items:center;justify-content:center;color:#5b6373;font-size:13px;overflow:hidden;';
+            var thumbImgStyle = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;';
+            var thumbFallback = "this.style.display='none';";
             var badgeImg = '<span style="background:#1f6f4a;color:#7ee5b4;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">IMAGE</span>';
             var badgeVid = '<span style="background:#3a2a5e;color:#c4a8ff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">VIDEO</span>';
             var badgeLnk = '<span style="background:#1e3a5e;color:#7ec1ff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:0.05em;">LINK</span>';
             var rmStyle = 'background:none;border:1px solid #444;color:#888;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;';
+            // Build a thumb tile that always renders (placeholder icon by
+            // default); when a src is available, the <img> lays over the
+            // icon and replaces it visually if it loads successfully.
+            function _attachThumbHtml(src, fallbackIcon) {
+                var icon = fallbackIcon || '&#9633;';
+                var imgTag = src
+                    ? '<img src="' + escAttr(src) + '" alt="" style="' + thumbImgStyle + '" onerror="' + thumbFallback + '">'
+                    : '';
+                return '<div style="' + thumbBoxStyle + '"><span aria-hidden="true">' + icon + '</span>' + imgTag + '</div>';
+            }
             attachedHtml += '<div style="' + headerStyle + '">Attached to this feature</div>';
-            if (img && img.dataUrl) {
+            if (hasImg) {
+                var imgThumbSrc = img.dataUrl || img.url || '';
                 attachedHtml +=
                     '<div style="' + rowStyle + '">' +
+                        _attachThumbHtml(imgThumbSrc, '&#128247;') +
                         badgeImg +
                         '<span style="' + nameStyle + '" title="' + escAttr(img.name || 'image') + '">' + escHtml(img.name || 'image') + '</span>' +
                         '<button class="batch-attach-remove" data-rm-kind="image" style="' + rmStyle + '">Remove</button>' +
@@ -6363,8 +6392,10 @@ function _renderBatchAttachMenu(btn, idx, view) {
             }
             for (var vi = 0; vi < vids.length; vi++) {
                 var vname = (vids[vi] && (vids[vi].name || vids[vi].url)) || 'video';
+                var vposter = (vids[vi] && (vids[vi].thumb_url || vids[vi].dataUrl)) || '';
                 attachedHtml +=
                     '<div style="' + rowStyle + '">' +
+                        _attachThumbHtml(vposter, '&#127910;') +
                         badgeVid +
                         '<span style="' + nameStyle + '" title="' + escAttr(vname) + '">' + escHtml(vname) + '</span>' +
                         '<button class="batch-attach-remove" data-rm-kind="video" data-rm-vidx="' + vi + '" style="' + rmStyle + '">Remove</button>' +
