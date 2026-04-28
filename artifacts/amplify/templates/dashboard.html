@@ -9393,6 +9393,12 @@ function _triggerHtmlDownload(html, filename) {
 // clicks so a user who doesn't realize the request is still pending
 // can't accidentally trigger two downloads of the same file.
 var emailHtmlDownloadInFlight = {};
+// Per-channel in-flight tracker for "Preview HTML". The
+// /api/publish/email/preview round trip can take a couple of seconds
+// on a heavy email, and without this a user who doesn't see immediate
+// feedback can fire a second request and end up with two preview tabs
+// fighting each other.
+var emailHtmlPreviewInFlight = {};
 
 function downloadEmailHtml(chKey) {
     if (emailHtmlDownloadInFlight[chKey]) return;
@@ -9481,6 +9487,7 @@ function downloadEmailHtml(chKey) {
 }
 
 function previewEmailHtml(chKey) {
+    if (emailHtmlPreviewInFlight[chKey]) return;
     var ta = document.getElementById('ta-' + chKey);
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to preview', 'error'); return; }
@@ -9493,6 +9500,8 @@ function previewEmailHtml(chKey) {
     }
 
     if (templateId) {
+        // Resend-template path opens a popup with its own loading
+        // screen immediately, so no toast / debounce is needed here.
         var w = window.open('', '_blank');
         if (!w) { showToast('Popup blocked', 'error'); return; }
         w.document.write(buildResendTemplateLoadingHtml(templateId, subject));
@@ -9519,18 +9528,31 @@ function previewEmailHtml(chKey) {
     if (imgMap && Object.keys(imgMap).length > 0) {
         payload.images = imgMap;
     }
+
+    emailHtmlPreviewInFlight[chKey] = true;
+    var loadingToast = _showLoadingToast('Preparing email preview\u2026');
+    function _finish() {
+        loadingToast.dismiss();
+        emailHtmlPreviewInFlight[chKey] = false;
+    }
+
     fetch('/api/publish/email/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     })
-    .then(function(r) { return r.text(); })
+    .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+    })
     .then(function(html) {
+        _finish();
         var w = window.open('', '_blank');
         if (w) { w.document.write(html); w.document.close(); }
     })
     .catch(function(err) {
-        showToast('Preview failed: ' + err.message, 'error');
+        _finish();
+        showToast('Preview failed: ' + (err && err.message ? err.message : 'render error'), 'error');
     });
 }
 
@@ -13020,7 +13042,14 @@ function onCombinedEmailBccInputChange() {
 
 window._lastCombinedPopupPreviewRetry = null;
 
+// In-flight tracker for the combined-digest "Preview HTML". Same idea
+// as emailHtmlPreviewInFlight: skip re-entry while the render is still
+// pending so a user who doesn't see immediate feedback can't fire a
+// second request and end up with two preview tabs fighting each other.
+var combinedEmailPreviewInFlight = false;
+
 function previewCombinedEmail() {
+    if (combinedEmailPreviewInFlight) return;
     var data = _buildCombinedEmailPayload();
     if (!data) { showToast('No items to preview', 'error'); return; }
     var fromNameEl = document.getElementById('combined-email-fromname');
@@ -13029,6 +13058,8 @@ function previewCombinedEmail() {
     var templateId = templateSel ? templateSel.value : '';
 
     if (templateId) {
+        // Resend-template path opens a popup with its own loading
+        // screen immediately, so no toast / debounce is needed here.
         var w = window.open('', '_blank');
         if (!w) { showToast('Popup blocked', 'error'); return; }
         w.document.write(buildResendTemplateLoadingHtml(templateId, data.subject || ''));
@@ -13049,17 +13080,32 @@ function previewCombinedEmail() {
         feature_ids: data.featureIds
     };
     if (Object.keys(data.imageMap).length > 0) payload.images = data.imageMap;
+
+    combinedEmailPreviewInFlight = true;
+    var loadingToast = _showLoadingToast('Preparing email preview\u2026');
+    function _finish() {
+        loadingToast.dismiss();
+        combinedEmailPreviewInFlight = false;
+    }
+
     fetch('/api/publish/email/preview', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(payload)
     })
-    .then(function(r) { return r.text(); })
+    .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+    })
     .then(function(html) {
+        _finish();
         var w = window.open('', '_blank');
         if (w) { w.document.write(html); w.document.close(); }
     })
-    .catch(function(err) { showToast('Preview failed: ' + err.message, 'error'); });
+    .catch(function(err) {
+        _finish();
+        showToast('Preview failed: ' + (err && err.message ? err.message : 'render error'), 'error');
+    });
 }
 
 // In-flight tracker for the combined-digest "Download HTML". Same idea
