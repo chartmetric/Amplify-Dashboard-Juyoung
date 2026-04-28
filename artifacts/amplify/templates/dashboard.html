@@ -7413,13 +7413,14 @@ function updateAttachmentsEmptyState() {
     if (contentViewFeatureLink) count++;
     if (empty) empty.style.display = count === 0 ? 'block' : 'none';
     if (countEl) countEl.textContent = count > 0 ? count + ' item' + (count === 1 ? '' : 's') : '';
-    if (toggleBtn) {
-        toggleBtn.style.display = count > 0 ? 'inline-flex' : 'none';
-        if (toggleLbl) toggleLbl.textContent = 'View';
+    // Always show previews when an attachment exists; collapse otherwise.
+    if (section) {
+        if (count > 0) section.classList.add('dropdown-open');
+        else section.classList.remove('dropdown-open');
     }
-    if (count === 0 && section) {
-        section.classList.remove('dropdown-open');
-        document.removeEventListener('click', _attachmentsDropdownOutsideClick);
+    if (toggleBtn) {
+        toggleBtn.style.display = 'none';
+        if (toggleLbl) toggleLbl.textContent = 'View';
     }
 }
 
