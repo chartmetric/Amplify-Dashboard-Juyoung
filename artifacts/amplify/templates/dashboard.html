@@ -9249,6 +9249,18 @@ function doPublishToChannel(chKey) {
             var toastMsg = sentCount > 2
                 ? 'Email sent to ' + sentCount + ' recipients \u2705'
                 : (data.to ? 'Email sent to ' + data.to + ' \u2705' : 'Email sent successfully! \u2705');
+            // Append BCC info so the marketer can confirm at a glance
+            // exactly who was copied. Show the actual addresses when the
+            // list is short; collapse to a count for larger blasts.
+            var _bccCount = data.bcc_count || 0;
+            var _bccList = (data.bcc || '').trim();
+            if (_bccCount > 0 && _bccList) {
+                if (_bccCount <= 3) {
+                    toastMsg += ' (BCC: ' + _bccList + ')';
+                } else {
+                    toastMsg += ' (BCC: ' + _bccCount + ' recipients)';
+                }
+            }
             showToast(toastMsg);
             if (data.skipped_videos && data.skipped_videos.length) {
                 showSkippedVideosNotice(data.skipped_videos);
@@ -12705,9 +12717,21 @@ function publishCombinedEmail() {
                 .catch(function() {});
             })();
             var sentCount = resp.count || 1;
+            var _featSuffix = ' (' + items.length + ' features marked published)';
             var toastMsg = sentCount > 2
-                ? 'Email sent to ' + sentCount + ' recipients \u2705 (' + items.length + ' features marked published)'
-                : (resp.to ? 'Email sent to ' + resp.to + ' \u2705 (' + items.length + ' features marked published)' : 'Email sent! \u2705 (' + items.length + ' features marked published)');
+                ? 'Email sent to ' + sentCount + ' recipients \u2705' + _featSuffix
+                : (resp.to ? 'Email sent to ' + resp.to + ' \u2705' + _featSuffix : 'Email sent! \u2705' + _featSuffix);
+            // Same BCC surfacing as the per-channel send path: list the
+            // BCCs when small enough to read, otherwise just the count.
+            var _bccCount2 = resp.bcc_count || 0;
+            var _bccList2 = (resp.bcc || '').trim();
+            if (_bccCount2 > 0 && _bccList2) {
+                if (_bccCount2 <= 3) {
+                    toastMsg += ' (BCC: ' + _bccList2 + ')';
+                } else {
+                    toastMsg += ' (BCC: ' + _bccCount2 + ' recipients)';
+                }
+            }
             showToast(toastMsg);
             if (resp.skipped_videos && resp.skipped_videos.length) {
                 showSkippedVideosNotice(resp.skipped_videos);

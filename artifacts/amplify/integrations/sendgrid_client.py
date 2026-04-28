@@ -678,12 +678,15 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
                 else:
                     ids = [str(batch_resp)]
             to_str = ", ".join(to_emails)
+            bcc_str = ", ".join(bcc_emails) if bcc_emails else ""
             logger.info(f"[resend] Sent {len(to_emails)} individual email(s) to {to_str}, ids={ids}")
             return {
                 "success": True,
                 "method": "resend",
                 "message_id": ids[0] if ids else "",
                 "to": to_str,
+                "bcc": bcc_str,
+                "bcc_count": len(bcc_emails) if bcc_emails else 0,
                 "count": len(to_emails),
                 "is_test": is_test,
             }
