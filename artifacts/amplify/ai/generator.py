@@ -495,7 +495,10 @@ def _find_title_subtitle_pair(content: str, channel_key: str):
       prefix:        text before the title (Resend Subject:/HMC meta_description)
       lines:         the body lines (text.split('\\n'))
       title_idx:     index of the title line in `lines`
-      subtitle_idx:  index of the subtitle line in `lines` (always title_idx+1)
+      subtitle_idx:  index of the subtitle line in `lines` (the next non-blank
+                     line after the title — usually title_idx+1, but the AI
+                     sometimes inserts a blank line between the bolded title
+                     and the bolded subtitle, so we skip blanks here)
       title_text:    the title text without markup
       subtitle_raw:  the subtitle line as-is
       subtitle_clean: subtitle stripped of bold/punct for comparison
@@ -530,11 +533,13 @@ def _find_title_subtitle_pair(content: str, channel_key: str):
         return None
 
     j = i + 1
+    while j < len(lines) and not lines[j].strip():
+        j += 1
     if j >= len(lines):
         return None
     subtitle_raw = lines[j]
     if not subtitle_raw.strip():
-        return None  # blank between title and "subtitle" -> no subtitle slot
+        return None  # no non-blank line after title -> no subtitle slot
 
     subtitle_clean = re.sub(r"^[*_`#\s]+|[*_`#\s\.\!\?]+$", "", subtitle_raw.strip())
     if not subtitle_clean:
@@ -585,10 +590,23 @@ def dedupe_title_subtitle(content: str, channel_key: str) -> str:
         f"[{channel_key}] Stripping duplicate subtitle line that mirrors title: "
         f"{pair['subtitle_raw'].strip()!r}"
     )
-    lines = pair["lines"]
+    lines = list(pair["lines"])
     j = pair["subtitle_idx"]
-    new_lines = lines[:j] + lines[j + 1:]
-    new_text = "\n".join(new_lines)
+    title_idx = pair["title_idx"]
+    # Remove the duplicate subtitle line.
+    del lines[j]
+    # If the AI inserted blank lines BETWEEN the title and the (now removed)
+    # subtitle, those blanks would now sit immediately under the title and
+    # then bump up against more blanks after the subtitle, producing an
+    # unsightly gap. Collapse blanks between the title and the next non-blank
+    # paragraph down to a single blank line.
+    k = title_idx + 1
+    blank_run_start = k
+    while k < len(lines) and not lines[k].strip():
+        k += 1
+    if k - blank_run_start > 1:
+        del lines[blank_run_start + 1:k]
+    new_text = "\n".join(lines)
     return pair["prefix"] + new_text
 
 
