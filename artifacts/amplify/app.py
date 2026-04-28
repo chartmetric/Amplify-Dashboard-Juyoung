@@ -2364,16 +2364,32 @@ def _filter_videos_to_body_refs(video_map: dict, body: str) -> dict:
     silently MIME-attached to every send, even after the user removed the
     marker from the body — so a video uploaded once would haunt every email
     for that feature.
+
+    Matching is fuzzy (see ``integrations.sendgrid_client._normalize_video_key``):
+    case-insensitive, whitespace-collapsed, and tolerant of browser
+    ``(N)`` dedup suffixes. A strict exact match here would drop the video
+    from the map before the renderer ever saw it, surfacing as a
+    "not attached" line even when the upload landed cleanly under a
+    near-identical filename.
     """
     if not video_map:
         return {}
     if not body:
         return {}
     import re as _re
-    refs = set(m.group(1).strip() for m in _re.finditer(r'\[video:\s*([^\]]+)\]', body or ""))
+    from integrations.sendgrid_client import _normalize_video_key
+    refs = set(
+        m.group(1).strip()
+        for m in _re.finditer(r'\[video:\s*([^\]]+)\]', body or "", flags=_re.IGNORECASE)
+    )
     if not refs:
         return {}
-    return {name: info for name, info in video_map.items() if name in refs}
+    norm_refs = {_normalize_video_key(r) for r in refs if r}
+    return {
+        name: info
+        for name, info in video_map.items()
+        if name in refs or _normalize_video_key(name) in norm_refs
+    }
 
 
 def _build_video_map(feature_id):

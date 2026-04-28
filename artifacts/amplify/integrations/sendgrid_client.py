@@ -108,9 +108,41 @@ def _render_chip_html(label: str) -> str:
 
 
 def _get_base_url() -> str:
+    """Return the public base URL for embedding in outgoing emails / video links.
+
+    Resolution order:
+      1. The current Flask request's host (when in a request context). This is
+         the only source that always matches whatever host the recipient just
+         hit, so it's correct for both production deploys and dev previews
+         even when env vars carry stale values from a different repl.
+      2. ``REPLIT_DEPLOYMENT_URL`` if explicitly set (custom override).
+      3. ``REPLIT_DOMAINS`` (the standard Replit env var, populated in both
+         dev and production deployments — production points at the
+         ``.replit.app`` URL, dev points at the ``.riker.replit.dev`` URL).
+      4. ``REPLIT_DEV_DOMAIN`` (legacy fallback).
+      5. ``http://localhost:5000``.
+
+    Falling back to a stale dev-domain env var in production is what caused
+    a long-running bug where every video thumbnail in a sent email pointed
+    at the dev container (unreachable from a recipient's inbox), which
+    rendered as broken images and "not attached" markers.
+    """
+    try:
+        from flask import has_request_context, request as _flask_request
+        if has_request_context():
+            host_url = (_flask_request.host_url or "").rstrip("/")
+            if host_url and not host_url.startswith("http://localhost"):
+                return host_url
+    except Exception:
+        pass
     deploy_url = os.environ.get("REPLIT_DEPLOYMENT_URL", "")
     if deploy_url:
         return deploy_url.rstrip("/")
+    domains = os.environ.get("REPLIT_DOMAINS", "")
+    if domains:
+        first = domains.split(",")[0].strip()
+        if first:
+            return f"https://{first}"
     dev_domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
     if dev_domain:
         return f"https://{dev_domain}"
@@ -497,6 +529,61 @@ def _composited_external_thumb_url(remote_thumb_url: str) -> str:
         return remote_thumb_url
 
 
+def _normalize_video_key(name: str) -> str:
+    """Normalize a video filename for fuzzy marker lookup.
+
+    The same video can show up under slightly different names because:
+      * Browsers append ``(1)``, ``(2)``... when downloading a duplicate.
+      * Recipients re-cap or re-space the filename when pasting it back
+        into the editor.
+      * Names round-trip through systems that collapse Unicode whitespace
+        (e.g. ``\u202f`` in macOS screen-recording filenames).
+
+    Two names are considered equivalent if they share the same lower-cased,
+    whitespace-collapsed stem after stripping any trailing ``(N)`` browser
+    dedup suffix and the file extension. Returns ``""`` for empty input so
+    callers can short-circuit cheaply.
+    """
+    if not name:
+        return ""
+    import os as _os
+    import re as _re
+    stem, ext = _os.path.splitext(str(name))
+    stem = _re.sub(r'\s*\(\d+\)\s*$', '', stem)
+    stem = _re.sub(r'\s+', ' ', stem).strip().lower()
+    ext = (ext or "").strip().lower()
+    return stem + ext
+
+
+def _resolve_video_marker(vid_ref: str, video_map: dict) -> tuple:
+    """Look up a ``[video: name]`` marker against ``video_map``.
+
+    Tries exact match first (the common case). Falls back to a normalized
+    match (see ``_normalize_video_key``) so a body marker like
+    ``Shortlist.mp4`` still resolves a video uploaded as
+    ``Shortlist (1).mp4``. As a last resort, when the body's marker maps
+    to nothing but only a single video has been attached, returns that
+    single video — the user's intent is unambiguous in that case and a
+    silent "not attached" stub is far worse than rendering the one
+    obvious match.
+
+    Returns ``(matched_key, vid_info)`` on success or ``(None, None)``.
+    """
+    if not vid_ref or not video_map:
+        return (None, None)
+    if vid_ref in video_map:
+        return (vid_ref, video_map[vid_ref])
+    norm_ref = _normalize_video_key(vid_ref)
+    if norm_ref:
+        for k, v in video_map.items():
+            if _normalize_video_key(k) == norm_ref:
+                return (k, v)
+    if len(video_map) == 1:
+        only_key = next(iter(video_map))
+        return (only_key, video_map[only_key])
+    return (None, None)
+
+
 def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None, from_name: str = None, videos: dict = None, strict: bool = False, view_url: str = None) -> str:
     """Render an email body to HTML.
 
@@ -597,20 +684,21 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
                 body_html += pending_chip_html
                 pending_chip_html = ""
             body_html += f'<h2 style="margin:0 0 16px 0;color:#1a1d23;font-size:22px;font-weight:700;line-height:1.3;">{_inline_markdown(stripped)}</h2>'
-        elif re.match(r'^\[video:\s*(.+)\]$', stripped):
-            vid_ref = re.match(r'^\[video:\s*(.+)\]$', stripped).group(1).strip()
+        elif re.match(r'^\[video:\s*(.+)\]$', stripped, re.IGNORECASE):
+            vid_ref = re.match(r'^\[video:\s*(.+)\]$', stripped, re.IGNORECASE).group(1).strip()
             if re.match(r'^https?://', vid_ref, re.IGNORECASE):
                 remote_thumb = _get_video_thumbnail(vid_ref)
                 thumb_url = _composited_external_thumb_url(remote_thumb)
                 vid_link = vid_ref
-            elif vid_ref in video_map:
-                vid_info = video_map[vid_ref]
-                thumb_url = vid_info.get("thumb_url", "")
-                vid_link = vid_info.get("video_url", "")
             else:
-                missing_videos.append(vid_ref)
-                body_html += f'<p style="margin:0 0 12px 0;color:#b91c1c;font-size:13px;font-weight:600;">[Video: {_esc(vid_ref)}] &mdash; not attached</p>'
-                continue
+                _matched_key, vid_info = _resolve_video_marker(vid_ref, video_map)
+                if vid_info is not None:
+                    thumb_url = vid_info.get("thumb_url", "")
+                    vid_link = vid_info.get("video_url", "")
+                else:
+                    missing_videos.append(vid_ref)
+                    body_html += f'<p style="margin:0 0 12px 0;color:#b91c1c;font-size:13px;font-weight:600;">[Video: {_esc(vid_ref)}] &mdash; not attached</p>'
+                    continue
             if not thumb_url or not vid_link:
                 # Entry exists but is incomplete (missing thumb_url or
                 # video_url). Treat the same as a missing marker so strict
