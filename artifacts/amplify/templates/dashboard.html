@@ -10388,10 +10388,15 @@ function regenerateAllBatch() {
     // a failed regeneration (the new results will overwrite the snapshot
     // on success anyway).
     if (!prepBatchResults || !prepBatchResults.length) {
+        // Nothing yet — first generation; cache is fine.
         startBatchGeneration();
         return;
     }
     if (!confirm('Regenerate AI text for all ' + prepBatchResults.length + ' features? Your attachments (images, videos, links) and saved subjects will be preserved.')) return;
+    // Force a true regeneration. Without this, the server returns cached
+    // content for every feature and "Regenerate all" is a no-op from the
+    // user's perspective.
+    window._batchSkipCacheNext = true;
     startBatchGeneration();
 }
 
@@ -10833,6 +10838,11 @@ function undoDeleteFeatureSet(linkEl) {
 }
 
 function startBatchGeneration() {
+    // Capture and clear the regen flag immediately so it can never leak
+    // into a later unrelated generation, even if we early-return below.
+    var skipCache = !!window._batchSkipCacheNext;
+    window._batchSkipCacheNext = false;
+
     var selectedFeatures = allFeatures.filter(function(f) { return prepSelectedIds[f.id]; });
     if (selectedFeatures.length === 0) { prepGoToStep(2); return; }
 
@@ -10882,7 +10892,7 @@ function startBatchGeneration() {
     fetch('/api/generate/batch-single-channel', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ features: selectedFeatures, channel: apiChannel, mode: batchMode })
+        body: JSON.stringify({ features: selectedFeatures, channel: apiChannel, mode: batchMode, skip_cache: skipCache })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {

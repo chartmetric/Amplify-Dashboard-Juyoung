@@ -3591,6 +3591,7 @@ def generate_batch_single_channel_endpoint():
     channel = data.get("channel")
     custom_instructions = data.get("custom_instructions", "")
     mode = data.get("mode") or None
+    skip_cache = bool(data.get("skip_cache", False))
 
     if not features or not isinstance(features, list):
         return jsonify({"error": "features is required and must be a list"}), 400
@@ -3608,12 +3609,13 @@ def generate_batch_single_channel_endpoint():
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         config = CHANNEL_CONFIGS[channel]
-        print(f"[generate/batch-single] Generating {channel} for {len(features)} features (mode: {mode or 'default'})", flush=True)
+        cache_note = " [skip_cache=True]" if skip_cache else ""
+        print(f"[generate/batch-single] Generating {channel} for {len(features)} features (mode: {mode or 'default'}){cache_note}", flush=True)
 
         from ai.generator import extract_benefit_title
 
         def gen_one(feature):
-            result = generate_for_channel(feature, channel, custom_instructions=custom_instructions or None, mode=mode)
+            result = generate_for_channel(feature, channel, custom_instructions=custom_instructions or None, mode=mode, skip_cache=skip_cache)
             result["feature_id"] = feature.get("id", "")
             raw_title = feature.get("title", "")
             # Surface a benefit-driven, marketer-ready headline (lifted from the
