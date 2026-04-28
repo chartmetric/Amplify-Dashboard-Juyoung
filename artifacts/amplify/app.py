@@ -3219,32 +3219,38 @@ def save_video_endpoint():
 
 
 _VIDEO_PLACEHOLDER_PNG_BYTES = None
+_VIDEO_PLACEHOLDER_PATH = os.path.join(_app_dir, "static", "video_placeholder.png")
 
 
 def _video_placeholder_png_bytes() -> bytes:
     """Return cached PNG bytes for our local video-thumbnail placeholder.
 
     Used when a real thumbnail isn't available (ffmpeg failed, external
-    thumb cache miss, unrecognized URL host). Generated once on first
-    request and cached for the lifetime of the worker. Replaces the dead
-    third-party placeholder we used to redirect to.
+    thumb cache miss, unrecognized URL host). We ship a pre-generated
+    640x360 PNG at static/video_placeholder.png so this works in
+    production deployments where Pillow may not be installed. Generates
+    on the fly via PIL only as a fallback if the static asset is missing.
     """
     global _VIDEO_PLACEHOLDER_PNG_BYTES
     if _VIDEO_PLACEHOLDER_PNG_BYTES is not None:
         return _VIDEO_PLACEHOLDER_PNG_BYTES
     try:
+        with open(_VIDEO_PLACEHOLDER_PATH, "rb") as fh:
+            _VIDEO_PLACEHOLDER_PNG_BYTES = fh.read()
+            return _VIDEO_PLACEHOLDER_PNG_BYTES
+    except Exception:
+        pass
+    try:
         from PIL import Image, ImageDraw
         from io import BytesIO
         img = Image.new("RGB", (640, 360), (34, 34, 34))
         draw = ImageDraw.Draw(img)
-        # Centered play triangle, ~80px tall.
         cx, cy = 320, 180
         size = 56
         draw.polygon(
             [(cx - size + 12, cy - size), (cx - size + 12, cy + size), (cx + size, cy)],
             fill=(255, 255, 255),
         )
-        # "Video" label below the triangle.
         try:
             draw.text((cx - 22, cy + size + 12), "Video", fill=(180, 180, 180))
         except Exception:

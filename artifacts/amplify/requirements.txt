@@ -8,3 +8,5 @@ waitress
 tweepy
 sendgrid
 resend
+Pillow
+imageio-ffmpeg

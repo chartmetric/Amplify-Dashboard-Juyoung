@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil as _shutil
 import tempfile
 import logging
 import base64
@@ -8,6 +9,53 @@ import subprocess
 import uuid
 
 logger = logging.getLogger(__name__)
+
+
+_FFMPEG_EXE = None
+_FFPROBE_EXE = None
+
+
+def _ffmpeg_exe() -> str:
+    """Return a usable ffmpeg binary path.
+
+    Prefers a system ffmpeg (Nix-provided in dev) and falls back to the
+    static binary shipped by the imageio-ffmpeg wheel so production
+    deployments (which don't have the Nix runtime path on PATH) can
+    still normalize uploads and extract thumbnails. Returns the bare
+    string ``"ffmpeg"`` if nothing is available so subprocess produces
+    its usual ENOENT error and the caller's normal failure path runs.
+    """
+    global _FFMPEG_EXE
+    if _FFMPEG_EXE:
+        return _FFMPEG_EXE
+    sys_ff = _shutil.which("ffmpeg")
+    if sys_ff:
+        _FFMPEG_EXE = sys_ff
+        return _FFMPEG_EXE
+    try:
+        import imageio_ffmpeg
+        _FFMPEG_EXE = imageio_ffmpeg.get_ffmpeg_exe()
+        return _FFMPEG_EXE
+    except Exception:
+        _FFMPEG_EXE = "ffmpeg"
+        return _FFMPEG_EXE
+
+
+def _ffprobe_exe() -> str | None:
+    """Return a usable ffprobe path or ``None``.
+
+    Only the system binary is checked; imageio-ffmpeg ships ffmpeg only.
+    Callers must treat ``None`` as "probing isn't available" and pick a
+    safe default (we always transcode in that case).
+    """
+    global _FFPROBE_EXE
+    if _FFPROBE_EXE:
+        return _FFPROBE_EXE
+    sys_fp = _shutil.which("ffprobe")
+    if sys_fp:
+        _FFPROBE_EXE = sys_fp
+        return _FFPROBE_EXE
+    return None
 
 PUBLISH_FILE = os.path.join(os.path.dirname(__file__), "..", ".publish_state.json")
 IMAGES_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", ".publish_images"))
@@ -276,9 +324,15 @@ def _video_dir(video_id):
 
 
 def _probe_video_streams(path):
+    ffprobe = _ffprobe_exe()
+    if not ffprobe:
+        # Probing unavailable in this environment (autoscale deployments
+        # don't ship ffprobe). The caller treats unknown codecs as
+        # "always transcode", which is correct.
+        return None, None, ""
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "error",
+            [ffprobe, "-v", "error",
              "-show_entries", "stream=codec_type,codec_name:format=format_name",
              "-of", "json", path],
             capture_output=True, timeout=30, text=True,
@@ -307,9 +361,10 @@ def _normalize_video_to_mp4(src_path, dst_path):
     is_mp4_container = bool(fmt_parts & {"mp4", "m4a", "3gp", "3g2", "mj2"})
     can_remux = (vcodec == "h264") and (acodec in (None, "aac")) and is_mp4_container
 
+    ffmpeg = _ffmpeg_exe()
     if can_remux:
         cmd = [
-            "ffmpeg", "-y", "-i", src_path,
+            ffmpeg, "-y", "-i", src_path,
             "-c", "copy",
             "-movflags", "+faststart",
             "-f", "mp4",
@@ -317,7 +372,7 @@ def _normalize_video_to_mp4(src_path, dst_path):
         ]
     else:
         cmd = [
-            "ffmpeg", "-y", "-i", src_path,
+            ffmpeg, "-y", "-i", src_path,
             "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
@@ -462,7 +517,7 @@ def save_video(feature_id, data_url, filename):
     thumb_ok = False
     try:
         result = subprocess.run(
-            ["ffmpeg", "-y", "-i", video_path, "-ss", "00:00:00", "-vframes", "1",
+            [_ffmpeg_exe(), "-y", "-i", video_path, "-ss", "00:00:00", "-vframes", "1",
              "-vf", "scale=640:-2", "-q:v", "3", thumb_path],
             capture_output=True, timeout=30
         )
