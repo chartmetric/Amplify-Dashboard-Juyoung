@@ -5361,6 +5361,22 @@ function simpleMarkdown(text, opts) {
     var result = [];
     var paraLines = [];
     var firstTextDone = false;
+    // Mirror the combined-email composer's behaviour: if a feature has an
+    // image attached but the body source has no matching [image: ...] marker,
+    // the combined preview auto-renders the image at the bottom of the
+    // section anyway. We only do this for the batch composer (where batchIdx
+    // is provided) so generic simpleMarkdown call sites that render
+    // per-channel cards keep their existing strict marker-driven semantics.
+    // batchImageRendered: did we already render the attached batch image
+    //   for this feature? (only the FIRST non-URL marker resolves to it,
+    //   matching the backend which keys image_map by the first marker's
+    //   text only)
+    // anyImageMarkerSeen: did the body have ANY [image: ...] marker at all,
+    //   URL or otherwise? Used to gate the post-loop auto-append so we
+    //   don't double-render alongside a URL marker (the backend doesn't
+    //   auto-append when any marker is present).
+    var batchImageRendered = false;
+    var anyImageMarkerSeen = false;
 
     function flushPara() {
         if (paraLines.length > 0) {
@@ -5461,15 +5477,24 @@ function simpleMarkdown(text, opts) {
         } else if (/^\[image: [^\]]+\]$/.test(lines[i].trim())) {
             flushPara();
             var imgName = lines[i].trim().match(/\[image: ([^\]]+)\]/)[1];
+            anyImageMarkerSeen = true;
             if (/^https?:\/\/.+/i.test(imgName.trim())) {
                 result.push('<div style="margin:8px 0;"><img src="' + escHtml(imgName.trim()) + '" alt="Image" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;"></div>');
-            } else if (batchImage && batchImage.dataUrl && batchImage.name === imgName) {
+            } else if (batchImage && batchImage.dataUrl && !batchImageRendered) {
+                // In batch composer context, the FIRST non-URL [image: ...]
+                // marker resolves to the feature's attached image regardless
+                // of the marker's exact name. The combined-email preview
+                // backend does the same (it keys the attached image by the
+                // first marker's text in image_map). Subsequent non-URL
+                // markers fall through to the placeholder branch below, also
+                // matching the backend (which would emit "missing" for them).
                 result.push(
                     '<div class="inline-attach-wrap" style="margin:8px 0;position:relative;display:inline-block;max-width:100%;">' +
                     '<img src="' + batchImage.dataUrl + '" alt="' + escHtml(imgName) + '" style="max-width:100%;max-height:220px;border-radius:8px;object-fit:cover;display:block;">' +
                     '<button type="button" class="inline-attach-remove" title="Remove image" onclick="event.stopPropagation();removeBatchImageInline(' + batchIdx + ')">\u00d7</button>' +
                     '</div>'
                 );
+                batchImageRendered = true;
             } else if (contentViewFeatureImage && contentViewFeatureImage.dataUrl) {
                 result.push('<div style="margin:8px 0;"><img src="' + contentViewFeatureImage.dataUrl + '" alt="' + escHtml(imgName) + '" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;"></div>');
             } else {
@@ -5485,6 +5510,21 @@ function simpleMarkdown(text, opts) {
         }
     }
     flushPara();
+    // Auto-append the attached batch image only when the body had NO
+    // [image: ...] marker at all. Mirrors renderCombinedEmailComposer,
+    // which only injects an [image: combined_feat_<idx>] marker when no
+    // existing marker was found in the body. If a URL marker is present,
+    // we don't auto-append (the backend's combined preview wouldn't
+    // either, since the URL marker takes precedence).
+    if (batchImage && batchImage.dataUrl && !anyImageMarkerSeen) {
+        var _bImgName = batchImage.name || 'image';
+        result.push(
+            '<div class="inline-attach-wrap" style="margin:8px 0;position:relative;display:inline-block;max-width:100%;">' +
+            '<img src="' + batchImage.dataUrl + '" alt="' + escHtml(_bImgName) + '" style="max-width:100%;max-height:220px;border-radius:8px;object-fit:cover;display:block;">' +
+            '<button type="button" class="inline-attach-remove" title="Remove image" onclick="event.stopPropagation();removeBatchImageInline(' + batchIdx + ')">\u00d7</button>' +
+            '</div>'
+        );
+    }
     return result.join('');
 }
 
