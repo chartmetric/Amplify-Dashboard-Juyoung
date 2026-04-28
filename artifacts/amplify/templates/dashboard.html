@@ -14232,19 +14232,15 @@ function renderAnalyticsCards(metrics, feedback) {
 
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
+        // Escape only dismisses lightweight UI like the analytics overlay
+        // and small popovers. It deliberately does NOT close the prep
+        // workflow or content view, because those overlays are tied to
+        // the per-artifact URL (`/artifact/<id>`) and closing them
+        // rewrites the URL back to `/`, which feels to the user like
+        // the browser navigated back.
         var analyticsOverlay = document.getElementById('analytics-overlay');
         if (analyticsOverlay && analyticsOverlay.style.display === 'block') {
             toggleAnalytics();
-            return;
-        }
-        var prepOverlay = document.getElementById('prep-overlay');
-        if (prepOverlay && prepOverlay.style.display === 'block') {
-            exitPrepWorkflow();
-            return;
-        }
-        var contentView = document.getElementById('content-view');
-        if (contentView && contentView.style.display === 'block') {
-            exitContentView();
             return;
         }
         closeActivePopover();
