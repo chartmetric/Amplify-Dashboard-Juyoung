@@ -352,6 +352,17 @@ def _get_video_thumbnail(url: str) -> str:
     vimeo = _re.search(r'vimeo\.com/(\d+)', url)
     if vimeo:
         return f'https://vumbnail.com/{vimeo.group(1)}.jpg'
+    # Loom: public sessions expose a poster image at this CDN path. The
+    # email body still uses the share URL as the click-through link.
+    loom = _re.search(r'loom\.com/(?:share|embed)/([A-Za-z0-9]+)', url)
+    if loom:
+        return f'https://cdn.loom.com/sessions/thumbnails/{loom.group(1)}-with-play.jpg'
+    # Google Drive video file: Drive renders a poster via the thumbnail
+    # endpoint regardless of file type, so it works for both images and
+    # videos. The link itself stays as the Drive viewer URL.
+    drv = _re.search(r'drive\.google\.com/file/d/([A-Za-z0-9_-]+)', url)
+    if drv:
+        return f'https://drive.google.com/thumbnail?id={drv.group(1)}&sz=w1600'
     return 'https://via.placeholder.com/480x270/e0e0e0/999999?text=Video'
 
 

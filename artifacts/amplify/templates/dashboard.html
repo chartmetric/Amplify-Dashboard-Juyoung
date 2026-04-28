@@ -5961,13 +5961,23 @@ function _normalizeImageUrl(raw) {
     var url = String(raw).trim();
     if (!url) return '';
     if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    // Google Drive: the legacy `uc?export=view&id=...` endpoint started
+    // returning HTML auth pages for many shared files, which broke
+    // <img src> rendering. The `thumbnail?id=...&sz=w...` endpoint is the
+    // current reliable way to get the actual image bytes for any file the
+    // share link allows access to.
     var m = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
-    if (m) return 'https://drive.google.com/uc?export=view&id=' + m[1];
+    if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w2000';
     var m2 = url.match(/drive\.google\.com\/open\?id=([A-Za-z0-9_-]+)/);
-    if (m2) return 'https://drive.google.com/uc?export=view&id=' + m2[1];
+    if (m2) return 'https://drive.google.com/thumbnail?id=' + m2[1] + '&sz=w2000';
     var m3 = url.match(/[?&]id=([A-Za-z0-9_-]+)/);
-    if (m3 && /drive\.google\.com/.test(url)) return 'https://drive.google.com/uc?export=view&id=' + m3[1];
-    if (/dropbox\.com\/.+\?dl=0/i.test(url)) return url.replace('?dl=0', '?raw=1');
+    if (m3 && /drive\.google\.com/.test(url)) return 'https://drive.google.com/thumbnail?id=' + m3[1] + '&sz=w2000';
+    // Dropbox shares need ?raw=1 (or &raw=1) to serve the file bytes
+    // instead of the HTML preview page.
+    if (/dropbox\.com\//i.test(url)) {
+        if (/[?&]dl=0/i.test(url)) return url.replace(/([?&])dl=0/i, '$1raw=1');
+        if (!/[?&]raw=1/i.test(url)) return url + (url.indexOf('?') > -1 ? '&raw=1' : '?raw=1');
+    }
     return url;
 }
 
@@ -6603,7 +6613,7 @@ function pasteBatchImageFromClipboard(idx, gifOnly) {
 }
 
 function promptBatchVideoUrl(idx) {
-    var raw = prompt('Paste a video URL (YouTube, Vimeo, or direct .mp4 link):', '');
+    var raw = prompt('Paste a video URL (YouTube, Vimeo, Loom, Google Drive, or direct .mp4 link):', '');
     if (raw === null) return;
     var norm = (typeof _normalizeVideoUrl === 'function') ? _normalizeVideoUrl(raw) : null;
     if (!norm) { showToast('Please enter a valid video URL', 'warning'); return; }
@@ -7119,6 +7129,47 @@ function _normalizeVideoUrl(raw) {
             source: 'vimeo'
         };
     }
+    // Loom share or embed URLs. The share URL is what we want as the
+    // click-through link; Loom serves a public thumbnail at the cdn URL
+    // for any session whose share permissions allow the link.
+    var loom = url.match(/loom\.com\/(?:share|embed)\/([A-Za-z0-9]+)/i);
+    if (loom) {
+        return {
+            url: 'https://www.loom.com/share/' + loom[1],
+            thumb_url: 'https://cdn.loom.com/sessions/thumbnails/' + loom[1] + '-with-play.jpg',
+            source: 'loom'
+        };
+    }
+    // Google Drive video file. We keep the share URL as the click-through
+    // (it opens Drive's player) and use Drive's thumbnail endpoint for the
+    // poster image. Match the same three URL shapes the image normalizer
+    // accepts (`/file/d/<id>`, `/open?id=<id>`, and a generic `?id=<id>`).
+    var driveId = null;
+    var drvA = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
+    if (drvA) driveId = drvA[1];
+    if (!driveId) {
+        var drvB = url.match(/drive\.google\.com\/open\?id=([A-Za-z0-9_-]+)/);
+        if (drvB) driveId = drvB[1];
+    }
+    if (!driveId) {
+        var drvC = url.match(/[?&]id=([A-Za-z0-9_-]+)/);
+        if (drvC && /drive\.google\.com/.test(url)) driveId = drvC[1];
+    }
+    if (driveId) {
+        return {
+            url: 'https://drive.google.com/file/d/' + driveId + '/view',
+            thumb_url: 'https://drive.google.com/thumbnail?id=' + driveId + '&sz=w1600',
+            source: 'drive'
+        };
+    }
+    // Dropbox direct video share. Rewrite to ?raw=1 so the URL serves the
+    // raw bytes (otherwise Dropbox returns its HTML preview page).
+    if (/dropbox\.com\/.+\.(mp4|mov|webm|m4v)/i.test(url)) {
+        var fixed = url;
+        if (/[?&]dl=0/i.test(fixed)) fixed = fixed.replace(/([?&])dl=0/i, '$1raw=1');
+        else if (!/[?&]raw=1/i.test(fixed)) fixed = fixed + (fixed.indexOf('?') > -1 ? '&raw=1' : '?raw=1');
+        return { url: fixed, thumb_url: '', source: 'direct' };
+    }
     if (/^https?:\/\/[^\s]+\.(mp4|mov|webm|m4v|ogg|ogv)(\?|#|$)/i.test(url)) {
         return { url: url, thumb_url: '', source: 'direct' };
     }
@@ -7126,7 +7177,7 @@ function _normalizeVideoUrl(raw) {
 }
 
 function promptVideoUrl() {
-    var raw = prompt('Paste a video URL (YouTube, Vimeo, or direct .mp4 link):', '');
+    var raw = prompt('Paste a video URL (YouTube, Vimeo, Loom, Google Drive, or direct .mp4 link):', '');
     if (raw === null) return;
     var norm = _normalizeVideoUrl(raw);
     if (!norm) { showToast('Please enter a valid video URL', 'warning'); return; }
