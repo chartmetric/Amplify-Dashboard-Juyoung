@@ -2394,7 +2394,7 @@ def _build_video_map(feature_id):
             "REPLIT_DEV_DOMAIN set — outgoing video links will point at "
             f"{base_url!r} and will not be reachable from recipients."
         )
-    fallback_thumb = "https://via.placeholder.com/640x360/222222/999999?text=Video"
+    fallback_thumb = f"{base_url}/api/placeholder/video-thumb"
     video_map = {}
     for v in vids:
         vid_id = v.get("video_id", "")
@@ -3218,6 +3218,85 @@ def save_video_endpoint():
     return jsonify({"success": True, "video_id": video_id, "thumb_url": thumb_url, "video_url": video_url}), 200
 
 
+_VIDEO_PLACEHOLDER_PNG_BYTES = None
+
+
+def _video_placeholder_png_bytes() -> bytes:
+    """Return cached PNG bytes for our local video-thumbnail placeholder.
+
+    Used when a real thumbnail isn't available (ffmpeg failed, external
+    thumb cache miss, unrecognized URL host). Generated once on first
+    request and cached for the lifetime of the worker. Replaces the dead
+    third-party placeholder we used to redirect to.
+    """
+    global _VIDEO_PLACEHOLDER_PNG_BYTES
+    if _VIDEO_PLACEHOLDER_PNG_BYTES is not None:
+        return _VIDEO_PLACEHOLDER_PNG_BYTES
+    try:
+        from PIL import Image, ImageDraw
+        from io import BytesIO
+        img = Image.new("RGB", (640, 360), (34, 34, 34))
+        draw = ImageDraw.Draw(img)
+        # Centered play triangle, ~80px tall.
+        cx, cy = 320, 180
+        size = 56
+        draw.polygon(
+            [(cx - size + 12, cy - size), (cx - size + 12, cy + size), (cx + size, cy)],
+            fill=(255, 255, 255),
+        )
+        # "Video" label below the triangle.
+        try:
+            draw.text((cx - 22, cy + size + 12), "Video", fill=(180, 180, 180))
+        except Exception:
+            pass
+        buf = BytesIO()
+        img.save(buf, format="PNG", optimize=True)
+        _VIDEO_PLACEHOLDER_PNG_BYTES = buf.getvalue()
+    except Exception:
+        # Smallest possible valid 1x1 grey PNG as a last resort.
+        _VIDEO_PLACEHOLDER_PNG_BYTES = bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108020000"
+            "00907753de0000000c4944415478da6360606000000000050001a5f6"
+            "45400000000049454e44ae426082"
+        )
+    return _VIDEO_PLACEHOLDER_PNG_BYTES
+
+
+@app.route("/api/placeholder/video-thumb")
+def video_thumb_placeholder():
+    """Serve our local fallback video-thumbnail PNG.
+
+    We used to redirect to via.placeholder.com here, but that host's TLS
+    chain went stale and every fallback request now fails with an SSL
+    handshake error, surfacing as a broken-image icon in the in-app
+    preview and recipient inboxes. Serving our own bytes keeps the
+    placeholder working as long as our app is up.
+    """
+    return (
+        _video_placeholder_png_bytes(),
+        200,
+        {
+            "Content-Type": "image/png",
+            "Cache-Control": "public, max-age=86400",
+        },
+    )
+
+
+def _placeholder_thumb_url(absolute: bool = False) -> str:
+    """Return the URL for our local video-thumb placeholder.
+
+    Pass ``absolute=True`` when the URL will be embedded in something
+    delivered off-host (rendered email HTML, external thumb redirects);
+    in-app previews can use the relative form.
+    """
+    if absolute:
+        try:
+            return f"{_get_base_url().rstrip('/')}/api/placeholder/video-thumb"
+        except Exception:
+            return "/api/placeholder/video-thumb"
+    return "/api/placeholder/video-thumb"
+
+
 @app.route("/api/videos/<video_id>")
 def serve_video(video_id):
     from flask import send_file
@@ -3234,23 +3313,31 @@ def serve_video(video_id):
 
 @app.route("/api/videos/<video_id>/thumb")
 def serve_video_thumb(video_id):
-    from flask import send_file, redirect
+    from flask import send_file
     try:
         thumb_path = get_video_thumb_path(video_id)
     except ValueError:
         return "Not found", 404
     if not thumb_path:
-        return redirect("https://via.placeholder.com/640x360/222222/999999?text=Video")
+        return (
+            _video_placeholder_png_bytes(),
+            200,
+            {"Content-Type": "image/png", "Cache-Control": "public, max-age=300"},
+        )
     return send_file(thumb_path, mimetype="image/jpeg")
 
 
 @app.route("/api/videos/external-thumb/<key>")
 def serve_external_video_thumb(key):
-    from flask import send_file, redirect
+    from flask import send_file
     from integrations.video_thumb import get_cached_external_thumb_path
     path = get_cached_external_thumb_path(key)
     if not path:
-        return redirect("https://via.placeholder.com/640x360/222222/999999?text=Video")
+        return (
+            _video_placeholder_png_bytes(),
+            200,
+            {"Content-Type": "image/png", "Cache-Control": "public, max-age=300"},
+        )
     return send_file(path, mimetype="image/jpeg")
 
 
@@ -3289,7 +3376,7 @@ def get_feature_videos(feature_id):
                 result.append({
                     "video_id": vid_id,
                     "filename": fname,
-                    "thumb_url": ext_thumb or "https://via.placeholder.com/640x360/222222/999999?text=Video",
+                    "thumb_url": ext_thumb or "/api/placeholder/video-thumb",
                     "video_url": v.get("external_url") or "",
                     "is_url": True,
                 })
@@ -3297,7 +3384,7 @@ def get_feature_videos(feature_id):
                 result.append({
                     "video_id": vid_id,
                     "filename": fname,
-                    "thumb_url": f"{scheme}://{base}/api/videos/{vid_id}/thumb" if has_thumb else "https://via.placeholder.com/640x360/222222/999999?text=Video",
+                    "thumb_url": f"{scheme}://{base}/api/videos/{vid_id}/thumb" if has_thumb else "/api/placeholder/video-thumb",
                     "video_url": f"{scheme}://{base}/api/videos/{vid_id}",
                 })
     return jsonify(result), 200

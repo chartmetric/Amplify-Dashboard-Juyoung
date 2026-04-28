@@ -376,7 +376,12 @@ def _get_video_thumbnail(url: str) -> str:
             drive_id = drv_c.group(1)
     if drive_id:
         return f'https://drive.google.com/thumbnail?id={drive_id}&sz=w1600'
-    return 'https://via.placeholder.com/480x270/e0e0e0/999999?text=Video'
+    # Local fallback served by /api/placeholder/video-thumb. We embed an
+    # absolute URL since this string ends up in delivered email HTML.
+    try:
+        return f"{_get_base_url().rstrip('/')}/api/placeholder/video-thumb"
+    except Exception:
+        return '/api/placeholder/video-thumb'
 
 
 _VIDEO_ATTACH_MAX_TOTAL = 22 * 1024 * 1024  # keep under Gmail's 25MB inbound cap (with HTML headroom)

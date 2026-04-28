@@ -444,7 +444,16 @@ def save_video(feature_id, data_url, filename):
         # get_video_path stay consistent rather than silently pointing at a
         # nonexistent file.
         os.replace(src_path, video_path)
-        if os.path.exists(normalized_path):
+        # When the source extension is `.mp4`, video_path is the SAME file as
+        # normalized_path (vdir/video.mp4). Removing normalized_path here
+        # would delete the file we just renamed into place and leave the
+        # video_id with only meta.json on disk. Skip cleanup in that case;
+        # _normalize_video_to_mp4 already removes its own dst_path when it
+        # returns False, so there's nothing left to clean up anyway.
+        if (
+            os.path.abspath(normalized_path) != os.path.abspath(video_path)
+            and os.path.exists(normalized_path)
+        ):
             try:
                 os.remove(normalized_path)
             except Exception:
