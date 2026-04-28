@@ -50,6 +50,11 @@ def _current_month_year() -> str:
     return f"{_MONTH_NAMES[now.month - 1]} {now.year}"
 
 
+def _current_year() -> str:
+    from datetime import datetime
+    return str(datetime.now().year)
+
+
 def _render_callout_html(text: str) -> str:
     return (
         '<div style="margin:16px 0;padding:14px 18px;background:#f0fbf8;'
@@ -615,7 +620,12 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 <tr><td style="background:#ffffff;padding:32px;border-radius:{body_radius};">
 {body_html}
 <hr style="border:none;border-top:1px solid #e8e8eb;margin:28px 0 16px 0;">
-<p style="margin:0;color:#999999;font-size:12px;">Chartmetric &middot; Product Update</p>
+<p style="margin:0 0 6px 0;color:#999999;font-size:12px;line-height:1.6;">
+<a href="https://chartmetric.com" target="_blank" rel="noopener noreferrer" style="color:#999999;text-decoration:underline;">View in browser</a>
+&nbsp;&middot;&nbsp;
+<a href="https://chartmetric.com/privacy-policy" target="_blank" rel="noopener noreferrer" style="color:#999999;text-decoration:underline;">Privacy Policy</a>
+</p>
+<p style="margin:0;color:#999999;font-size:12px;line-height:1.6;">&copy; {_current_year()} Chartmetric, Inc.</p>
 </td></tr>
 </table>
 </td></tr>
