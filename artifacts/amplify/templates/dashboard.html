@@ -12157,19 +12157,29 @@ function renderCombinedEmailComposer(items) {
         // leading title line so the same headline doesn't render twice.
         var sectionContent = _stripLeadingTitleLine(it.content || '', it.feature_title || '');
         var existingImgMatch = sectionContent.match(/\[image:\s*([^\]]+)\]/);
+        var appendImageMarker = false;
         if (img && img.dataUrl) {
             if (existingImgMatch) {
                 it.imagePlaceholder = existingImgMatch[1].trim();
             } else {
                 var placeholder = 'combined_feat_' + it.idx;
                 it.imagePlaceholder = placeholder;
-                bodyParts.push('[image: ' + placeholder + ']');
+                appendImageMarker = true;
             }
         } else if (existingImgMatch) {
             sectionContent = sectionContent.replace(/\n?\[image:\s*[^\]]+\]/g, '').replace(/^\s+|\s+$/g, '');
         }
         bodyParts.push('');
         bodyParts.push(sectionContent);
+        // Image markers belong at the BOTTOM of each feature section so they
+        // render after the body copy (matching the convention every other
+        // attached block follows). Pushing the placeholder before the
+        // section content used to make the image appear above the subtitle
+        // line in the rendered email.
+        if (appendImageMarker) {
+            bodyParts.push('');
+            bodyParts.push('[image: ' + it.imagePlaceholder + ']');
+        }
         if (i < items.length - 1) {
             bodyParts.push('');
             bodyParts.push('---');
@@ -13632,6 +13642,25 @@ function getVideoThumbnail(url) {
     if (ytMatch) return 'https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg';
     var vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
     if (vimeoMatch) return 'https://vumbnail.com/' + vimeoMatch[1] + '.jpg';
+    // Loom shares expose a public poster image at this CDN path. Mirrors
+    // the server-side _get_video_thumbnail so the in-app composer preview
+    // and the rendered email show the same picture.
+    var loomMatch = url.match(/loom\.com\/(?:share|embed)\/([A-Za-z0-9]+)/i);
+    if (loomMatch) return 'https://cdn.loom.com/sessions/thumbnails/' + loomMatch[1] + '-with-play.jpg';
+    // Google Drive serves a poster via the thumbnail endpoint regardless
+    // of file type. Match the same URL shapes _normalizeVideoUrl accepts.
+    var driveId = null;
+    var drvA = url.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/);
+    if (drvA) driveId = drvA[1];
+    if (!driveId) {
+        var drvB = url.match(/drive\.google\.com\/open\?id=([A-Za-z0-9_-]+)/);
+        if (drvB) driveId = drvB[1];
+    }
+    if (!driveId) {
+        var drvC = url.match(/[?&]id=([A-Za-z0-9_-]+)/);
+        if (drvC && /drive\.google\.com/.test(url)) driveId = drvC[1];
+    }
+    if (driveId) return 'https://drive.google.com/thumbnail?id=' + driveId + '&sz=w1600';
     return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" fill="%23222"><rect width="320" height="180" rx="8" fill="%23e0e0e0"/><text x="160" y="95" text-anchor="middle" font-family="sans-serif" font-size="14" fill="%23999">Video</text></svg>');
 }
 

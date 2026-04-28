@@ -359,10 +359,23 @@ def _get_video_thumbnail(url: str) -> str:
         return f'https://cdn.loom.com/sessions/thumbnails/{loom.group(1)}-with-play.jpg'
     # Google Drive video file: Drive renders a poster via the thumbnail
     # endpoint regardless of file type, so it works for both images and
-    # videos. The link itself stays as the Drive viewer URL.
-    drv = _re.search(r'drive\.google\.com/file/d/([A-Za-z0-9_-]+)', url)
-    if drv:
-        return f'https://drive.google.com/thumbnail?id={drv.group(1)}&sz=w1600'
+    # videos. Match the same three URL shapes the frontend's
+    # _normalizeVideoUrl and getVideoThumbnail accept so the in-app
+    # preview and the rendered email show the same picture.
+    drive_id = None
+    drv_a = _re.search(r'drive\.google\.com/file/d/([A-Za-z0-9_-]+)', url)
+    if drv_a:
+        drive_id = drv_a.group(1)
+    if not drive_id:
+        drv_b = _re.search(r'drive\.google\.com/open\?id=([A-Za-z0-9_-]+)', url)
+        if drv_b:
+            drive_id = drv_b.group(1)
+    if not drive_id and 'drive.google.com' in url:
+        drv_c = _re.search(r'[?&]id=([A-Za-z0-9_-]+)', url)
+        if drv_c:
+            drive_id = drv_c.group(1)
+    if drive_id:
+        return f'https://drive.google.com/thumbnail?id={drive_id}&sz=w1600'
     return 'https://via.placeholder.com/480x270/e0e0e0/999999?text=Video'
 
 
