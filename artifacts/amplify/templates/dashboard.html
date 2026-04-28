@@ -1483,6 +1483,19 @@
         }
         .batch-item-drag { color: var(--text-faint); font-size: 16px; cursor: grab; user-select: none; }
         .batch-item-title { font-size: 14px; font-weight: 600; color: var(--text-body); flex: 1; }
+        .batch-item-title[contenteditable="true"] {
+            cursor: text;
+            border-radius: 4px;
+            padding: 2px 6px;
+            margin: -2px -6px;
+            transition: background-color 0.15s, box-shadow 0.15s;
+        }
+        .batch-item-title[contenteditable="true"]:hover { background-color: var(--bg-hover, rgba(255,255,255,0.04)); }
+        .batch-item-title[contenteditable="true"]:focus {
+            outline: none;
+            background-color: var(--bg-card, rgba(255,255,255,0.06));
+            box-shadow: 0 0 0 2px var(--accent, #00C9A7);
+        }
         .batch-item-title-link { color: var(--accent); text-decoration: none; }
         .batch-item-title-link:hover { text-decoration: underline; }
         .batch-item-cats {
@@ -7698,6 +7711,62 @@ function _rewriteBodyHyperlinks(oldUrl, newUrl) {
     return total;
 }
 
+// Inline editing of the batch entry's headline. The card's title element
+// is contenteditable; these handlers persist the edited text back to
+// prepBatchResults so downstream renders (Step 4 digest assembly,
+// preview/publish payloads) pick up the new headline immediately.
+function _onBatchTitleFocus(idx, el) {
+    el.dataset.original = (el.textContent || '').trim();
+}
+
+function _onBatchTitleBlur(idx, el) {
+    var original = el.dataset.original || '';
+    var next = (el.textContent || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!next) {
+        // Empty title would orphan the row in the digest. Restore the
+        // previous label and warn the user.
+        el.textContent = original;
+        showToast('Headline can\'t be empty', 'warning');
+        return;
+    }
+    if (next === original) {
+        el.textContent = next;
+        return;
+    }
+    el.textContent = next;
+    if (window.prepBatchResults && window.prepBatchResults[idx]) {
+        window.prepBatchResults[idx].feature_title = next;
+    }
+}
+
+function _onBatchTitleKeydown(e, idx, el) {
+    // Stop the row's drag handler from consuming the spacebar etc.
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        el.blur();
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        el.textContent = el.dataset.original || '';
+        el.blur();
+    }
+}
+
+function _onBatchTitlePaste(e, el) {
+    // Force plain text so users can't paste rich HTML/styles into the headline.
+    e.preventDefault();
+    var text = '';
+    if (e.clipboardData && typeof e.clipboardData.getData === 'function') {
+        text = e.clipboardData.getData('text/plain') || '';
+    }
+    text = text.replace(/[\r\n\t]+/g, ' ');
+    if (document.execCommand) {
+        document.execCommand('insertText', false, text);
+    } else {
+        el.textContent = (el.textContent || '') + text;
+    }
+}
+
 // Re-render the batch entry's title element to keep it as plain text.
 // The feature URL is intentionally NOT exposed on the title — it lives
 // only in the dedicated Feature URL row's input + arrow. This helper is
@@ -7716,8 +7785,26 @@ function _refreshBatchItemTitleLink(idx, url) {
     if (label == null || label === '') {
         label = (existing.textContent || '').replace(/\s*\u2197\s*$/, '').trim();
     }
+    // If the title element is already a plain span (the standard render),
+    // just update its text in place so we keep the contenteditable behavior
+    // and any focus state intact. Only swap it out when the existing element
+    // is something else (e.g. a legacy <a> link from an older render).
+    if (existing.tagName === 'SPAN') {
+        if (existing.textContent !== label) existing.textContent = label;
+        return;
+    }
     var replacement = document.createElement('span');
     replacement.className = 'batch-item-title';
+    replacement.id = 'batch-title-' + idx;
+    replacement.setAttribute('contenteditable', 'true');
+    replacement.setAttribute('spellcheck', 'false');
+    replacement.setAttribute('title', 'Click to edit headline. Press Enter to save, Esc to cancel.');
+    replacement.setAttribute('onfocus', '_onBatchTitleFocus(' + idx + ', this)');
+    replacement.setAttribute('onblur', '_onBatchTitleBlur(' + idx + ', this)');
+    replacement.setAttribute('onkeydown', '_onBatchTitleKeydown(event, ' + idx + ', this)');
+    replacement.setAttribute('onpaste', '_onBatchTitlePaste(event, this)');
+    replacement.setAttribute('onmousedown', 'event.stopPropagation();');
+    replacement.setAttribute('ondragstart', 'event.preventDefault();event.stopPropagation();return false;');
     replacement.textContent = label;
     existing.replaceWith(replacement);
 }
@@ -11109,7 +11196,16 @@ function buildBatchItem(r, idx) {
     var batchScoreTitle = batchScoreDisabled ? 'title="Score cannot be edited \u2014 feature id not available"' : 'title="Click to change importance score"';
     var batchScoreHtml = renderBatchScoreBadge(batchFid, r);
 
-    var batchTitleHtml = '<span class="batch-item-title">' + escHtml(r.feature_title || '') + '</span>';
+    var batchTitleHtml = '<span class="batch-item-title" id="batch-title-' + idx + '"' +
+        ' contenteditable="true" spellcheck="false"' +
+        ' title="Click to edit headline. Press Enter to save, Esc to cancel."' +
+        ' onfocus="_onBatchTitleFocus(' + idx + ', this)"' +
+        ' onblur="_onBatchTitleBlur(' + idx + ', this)"' +
+        ' onkeydown="_onBatchTitleKeydown(event, ' + idx + ', this)"' +
+        ' onpaste="_onBatchTitlePaste(event, this)"' +
+        ' onmousedown="event.stopPropagation();"' +
+        ' ondragstart="event.preventDefault();event.stopPropagation();return false;"' +
+        '>' + escHtml(r.feature_title || '') + '</span>';
     item.innerHTML =
         '<div class="batch-item-header">' +
             '<span class="batch-item-drag">\u2261</span>' +
