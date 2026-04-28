@@ -1626,6 +1626,7 @@
         .toast-item.toast-success { border-left-color: #4ade80; }
         .toast-item.toast-error { border-left-color: #ef4444; }
         .toast-item.toast-warning { border-left-color: #facc15; }
+        .toast-item.toast-info { border-left-color: #38bdf8; }
 
         .empty-state-large { text-align: center; padding: 80px 20px; }
         .empty-state-large .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.6; }
@@ -9346,7 +9347,14 @@ function _triggerHtmlDownload(html, filename) {
     }
 }
 
+// Per-channel in-flight tracker for "Download HTML". A heavy digest can
+// take a couple of seconds to render server-side; we debounce repeat
+// clicks so a user who doesn't realize the request is still pending
+// can't accidentally trigger two downloads of the same file.
+var emailHtmlDownloadInFlight = {};
+
 function downloadEmailHtml(chKey) {
+    if (emailHtmlDownloadInFlight[chKey]) return;
     var ta = document.getElementById('ta-' + chKey);
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to download', 'error'); return; }
@@ -9356,6 +9364,13 @@ function downloadEmailHtml(chKey) {
     if (chKey === 'email_standalone') {
         var templateSel = document.getElementById('template-' + chKey);
         if (templateSel && templateSel.value) templateId = templateSel.value;
+    }
+
+    emailHtmlDownloadInFlight[chKey] = true;
+    var loadingToast = _showLoadingToast('Preparing email HTML\u2026');
+    function _finish() {
+        loadingToast.dismiss();
+        emailHtmlDownloadInFlight[chKey] = false;
     }
 
     // Mirror previewEmailHtml: in Resend-template mode, the preview shows
@@ -9374,12 +9389,14 @@ function downloadEmailHtml(chKey) {
                 throw new Error(msg);
             }
             var html = data.html || '';
+            _finish();
             if (!html) { showToast('Download failed: template has no HTML body', 'error'); return; }
             if (_triggerHtmlDownload(html, _buildEmailDownloadFilename(subjectInput ? subjectInput.value.trim() : ''))) {
                 showToast('Email HTML downloaded \uD83D\uDCBE');
             }
         })
         .catch(function(err) {
+            _finish();
             showToast('Download failed: ' + (err && err.message ? err.message : 'render error'), 'error');
         });
         return;
@@ -9408,6 +9425,7 @@ function downloadEmailHtml(chKey) {
         return r.text();
     })
     .then(function(html) {
+        _finish();
         if (!html) { showToast('Download failed: empty response', 'error'); return; }
         var subjectInput2 = document.getElementById('subject-' + chKey);
         var liveSubject = subjectInput2 ? subjectInput2.value.trim() : '';
@@ -9416,6 +9434,7 @@ function downloadEmailHtml(chKey) {
         }
     })
     .catch(function(err) {
+        _finish();
         showToast('Download failed: ' + (err && err.message ? err.message : 'render error'), 'error');
     });
 }
@@ -13002,13 +13021,27 @@ function previewCombinedEmail() {
     .catch(function(err) { showToast('Preview failed: ' + err.message, 'error'); });
 }
 
+// In-flight tracker for the combined-digest "Download HTML". Same idea
+// as emailHtmlDownloadInFlight: skip re-entry while the render is still
+// pending so a user who doesn't see immediate feedback can't fire a
+// second request and end up with two saved files.
+var combinedEmailDownloadInFlight = false;
+
 function downloadCombinedEmail() {
+    if (combinedEmailDownloadInFlight) return;
     var data = _buildCombinedEmailPayload();
     if (!data) { showToast('No items to download', 'error'); return; }
     var fromNameEl = document.getElementById('combined-email-fromname');
     var fromName = fromNameEl ? fromNameEl.value.trim() : 'Chartmetric';
     var templateSel = document.getElementById('combined-email-template');
     var templateId = templateSel ? templateSel.value : '';
+
+    combinedEmailDownloadInFlight = true;
+    var loadingToast = _showLoadingToast('Preparing email HTML\u2026');
+    function _finish() {
+        loadingToast.dismiss();
+        combinedEmailDownloadInFlight = false;
+    }
 
     // Mirror previewCombinedEmail: in Resend-template mode, the live
     // preview shows the template's HTML, not the locally rendered
@@ -13026,12 +13059,14 @@ function downloadCombinedEmail() {
                 throw new Error(msg);
             }
             var html = resp.html || '';
+            _finish();
             if (!html) { showToast('Download failed: template has no HTML body', 'error'); return; }
             if (_triggerHtmlDownload(html, _buildEmailDownloadFilename(data.subject))) {
                 showToast('Email HTML downloaded \uD83D\uDCBE');
             }
         })
         .catch(function(err) {
+            _finish();
             showToast('Download failed: ' + (err && err.message ? err.message : 'render error'), 'error');
         });
         return;
@@ -13055,12 +13090,14 @@ function downloadCombinedEmail() {
         return r.text();
     })
     .then(function(html) {
+        _finish();
         if (!html) { showToast('Download failed: empty response', 'error'); return; }
         if (_triggerHtmlDownload(html, _buildEmailDownloadFilename(data.subject))) {
             showToast('Email HTML downloaded \uD83D\uDCBE');
         }
     })
     .catch(function(err) {
+        _finish();
         showToast('Download failed: ' + (err && err.message ? err.message : 'render error'), 'error');
     });
 }
@@ -14141,6 +14178,30 @@ function showToast(msg, typeOrWarning) {
         item.classList.remove('visible');
         setTimeout(function() { if (item.parentNode) item.parentNode.removeChild(item); }, 300);
     }, 3000);
+}
+
+// Sticky toast that stays visible until .dismiss() is called. Used for
+// progress indicators on actions that take a noticeable amount of time
+// (e.g. fetching the rendered email HTML before triggering the download).
+function _showLoadingToast(msg) {
+    var container = document.getElementById('toast-container');
+    if (!container) return { dismiss: function() {} };
+    var item = document.createElement('div');
+    item.className = 'toast-item toast-info';
+    item.textContent = msg;
+    container.appendChild(item);
+    requestAnimationFrame(function() {
+        requestAnimationFrame(function() { item.classList.add('visible'); });
+    });
+    var dismissed = false;
+    return {
+        dismiss: function() {
+            if (dismissed) return;
+            dismissed = true;
+            item.classList.remove('visible');
+            setTimeout(function() { if (item.parentNode) item.parentNode.removeChild(item); }, 300);
+        }
+    };
 }
 
 function focusPasteBar() {
