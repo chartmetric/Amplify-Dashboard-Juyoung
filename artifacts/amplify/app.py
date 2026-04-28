@@ -2748,6 +2748,7 @@ def dismiss_announcement_endpoint(announcement_id):
 def announcements_widget():
     from integrations.inapp_client import get_announcements
     import html as html_mod
+    import re as _re
 
     announcements = get_announcements(limit=5, status="active")
     cards_html = ""
@@ -2758,7 +2759,14 @@ def announcements_widget():
             cat = ann.get("category", "") or ""
             cat_badge = f'<span class="cat-badge">{html_mod.escape(cat.replace("_", " ").title())}</span>' if cat else ""
             ts = ann.get("published_at", "")[:16].replace("T", " ")
-            body_lines = html_mod.escape(ann.get("body", "")).replace("\n", "<br>")
+            # Escape first (safe), then convert markdown bold **...** to
+            # <strong> so the bolded subtitle line and any inline emphasis
+            # render as bold instead of showing literal asterisks. Asterisks
+            # are not HTML metacharacters, so escape leaves them intact for
+            # this regex to match.
+            body_escaped = html_mod.escape(ann.get("body", ""))
+            body_escaped = _re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", body_escaped)
+            body_lines = body_escaped.replace("\n", "<br>")
             cards_html += f'''<div class="ann-card" id="{html_mod.escape(ann["id"])}">
                 <button class="dismiss" onclick="dismiss('{html_mod.escape(ann["id"])}')">&times;</button>
                 <div class="ann-header">{cat_badge}<span class="ann-ts">{ts} UTC</span></div>

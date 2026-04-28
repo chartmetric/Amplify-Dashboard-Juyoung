@@ -162,7 +162,7 @@ IMPORTANT RULES:
     Subtitle → "Why should I care?"   (what the user can now do or find)
 
   1. TITLE (line 1) — bolded with **...** (or `# ` heading for the HMC article). A punchy NOUN PHRASE that NAMES THE CAPABILITY. ~5-7 words. NOT a sentence, NOT an announcement, NOT a launch headline. Examples: "Smarter Playlist Discovery on Spotify", "Full Analytics on Your Shortlists", "Real-Time Playlist Scoring", "Plain-English Data Assistant".
-  2. SUBTITLE (line 2, directly under the title — no blank line between them) — PLAIN text (no bold, no italic, no bullet, no '#'). One short line that reframes the title FROM THE USER'S PERSPECTIVE: what they can now DO or FIND. Same energy as the title, conversational, no jargon. Examples: "Find playlists people actually listen to", "See exactly who listens, where, and why", "Stop guessing which playlists matter", "Ask your music questions in plain English".
+  2. SUBTITLE (line 2, directly under the title — no blank line between them) — BOLDED with **...** (same emphasis as the title). No bullet, no '#'. One short line that reframes the title FROM THE USER'S PERSPECTIVE: what they can now DO or FIND. Same energy as the title, conversational, no jargon. Examples: "**Find playlists people actually listen to**", "**See exactly who listens, where, and why**", "**Stop guessing which playlists matter**", "**Ask your music questions in plain English**".
 
   Then a BLANK LINE, then the body content.
 
@@ -173,25 +173,25 @@ IMPORTANT RULES:
     d) Concrete WRONG / RIGHT pairs:
 
        WRONG TITLE (announcement framing)  →  **Data Assistant Now Available to All Premium Users**
-                                              The Data Assistant is now available to all premium users.
+                                              **The Data Assistant is now available to all premium users.**
        RIGHT (noun-phrase title + user-perspective subtitle)
                                            →  **Plain-English Data Assistant**
-                                              Ask your music questions and get answers without writing a query.
+                                              **Ask your music questions and get answers without writing a query.**
 
        WRONG TITLE (announcement framing)  →  **Introducing Smarter Playlist Discovery on Spotify**
-                                              We're excited to launch smarter playlist discovery.
+                                              **We're excited to launch smarter playlist discovery.**
        RIGHT                               →  **Smarter Playlist Discovery on Spotify**
-                                              Find playlists people actually listen to.
+                                              **Find playlists people actually listen to.**
 
        WRONG SUBTITLE (mirrors title)      →  **Full Analytics on Your Shortlists**
-                                              Full analytics for your shortlists.
+                                              **Full analytics for your shortlists.**
        RIGHT                               →  **Full Analytics on Your Shortlists**
-                                              Spot the strongest tracks before your A&R meeting.
+                                              **Spot the strongest tracks before your A&R meeting.**
 
        WRONG SUBTITLE (defines the title)  →  **Real-Time Playlist Scoring**
-                                              Real-time playlist scoring is now available.
+                                              **Real-time playlist scoring is now available.**
        RIGHT                               →  **Real-Time Playlist Scoring**
-                                              Know which playlists are worth pitching the moment they move.
+                                              **Know which playlists are worth pitching the moment they move.**
 
   Channels WITHOUT this pattern: twitter (single block, no headline), linkedin (trend-hook open), did_you_know (single fact line).
 - LINK HANDLING:
@@ -829,6 +829,7 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
                 f"one-line subtitle that answers \"why should I care?\" — different vocabulary from the title, "
                 f"starting with a user-facing verb (Find..., See..., Spot..., Stop guessing..., Understand..., "
                 f"Get..., Ask...) or a noun phrase naming the user's outcome. "
+                f"The subtitle line MUST be wrapped in **...** (bold), same emphasis as the title. "
                 f"Keep everything else (body, closing CTA sentence, attachment markup) intact. "
                 f"Output ONLY the rewritten content:\n\n{content}"
             )
