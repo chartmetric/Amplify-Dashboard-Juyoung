@@ -486,21 +486,24 @@ def detect_banned_title_phrase(content: str, channel_key: str) -> str | None:
     return None
 
 
-def dedupe_title_subtitle(content: str, channel_key: str) -> str:
-    """Safety net: if the AI emitted a subtitle that is identical (or
-    alphanumeric-equivalent) to the title, drop the duplicate subtitle line.
-    Skip channels that don't use the title+subtitle pattern.
+def _find_title_subtitle_pair(content: str, channel_key: str):
+    """Locate the title + subtitle adjacent pair at the top of content.
+    Returns a dict with the parsed pieces, or None if there isn't a
+    title+subtitle layout to inspect.
 
-    Examples handled:
-      "**Foo Bar**\nFoo Bar\n\nbody"        -> "**Foo Bar**\n\nbody"
-      "**Foo Bar**\nfoo bar.\n\nbody"       -> "**Foo Bar**\n\nbody"
-      "### **Foo Bar**\nFoo Bar\nbody"      -> "### **Foo Bar**\nbody"
-      "# Foo Bar\nFoo Bar\n\nbody"          -> "# Foo Bar\n\nbody"
+    Returned dict keys:
+      prefix:        text before the title (Resend Subject:/HMC meta_description)
+      lines:         the body lines (text.split('\\n'))
+      title_idx:     index of the title line in `lines`
+      subtitle_idx:  index of the subtitle line in `lines` (always title_idx+1)
+      title_text:    the title text without markup
+      subtitle_raw:  the subtitle line as-is
+      subtitle_clean: subtitle stripped of bold/punct for comparison
     """
     if not content:
-        return content
+        return None
     if channel_key in {"twitter", "linkedin", "did_you_know"}:
-        return content
+        return None
 
     text = content
     sub_match = _BENEFIT_TITLE_SUBJECT_RE.match(text)
@@ -509,49 +512,84 @@ def dedupe_title_subtitle(content: str, channel_key: str) -> str:
         prefix = text[:sub_match.end()]
         text = text[sub_match.end():]
 
-    # For HMC, skip the optional `meta_description: ...` line(s) at the top.
-    meta_prefix = ""
     if channel_key == "article_hmc":
         m = re.match(r"^(\s*meta_description:[^\n]*\n+)", text, re.IGNORECASE)
         if m:
-            meta_prefix = m.group(1)
+            prefix = prefix + m.group(1)
             text = text[m.end():]
 
-    # Find first non-empty line (the title candidate) and the line directly
-    # after it (the subtitle candidate). We only strip if they are adjacent
-    # with no blank line between them — that's the title+subtitle layout.
     lines = text.split("\n")
     i = 0
     while i < len(lines) and not lines[i].strip():
         i += 1
     if i >= len(lines) - 1:
-        return content
+        return None
 
     title_text = _strip_title_markup(lines[i])
     if not title_text:
-        return content
+        return None
 
     j = i + 1
     if j >= len(lines):
-        return content
-    subtitle_line = lines[j]
-    if not subtitle_line.strip():
-        return content  # blank line between -> not the subtitle slot
+        return None
+    subtitle_raw = lines[j]
+    if not subtitle_raw.strip():
+        return None  # blank between title and "subtitle" -> no subtitle slot
 
-    subtitle_clean = re.sub(r"^[*_`#\s]+|[*_`#\s\.\!\?]+$", "", subtitle_line.strip())
+    subtitle_clean = re.sub(r"^[*_`#\s]+|[*_`#\s\.\!\?]+$", "", subtitle_raw.strip())
     if not subtitle_clean:
-        return content
+        return None
 
-    if _normalize_for_compare(subtitle_clean) != _normalize_for_compare(title_text):
+    return {
+        "prefix": prefix,
+        "lines": lines,
+        "title_idx": i,
+        "subtitle_idx": j,
+        "title_text": title_text,
+        "subtitle_raw": subtitle_raw,
+        "subtitle_clean": subtitle_clean,
+    }
+
+
+def detect_duplicate_subtitle(content: str, channel_key: str):
+    """If the title+subtitle pair has the subtitle mirroring the title
+    (alphanumeric-equivalent), return a (title, subtitle) tuple. Otherwise
+    return None. Skips channels that don't use the title+subtitle pattern."""
+    pair = _find_title_subtitle_pair(content, channel_key)
+    if not pair:
+        return None
+    if _normalize_for_compare(pair["subtitle_clean"]) == _normalize_for_compare(pair["title_text"]):
+        return (pair["title_text"], pair["subtitle_raw"].strip())
+    return None
+
+
+def dedupe_title_subtitle(content: str, channel_key: str) -> str:
+    """Last-resort safety net: if the AI emitted a subtitle that is
+    identical (or alphanumeric-equivalent) to the title, drop the duplicate
+    subtitle line. Prefer the regen retry in generate_for_channel — this
+    only fires if the AI still produced a duplicate after the retry.
+
+    Examples handled:
+      "**Foo Bar**\nFoo Bar\n\nbody"        -> "**Foo Bar**\n\nbody"
+      "**Foo Bar**\nfoo bar.\n\nbody"       -> "**Foo Bar**\n\nbody"
+      "### **Foo Bar**\nFoo Bar\nbody"      -> "### **Foo Bar**\nbody"
+      "# Foo Bar\nFoo Bar\n\nbody"          -> "# Foo Bar\n\nbody"
+    """
+    pair = _find_title_subtitle_pair(content, channel_key)
+    if not pair:
+        return content
+    if _normalize_for_compare(pair["subtitle_clean"]) != _normalize_for_compare(pair["title_text"]):
         return content
 
     logger.info(
         f"[{channel_key}] Stripping duplicate subtitle line that mirrors title: "
-        f"{subtitle_line.strip()!r}"
+        f"{pair['subtitle_raw'].strip()!r}"
     )
+    lines = pair["lines"]
+    j = pair["subtitle_idx"]
     new_lines = lines[:j] + lines[j + 1:]
     new_text = "\n".join(new_lines)
-    return prefix + meta_prefix + new_text
+    return pair["prefix"] + new_text
 
 
 def _auto_append_cta_link(content: str, channel_key: str, feature_url: str | None) -> str:
@@ -774,6 +812,37 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
                 content = regen_result["content"]
             else:
                 logger.warning(f"[{channel_key}] Title-rewrite retry failed; keeping original draft.")
+
+        dup = detect_duplicate_subtitle(content, channel_key)
+        if dup:
+            dup_title, dup_subtitle = dup
+            logger.info(
+                f"[{channel_key}] Subtitle duplicates title ({dup_subtitle!r} == {dup_title!r}). "
+                f"Regenerating once with explicit feedback."
+            )
+            dup_regen_prompt = (
+                f"In the content below, the subtitle line is identical (or a cosmetic rewording) "
+                f"of the title line. The title is \"{dup_title}\" and the subtitle is \"{dup_subtitle}\". "
+                f"This violates the TITLE+SUBTITLE rule. The subtitle MUST contain DIFFERENT WORDS from "
+                f"the title and reframe it from the user's perspective — what they can now DO or FIND. "
+                f"Keep the title \"{dup_title}\" exactly as-is, but replace the subtitle line with a fresh "
+                f"one-line subtitle that answers \"why should I care?\" — different vocabulary from the title, "
+                f"starting with a user-facing verb (Find..., See..., Spot..., Stop guessing..., Understand..., "
+                f"Get..., Ask...) or a noun phrase naming the user's outcome. "
+                f"Keep everything else (body, closing CTA sentence, attachment markup) intact. "
+                f"Output ONLY the rewritten content:\n\n{content}"
+            )
+            dup_regen_result = generate_content(SYSTEM_PROMPT, dup_regen_prompt, max_tokens=max_tokens)
+            if dup_regen_result["success"] and dup_regen_result.get("content"):
+                still_dup = detect_duplicate_subtitle(dup_regen_result["content"], channel_key)
+                if still_dup:
+                    logger.warning(
+                        f"[{channel_key}] Subtitle still duplicates title after regen "
+                        f"({still_dup[1]!r}). dedupe_title_subtitle will strip it as last resort."
+                    )
+                content = dup_regen_result["content"]
+            else:
+                logger.warning(f"[{channel_key}] Duplicate-subtitle retry failed; keeping original draft.")
 
         measured = _measured_len(content)
         if measured > char_limit:
