@@ -156,26 +156,43 @@ IMPORTANT RULES:
 - ABSOLUTELY NEVER use the em dash character (\u2014) in any generated content. This is a hard rule with zero exceptions. Use periods, commas, or semicolons instead. Rewrite sentences to avoid needing dashes entirely. Also never use en dashes (\u2013). Only use regular hyphens (-) for compound words.
 - HEADLINE / TITLE HANDLING: The "Internal Feature Name" provided in FEATURE CONTEXT is the raw Asana / Slack ticket title (e.g., "Introduce New Playlist Scores on Spotify Playlist List 2", "Add X to Y", "Refactor Z"). It is engineering-speak, not marketing copy. NEVER reuse it verbatim as the headline / title / header line for any channel. Always craft a fresh, benefit-driven, user-facing headline derived from the Description (which is usually the cleaner, marketer-ready summary) and the actual user impact. Drop internal verbs like "Introduce", "Add", "Implement", "Refactor"; drop ticket-suffix noise like trailing numbers ("2"), "v2", or "(WIP)". Lead with what the user can now do, not what was built. The Internal Feature Name is provided only as context for what the feature is.
 - TITLE + SUBTITLE PATTERN: For every channel that emits a headline (email_newsletter, email_short, email_medium, email_long, email_standalone, email_standalone_digest, inapp, notion_monthly, article_hmc), open the body with a TWO-LINE pair before any other content:
-  1. TITLE (line 1) — bolded with **...** (or `# ` heading for the HMC article). A punchy noun phrase that names the capability. Aim for 5-7 words. Answers "What is it?". Examples: "Smarter Playlist Discovery on Spotify", "Full Analytics on Your Shortlists", "Real-Time Playlist Scoring".
-  2. SUBTITLE (line 2, directly under the title — no blank line between them) — PLAIN text (no bold, no italic, no bullet, no '#'). One short line that reframes the title from the user's perspective: what they can now DO or FIND. Same energy as the title, conversational, no jargon. Answers "Why should I care?". Examples: "Find playlists people actually listen to", "See exactly who listens, where, and why", "Stop guessing which playlists matter".
+
+  THINK OF IT THIS WAY:
+    Title    → "What is it?"          (names the capability)
+    Subtitle → "Why should I care?"   (what the user can now do or find)
+
+  1. TITLE (line 1) — bolded with **...** (or `# ` heading for the HMC article). A punchy NOUN PHRASE that NAMES THE CAPABILITY. ~5-7 words. NOT a sentence, NOT an announcement, NOT a launch headline. Examples: "Smarter Playlist Discovery on Spotify", "Full Analytics on Your Shortlists", "Real-Time Playlist Scoring", "Plain-English Data Assistant".
+  2. SUBTITLE (line 2, directly under the title — no blank line between them) — PLAIN text (no bold, no italic, no bullet, no '#'). One short line that reframes the title FROM THE USER'S PERSPECTIVE: what they can now DO or FIND. Same energy as the title, conversational, no jargon. Examples: "Find playlists people actually listen to", "See exactly who listens, where, and why", "Stop guessing which playlists matter", "Ask your music questions in plain English".
+
   Then a BLANK LINE, then the body content.
+
   HARD RULES — read carefully, the AI keeps breaking these:
-    a) The subtitle MUST contain DIFFERENT WORDS from the title. It is NEVER acceptable to repeat the title text on the subtitle line. If the title is "Smarter Playlist Discovery on Spotify", the subtitle must NOT be "Smarter Playlist Discovery on Spotify" or any cosmetic rewording of those same words.
-    b) The subtitle is NOT a definition of the title and NOT a paraphrase of the title. Title = WHAT the capability is. Subtitle = WHAT THE USER CAN DO with it. Different angle, different vocabulary.
-    c) The subtitle should usually start with a user-facing verb ("Find...", "See...", "Spot...", "Stop guessing...", "Understand...", "Get...") OR a noun phrase that names the user's outcome ("Fewer dead-end pitches", "More playlists you can actually pitch to").
+    a) The TITLE is a NOUN PHRASE that names the capability. It is NEVER a launch / availability / release announcement. BANNED title phrasings include any form of: "Now Available", "Now Live", "Just Launched", "Just Released", "Introducing", "Announcing", "Coming Soon", "Available to All [Users/Plans/Tiers]", "Now Open to ...", "Rolling Out to ...", "Live for ...". Drop that framing entirely and name the thing itself.
+    b) The SUBTITLE MUST contain DIFFERENT WORDS from the title — not a cosmetic rewording, not a definition, not a paraphrase. Title = WHAT the capability is. Subtitle = WHAT THE USER CAN DO / FIND with it. Different angle, different vocabulary.
+    c) The subtitle should usually start with a user-facing verb ("Find...", "See...", "Spot...", "Stop guessing...", "Understand...", "Get...", "Ask...") OR a noun phrase that names the user's outcome ("Fewer dead-end pitches", "More playlists you can actually pitch to").
     d) Concrete WRONG / RIGHT pairs:
-       WRONG  →  **Smarter Playlist Discovery on Spotify**
-                 Smarter Playlist Discovery on Spotify
-       RIGHT  →  **Smarter Playlist Discovery on Spotify**
-                 Find playlists people actually listen to.
-       WRONG  →  **Full Analytics on Your Shortlists**
-                 Full analytics for your shortlists.
-       RIGHT  →  **Full Analytics on Your Shortlists**
-                 Spot the strongest tracks before your A&R meeting.
-       WRONG  →  **Data Assistant Now Available to All Premium Users**
-                 The Data Assistant is now available to all premium users.
-       RIGHT  →  **Data Assistant Now Available to All Premium Users**
-                 Ask your music questions in plain English and get answers.
+
+       WRONG TITLE (announcement framing)  →  **Data Assistant Now Available to All Premium Users**
+                                              The Data Assistant is now available to all premium users.
+       RIGHT (noun-phrase title + user-perspective subtitle)
+                                           →  **Plain-English Data Assistant**
+                                              Ask your music questions and get answers without writing a query.
+
+       WRONG TITLE (announcement framing)  →  **Introducing Smarter Playlist Discovery on Spotify**
+                                              We're excited to launch smarter playlist discovery.
+       RIGHT                               →  **Smarter Playlist Discovery on Spotify**
+                                              Find playlists people actually listen to.
+
+       WRONG SUBTITLE (mirrors title)      →  **Full Analytics on Your Shortlists**
+                                              Full analytics for your shortlists.
+       RIGHT                               →  **Full Analytics on Your Shortlists**
+                                              Spot the strongest tracks before your A&R meeting.
+
+       WRONG SUBTITLE (defines the title)  →  **Real-Time Playlist Scoring**
+                                              Real-time playlist scoring is now available.
+       RIGHT                               →  **Real-Time Playlist Scoring**
+                                              Know which playlists are worth pitching the moment they move.
+
   Channels WITHOUT this pattern: twitter (single block, no headline), linkedin (trend-hook open), did_you_know (single fact line).
 - LINK HANDLING:
   - When a Feature URL is provided, embed it according to the channel's rules below. When no Feature URL is provided ("Not provided"), write a natural verbal CTA phrase instead and never invent a URL.
@@ -409,6 +426,63 @@ def _strip_title_markup(line: str) -> str | None:
             inner = m.group(1).strip()
             inner = re.sub(r"^[*_`#\s]+|[*_`#\s]+$", "", inner)
             return inner or None
+    return None
+
+
+_BANNED_TITLE_PATTERNS = [
+    re.compile(r"\bnow\s+available\b", re.IGNORECASE),
+    re.compile(r"\bnow\s+live\b", re.IGNORECASE),
+    re.compile(r"\bjust\s+launched\b", re.IGNORECASE),
+    re.compile(r"\bjust\s+released\b", re.IGNORECASE),
+    re.compile(r"\bintroducing\b", re.IGNORECASE),
+    re.compile(r"\bannouncing\b", re.IGNORECASE),
+    re.compile(r"\bcoming\s+soon\b", re.IGNORECASE),
+    re.compile(r"\bavailable\s+to\s+all\b", re.IGNORECASE),
+    re.compile(r"\bnow\s+open\s+to\b", re.IGNORECASE),
+    re.compile(r"\brolling\s+out\s+to\b", re.IGNORECASE),
+    re.compile(r"\blive\s+for\s+(?:all\s+)?(?:premium|free|pro|users|customers|members)\b", re.IGNORECASE),
+]
+
+
+def _extract_first_title_line(content: str, channel_key: str) -> str | None:
+    """Return the title text (e.g. inside **...** or `# ...`) at the very top
+    of the content, after skipping the optional Resend subject prefix and the
+    optional `meta_description:` line for HMC. Returns None if there is no
+    recognizable title-style line."""
+    if not content:
+        return None
+    text = content
+    sub_match = _BENEFIT_TITLE_SUBJECT_RE.match(text)
+    if sub_match:
+        text = text[sub_match.end():]
+    if channel_key == "article_hmc":
+        m = re.match(r"^(\s*meta_description:[^\n]*\n+)", text, re.IGNORECASE)
+        if m:
+            text = text[m.end():]
+    for line in text.split("\n"):
+        if not line.strip():
+            continue
+        stripped = _strip_title_markup(line)
+        if stripped:
+            return stripped
+        return line.strip()
+    return None
+
+
+def detect_banned_title_phrase(content: str, channel_key: str) -> str | None:
+    """If the first title line uses launch/availability announcement framing
+    (e.g. "Now Available to All Premium Users", "Introducing X", "Just
+    Launched"), return the matched phrase. Otherwise return None.
+    Skips channels that don't use the title+subtitle pattern."""
+    if channel_key in {"twitter", "linkedin", "did_you_know"}:
+        return None
+    title = _extract_first_title_line(content, channel_key)
+    if not title:
+        return None
+    for pattern in _BANNED_TITLE_PATTERNS:
+        m = pattern.search(title)
+        if m:
+            return m.group(0)
     return None
 
 
@@ -670,7 +744,37 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
     char_limit = config["max_chars"]
     char_floor = config.get("min_chars")
 
-    if result["success"]:
+    if result["success"] and content:
+        banned = detect_banned_title_phrase(content, channel_key)
+        if banned:
+            logger.info(
+                f"[{channel_key}] Title contains banned announcement phrasing "
+                f"{banned!r}. Regenerating once with explicit feedback."
+            )
+            regen_prompt = (
+                f"The title in the content below uses the BANNED announcement phrase \"{banned}\". "
+                f"Per the TITLE+SUBTITLE rules, the title is a NOUN PHRASE that NAMES THE CAPABILITY — "
+                f"never a launch / availability / release announcement. Drop \"{banned}\" entirely "
+                f"and rewrite the title as a punchy 5-7 word noun phrase that names what the capability IS "
+                f"(examples of the right shape: \"Plain-English Data Assistant\", "
+                f"\"Smarter Playlist Discovery on Spotify\", \"Real-Time Playlist Scoring\"). "
+                f"Then write a fresh subtitle from the user's perspective — different words from the title, "
+                f"answering \"why should I care?\" (e.g. \"Ask your music questions and get answers without writing a query.\"). "
+                f"Keep the rest of the body, the closing CTA sentence, and any attachment markup intact. "
+                f"Output ONLY the rewritten content:\n\n{content}"
+            )
+            regen_result = generate_content(SYSTEM_PROMPT, regen_prompt, max_tokens=max_tokens)
+            if regen_result["success"] and regen_result.get("content"):
+                still_banned = detect_banned_title_phrase(regen_result["content"], channel_key)
+                if still_banned:
+                    logger.warning(
+                        f"[{channel_key}] Title still contains banned phrase "
+                        f"{still_banned!r} after regen. Keeping regenerated draft anyway."
+                    )
+                content = regen_result["content"]
+            else:
+                logger.warning(f"[{channel_key}] Title-rewrite retry failed; keeping original draft.")
+
         measured = _measured_len(content)
         if measured > char_limit:
             logger.info(f"[{channel_key}] Content is {measured} prose chars, exceeds {char_limit}. Requesting shorter version.")
@@ -706,6 +810,16 @@ def generate_for_channel(feature_data: dict, channel_key: str, custom_instructio
                 logger.info(f"[{channel_key}] Expanded to {measured} prose chars.")
             else:
                 logger.warning(f"[{channel_key}] Expand retry failed; keeping original short draft.")
+
+        # Final guard: shorten/expand could theoretically reintroduce banned
+        # title phrasing. If so, log it — we don't retry again to avoid
+        # ping-ponging with the length retries above.
+        post_retry_banned = detect_banned_title_phrase(content, channel_key)
+        if post_retry_banned:
+            logger.warning(
+                f"[{channel_key}] Banned title phrasing {post_retry_banned!r} "
+                f"reappeared after length retries. Keeping draft; user can regenerate."
+            )
 
         content = dedupe_title_subtitle(content, channel_key)
 
