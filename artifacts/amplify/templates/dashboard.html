@@ -2211,6 +2211,7 @@
             <div class="picker-list" id="picker-list"></div>
             <div class="picker-bottom-bar">
                 <span class="picker-count" id="picker-count-bottom">0 features selected</span>
+                <button class="btn-quick" id="btn-deselect-all-bottom" onclick="pickerDeselectAll()" style="font-size:12px;" disabled>Deselect All</button>
                 <button class="btn-quick" id="btn-save-set" onclick="showSaveSetInput()" style="font-size:12px;">Save Set</button>
                 <button class="btn-generate-batch" id="btn-generate-batch" disabled onclick="prepGoToStep(3)">Generate for 0 features &rarr;</button>
             </div>
@@ -10700,6 +10701,8 @@ function updatePickerCount() {
         btn.disabled = count === 0;
         btn.textContent = 'Generate for ' + count + ' feature' + (count !== 1 ? 's' : '') + ' \u2192';
     }
+    var deselBtn = document.getElementById('btn-deselect-all-bottom');
+    if (deselBtn) deselBtn.disabled = count === 0;
 }
 
 function pickerSelectAll() {
