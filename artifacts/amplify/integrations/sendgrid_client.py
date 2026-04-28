@@ -602,19 +602,32 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
                 continue
             esc_link = _esc(vid_link)
             esc_thumb = _esc(thumb_url)
+            # Single-layer poster + click-through link with a play-button
+            # overlay. We previously stacked a `<video controls>` element
+            # on top so Apple Mail could play inline, but that overlay
+            # rendered as a black box covering the poster in the in-app
+            # preview iframe (and in any client where `<video>` shows but
+            # the source can't be loaded inline). The click-through pattern
+            # used here matches the in-app channel preview, works in every
+            # email client, and never hides the poster.
             body_html += (
                 f'<div style="text-align:center;margin:16px 0 20px 0;">'
-                f'<div style="position:relative;display:inline-block;max-width:600px;width:100%;margin:0 auto;line-height:0;">'
                 f'<a href="{esc_link}" target="_blank" rel="noopener noreferrer" '
-                f'style="display:block;text-decoration:none;">'
+                f'style="display:inline-block;position:relative;text-decoration:none;max-width:600px;width:100%;line-height:0;">'
                 f'<img src="{esc_thumb}" alt="Play video" width="600" '
                 f'style="display:block;width:100%;max-width:600px;height:auto;border-radius:6px;border:0;outline:none;">'
+                f'<span style="position:absolute;top:50%;left:50%;'
+                f'transform:translate(-50%,-50%);width:64px;height:64px;'
+                f'background:rgba(0,0,0,0.65);border-radius:50%;'
+                f'display:inline-block;line-height:64px;text-align:center;'
+                f'font-size:0;">'
+                f'<span style="display:inline-block;vertical-align:middle;'
+                f'width:0;height:0;border-style:solid;'
+                f'border-width:14px 0 14px 22px;'
+                f'border-color:transparent transparent transparent #ffffff;'
+                f'margin-left:6px;"></span>'
+                f'</span>'
                 f'</a>'
-                f'<video src="{esc_link}" poster="{esc_thumb}" '
-                f'controls preload="none" playsinline '
-                f'style="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:6px;background:#000;outline:none;border:0;">'
-                f'</video>'
-                f'</div>'
                 f'</div>'
             )
         elif re.match(r'^\[image:\s*(.+)\]$', stripped):
