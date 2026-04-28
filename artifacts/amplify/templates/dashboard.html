@@ -5811,7 +5811,6 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
                 }
             } catch(_e) {}
             renderBatchImagePreview(batchIdx);
-            if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
             var bta = document.getElementById('batch-ta-' + batchIdx);
             if (bta) {
                 var stripped = bta.value;
@@ -5829,6 +5828,16 @@ function handleImageFile(file, chKey, isBatch, batchIdx) {
                 bta.dispatchEvent(new Event('input'));
                 switchToBatchPreview(batchIdx);
             }
+            // Mirror the new image into the combined-email-body so the
+            // digest preview reflects the just-pasted file/clipboard
+            // image instead of the previous one (or nothing).
+            if (typeof _stripImageMarkersForBatchInCombined === 'function') {
+                _stripImageMarkersForBatchInCombined(batchIdx);
+            }
+            if (typeof _appendMarkerToCombinedFor === 'function') {
+                _appendMarkerToCombinedFor(batchIdx, '[image: ' + imgData.name + ']');
+            }
+            if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
         } else {
             contentViewFeatureImage = imgData;
             renderFeatureImagePreview();
@@ -6042,6 +6051,16 @@ function promptBatchImageUrl(idx) {
         }
         if (typeof autoResizeTextarea === 'function') autoResizeTextarea(ta);
     }
+    // Mirror into combined-email-body: drop any prior image marker for
+    // this feature section (a feature only ever has one image), then
+    // append the new one so the digest preview matches.
+    if (typeof _stripImageMarkersForBatchInCombined === 'function') {
+        _stripImageMarkersForBatchInCombined(idx);
+    }
+    if (typeof _appendMarkerToCombinedFor === 'function') {
+        _appendMarkerToCombinedFor(idx, '[image: ' + url + ']');
+    }
+    if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
     if (typeof refreshBatchMediaButton === 'function') refreshBatchMediaButton(idx);
     if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     showToast('Image URL attached', 'success');
@@ -6142,6 +6161,15 @@ function promptBatchGifUrl(idx) {
         }
         if (typeof autoResizeTextarea === 'function') autoResizeTextarea(ta);
     }
+    // Mirror the new GIF into the combined-email-body so the digest
+    // preview shows it; same image-marker rules as a static image.
+    if (typeof _stripImageMarkersForBatchInCombined === 'function') {
+        _stripImageMarkersForBatchInCombined(idx);
+    }
+    if (typeof _appendMarkerToCombinedFor === 'function') {
+        _appendMarkerToCombinedFor(idx, '[image: ' + url + ']');
+    }
+    if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
     if (typeof refreshBatchMediaButton === 'function') refreshBatchMediaButton(idx);
     if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     showToast('GIF URL attached', 'success');
@@ -6637,14 +6665,21 @@ function promptBatchVideoUrl(idx) {
         if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     }
     var ta = document.getElementById('batch-ta-' + idx);
+    var marker = '[video: ' + url + ']';
     if (ta) {
-        var marker = '[video: ' + url + ']';
         if (ta.value.indexOf(marker) === -1) {
             ta.value = ta.value.replace(/\s+$/, '') + '\n' + marker;
             ta.dispatchEvent(new Event('input'));
         }
         switchToBatchPreview(idx);
     }
+    // Mirror the new video into the corresponding feature section of the
+    // combined-email-body so the digest preview shows it without needing
+    // the user to reopen the composer.
+    if (typeof _appendMarkerToCombinedFor === 'function') {
+        _appendMarkerToCombinedFor(idx, marker);
+    }
+    if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
     if (typeof refreshBatchMediaButton === 'function') refreshBatchMediaButton(idx);
     fetch('/api/publish/video', {
         method: 'POST',
@@ -6846,6 +6881,13 @@ function removeBatchVideoByName(idx, name) {
         ta.dispatchEvent(new Event('input'));
         switchToBatchPreview(idx);
     }
+    // Mirror the removal into the combined-email-body so the live digest
+    // preview stops rendering the (now-deleted) video. Scope the strip to
+    // this feature's section only so a shared video URL in a different
+    // feature isn't accidentally wiped out at the same time.
+    if (typeof _stripVideoMarkerForBatchInCombined === 'function') {
+        _stripVideoMarkerForBatchInCombined(idx, name);
+    }
     if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
 }
 
@@ -6863,7 +6905,6 @@ function removeBatchImageInline(idx) {
     if (window.prepBatchImages) delete window.prepBatchImages[idx];
     if (typeof _persistBatchAttachments === 'function') _persistBatchAttachments();
     renderBatchImagePreview(idx);
-    if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
     var ta = document.getElementById('batch-ta-' + idx);
     if (ta) {
         if (name) {
@@ -6875,6 +6916,15 @@ function removeBatchImageInline(idx) {
         ta.dispatchEvent(new Event('input'));
         switchToBatchPreview(idx);
     }
+    // Mirror the removal into the combined-email-body so the live digest
+    // preview stops rendering the (now-deleted) image. Strip ALL image
+    // markers in the matching feature section because the combined body
+    // may use either the real filename or a "combined_feat_<idx>"
+    // placeholder, and a feature only carries one image at a time.
+    if (typeof _stripImageMarkersForBatchInCombined === 'function') {
+        _stripImageMarkersForBatchInCombined(idx);
+    }
+    if (typeof notifyCombinedEmailImagesChanged === 'function') notifyCombinedEmailImagesChanged();
 }
 
 function triggerVideoFilePicker() {
@@ -12086,6 +12136,81 @@ function _buildCombinedEmailPayload() {
         imageMap: imageMap,
         featureIds: featureIds
     };
+}
+
+// The combined-email-body textarea is a snapshot taken when the composer
+// first opens. After that, edits the user makes inside per-feature batch
+// textareas (X-ing a video, attaching a new GIF, swapping an image) don't
+// flow into the combined body on their own, which leaves the live preview
+// rendering stale media. The helpers below let the per-feature add/remove
+// paths surgically mirror their changes into the combined body so the
+// preview matches what's actually attached. Each helper no-ops when the
+// composer isn't open or when the body has been edited so heavily that
+// per-feature sections can't be located.
+function _splitCombinedBodyByFeature() {
+    var ta = document.getElementById('combined-email-body');
+    if (!ta) return null;
+    var items = window._combinedEmailItems || [];
+    if (!items.length) return null;
+    // The digest builder inserts a horizontal-rule line surrounded by
+    // blank lines between features. Be lenient about whitespace so a
+    // user reflow doesn't break section detection.
+    var parts = (ta.value || '').split(/\n\s*---\s*\n/);
+    if (parts.length !== items.length) return null;
+    return { ta: ta, parts: parts, items: items };
+}
+
+function _joinCombinedBodyParts(info) {
+    return info.parts.join('\n\n---\n\n');
+}
+
+function _findBatchPositionInCombined(idx) {
+    var info = _splitCombinedBodyByFeature();
+    if (!info) return null;
+    for (var i = 0; i < info.items.length; i++) {
+        if (info.items[i] && info.items[i].idx === idx) return { info: info, pos: i };
+    }
+    return null;
+}
+
+function _stripVideoMarkerForBatchInCombined(idx, name) {
+    // Section-scoped video removal: only strip the marker inside the
+    // matching feature's slice of the combined body. Doing a global
+    // regex replace across the whole textarea would clobber the same
+    // video marker in other features that happen to share the URL or
+    // filename, silently dropping valid media from unrelated sections.
+    if (!name) return;
+    var pos = _findBatchPositionInCombined(idx);
+    if (!pos) return;
+    var esc = String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var re = new RegExp('\\n?\\n?\\[video:\\s*' + esc + '\\s*\\]', 'g');
+    var before = pos.info.parts[pos.pos];
+    var after = before.replace(re, '');
+    if (after === before) return;
+    pos.info.parts[pos.pos] = after.replace(/\s+$/, '');
+    pos.info.ta.value = _joinCombinedBodyParts(pos.info);
+    pos.info.ta.dispatchEvent(new Event('input'));
+}
+
+function _stripImageMarkersForBatchInCombined(idx) {
+    var pos = _findBatchPositionInCombined(idx);
+    if (!pos) return;
+    pos.info.parts[pos.pos] = pos.info.parts[pos.pos]
+        .replace(/\n?\n?\[image:\s*[^\]]+\]/g, '')
+        .replace(/\s+$/, '');
+    pos.info.ta.value = _joinCombinedBodyParts(pos.info);
+    pos.info.ta.dispatchEvent(new Event('input'));
+}
+
+function _appendMarkerToCombinedFor(idx, marker) {
+    var pos = _findBatchPositionInCombined(idx);
+    if (!pos) return false;
+    var section = pos.info.parts[pos.pos];
+    if (section.indexOf(marker) !== -1) return true;
+    pos.info.parts[pos.pos] = section.replace(/\s+$/, '') + '\n\n' + marker;
+    pos.info.ta.value = _joinCombinedBodyParts(pos.info);
+    pos.info.ta.dispatchEvent(new Event('input'));
+    return true;
 }
 
 function renderCombinedEmailComposer(items) {
