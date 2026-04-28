@@ -5306,7 +5306,12 @@ function _stripLeadingTitleLine(content, headerTitle) {
     var first = lines[i];
     var stripped, m;
     if ((m = first.match(/^\s*\*\*(.+?)\*\*\s*$/))) stripped = m[1];
-    else if ((m = first.match(/^\s*#{1,6}\s+(.+?)\s*$/))) stripped = m[1];
+    else if ((m = first.match(/^\s*#{1,6}\s+(.+?)\s*$/))) {
+        stripped = m[1];
+        // Tolerate heading text that is also bolded, e.g. "### **Title**".
+        var bm = stripped.match(/^\s*\*\*(.+?)\*\*\s*$/);
+        if (bm) stripped = bm[1];
+    }
     else stripped = first.trim();
     var normFirst = stripped.trim().toLowerCase().replace(/\s+/g, ' ');
     if (normFirst !== normHeader) return content;
@@ -11789,7 +11794,11 @@ function renderCombinedEmailComposer(items) {
         var header = '## ' + (it.feature_title || ('Feature ' + (i + 1)));
         bodyParts.push(header);
         var img = (window.prepBatchImages || {})[it.idx];
-        var sectionContent = it.content || '';
+        // The per-feature AI content for digest channels (Notion monthly,
+        // standalone email digest) typically opens with "**Title**" — which
+        // the digest assembler has just added as "## Title" above. Strip the
+        // leading title line so the same headline doesn't render twice.
+        var sectionContent = _stripLeadingTitleLine(it.content || '', it.feature_title || '');
         var existingImgMatch = sectionContent.match(/\[image:\s*([^\]]+)\]/);
         if (img && img.dataUrl) {
             if (existingImgMatch) {
