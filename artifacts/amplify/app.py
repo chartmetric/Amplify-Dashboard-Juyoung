@@ -2556,7 +2556,42 @@ def preview_email():
         videos = _build_video_map(feature_id)
     # Match the send path: only show videos the body actually references.
     videos = _filter_videos_to_body_refs(videos, content)
-    html = render_email_html(subject, content, images=images, from_name=from_name, videos=videos)
+    # Mint a token + persist the preview so the footer's "View in
+    # browser" link works from the in-app preview too. The actual send
+    # path mints a separate token, so test previews don't collide with
+    # real sent messages.
+    import secrets as _secrets
+    from integrations.sendgrid_client import _save_hosted_email, _build_view_in_browser_url
+    view_token = _secrets.token_urlsafe(16)
+    view_url = _build_view_in_browser_url(view_token)
+    html = render_email_html(subject, content, images=images, from_name=from_name, videos=videos, view_url=view_url)
+    _save_hosted_email(view_token, html)
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/email/view/<token>", methods=["GET"])
+def view_hosted_email(token):
+    """Serve the rendered HTML of a previously-sent (or previewed) email.
+
+    Tokens are random base64url strings minted in `send_email` /
+    `preview_email`. They're unguessable, so we don't require auth, but
+    we also don't expose any listing endpoint.
+    """
+    from integrations.sendgrid_client import load_hosted_email
+    html = load_hosted_email(token)
+    if html is None:
+        return (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            "<title>Email not available</title></head>"
+            "<body style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;"
+            "max-width:520px;margin:80px auto;padding:0 24px;color:#333;line-height:1.6;\">"
+            "<h2 style='margin:0 0 12px 0;color:#1a1d23;'>This email is no longer available</h2>"
+            "<p style='margin:0;color:#666;'>The link may have expired or the message was never sent. "
+            "If you believe this is a mistake, contact the sender.</p>"
+            "</body></html>",
+            404,
+            {"Content-Type": "text/html; charset=utf-8"},
+        )
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 

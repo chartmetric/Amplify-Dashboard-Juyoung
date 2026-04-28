@@ -117,6 +117,86 @@ def _get_base_url() -> str:
     return "http://localhost:5000"
 
 
+# Hosted-email store: when an email is sent (or previewed), we persist the
+# rendered HTML under a random token so the recipient's "View in browser"
+# link can fetch it from /email/view/<token>. Tokens are unguessable
+# (secrets.token_urlsafe(16) ~> 22 chars of base64url) so we don't need
+# auth for the read endpoint.
+HOSTED_EMAILS_DIR = os.path.realpath(
+    os.path.join(os.path.dirname(__file__), "..", ".hosted_emails")
+)
+
+
+def _save_hosted_email(token: str, html: str) -> bool:
+    """Persist `html` so /email/view/<token> can serve it later.
+
+    Best effort: a write failure logs but does not raise, so a transient
+    disk problem can't block an outbound email send.
+    """
+    if not token or not html:
+        return False
+    try:
+        os.makedirs(HOSTED_EMAILS_DIR, exist_ok=True)
+        # Token is base64url so it's already filesystem-safe, but we still
+        # strip path separators defensively.
+        safe = "".join(c for c in token if c.isalnum() or c in "-_")
+        if not safe:
+            return False
+        path = os.path.join(HOSTED_EMAILS_DIR, f"{safe}.html")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(html)
+        return True
+    except Exception as e:
+        # Tokens are effectively bearer secrets (anyone with the URL can
+        # read the hosted email), so log only a short prefix instead of
+        # the full value.
+        logger.warning(f"[hosted_email] save failed for token=<{token[:4]}...>: {e}")
+        return False
+
+
+def load_hosted_email(token: str) -> str | None:
+    """Return the stored HTML for `token` or None if missing/invalid."""
+    if not token:
+        return None
+    safe = "".join(c for c in token if c.isalnum() or c in "-_")
+    if not safe:
+        return None
+    path = os.path.join(HOSTED_EMAILS_DIR, f"{safe}.html")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        # See note in _save_hosted_email — never log the full token.
+        logger.warning(f"[hosted_email] load failed for token=<{token[:4]}...>: {e}")
+        return None
+
+
+def _build_view_in_browser_url(token: str) -> str:
+    return f"{_get_base_url()}/email/view/{token}"
+
+
+def _render_footer_links_html(view_url: str = None) -> str:
+    """Render the "View in browser · Privacy Policy" footer line.
+
+    When ``view_url`` is provided, "View in browser" links to that hosted
+    HTML page (the same content the recipient just opened, served from
+    /email/view/<token>). When it's None, we fall back to the marketing
+    homepage rather than emitting a dead link.
+    """
+    safe_view = _esc(view_url) if view_url else "https://chartmetric.com"
+    return (
+        '<p style="margin:0 0 6px 0;color:#999999;font-size:12px;line-height:1.6;">'
+        f'<a href="{safe_view}" target="_blank" rel="noopener noreferrer" '
+        'style="color:#999999;text-decoration:underline;">View in browser</a>'
+        '&nbsp;&middot;&nbsp;'
+        '<a href="https://chartmetric.com/privacy-policy" target="_blank" '
+        'rel="noopener noreferrer" style="color:#999999;text-decoration:underline;">Privacy Policy</a>'
+        '</p>'
+    )
+
+
 class MediaResolutionError(Exception):
     """Raised when an `[image: ...]` or `[video: ...]` marker in an email
     body cannot be resolved to a real hosted asset at send time.
@@ -388,7 +468,7 @@ def _composited_external_thumb_url(remote_thumb_url: str) -> str:
         return remote_thumb_url
 
 
-def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None, from_name: str = None, videos: dict = None, strict: bool = False) -> str:
+def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None, from_name: str = None, videos: dict = None, strict: bool = False, view_url: str = None) -> str:
     """Render an email body to HTML.
 
     When ``strict`` is True, raise ``MediaResolutionError`` if any
@@ -620,11 +700,7 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 <tr><td style="background:#ffffff;padding:32px;border-radius:{body_radius};">
 {body_html}
 <hr style="border:none;border-top:1px solid #e8e8eb;margin:28px 0 16px 0;">
-<p style="margin:0 0 6px 0;color:#999999;font-size:12px;line-height:1.6;">
-<a href="https://chartmetric.com" target="_blank" rel="noopener noreferrer" style="color:#999999;text-decoration:underline;">View in browser</a>
-&nbsp;&middot;&nbsp;
-<a href="https://chartmetric.com/privacy-policy" target="_blank" rel="noopener noreferrer" style="color:#999999;text-decoration:underline;">Privacy Policy</a>
-</p>
+{_render_footer_links_html(view_url)}
 <p style="margin:0;color:#999999;font-size:12px;line-height:1.6;">&copy; {_current_year()} Chartmetric, Inc.</p>
 </td></tr>
 </table>
@@ -768,10 +844,21 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
 
     hosted_images = _build_hosted_image_map(images)
     bcc_list = [e.strip() for e in (bcc_email or "").split(",") if e.strip()] if bcc_email else None
+
+    # Generate the "View in browser" token BEFORE rendering so the
+    # rendered HTML's footer link can point at the same hosted page that
+    # we're about to persist. The token is unguessable
+    # (secrets.token_urlsafe(16)) so /email/view/<token> doesn't need
+    # auth — only people who received the email or have the URL can read
+    # it.
+    import secrets as _secrets
+    view_token = _secrets.token_urlsafe(16)
+    view_url = _build_view_in_browser_url(view_token)
+
     try:
         html_content = render_email_html(
             final_subject, body, images=hosted_images, from_name=from_name,
-            videos=videos, strict=True,
+            videos=videos, strict=True, view_url=view_url,
         )
     except MediaResolutionError as _mre:
         logger.warning(
@@ -804,6 +891,15 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     if result:
         if skipped_videos:
             result["skipped_videos"] = skipped_videos
+        # Persist the rendered HTML so the "View in browser" link in the
+        # footer resolves to the same content the recipient just opened.
+        # Save AFTER send so we don't host pages for emails that failed
+        # to dispatch (the token in the HTML is now effectively dead in
+        # that case, which is the desired behavior).
+        if result.get("success"):
+            _save_hosted_email(view_token, html_content)
+            result["view_url"] = view_url
+            result["view_token"] = view_token
         return result
 
     return {
