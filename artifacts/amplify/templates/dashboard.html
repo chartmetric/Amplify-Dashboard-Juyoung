@@ -1446,6 +1446,30 @@
         .batch-actions-top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
         .batch-approved-count { font-size: 13px; color: var(--text-muted); font-weight: 500; }
         .batch-results-list { display: flex; flex-direction: column; gap: 14px; padding-bottom: 80px; }
+        .batch-empty-state {
+            background: var(--bg-card); border: 1px dashed var(--border); border-radius: 12px;
+            padding: 40px 24px; text-align: center; color: var(--text-muted); margin: 8px 0;
+        }
+        .batch-empty-state.is-error { border-color: rgba(239, 68, 68, 0.45); }
+        .batch-empty-state-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.7; }
+        .batch-empty-state-title { color: var(--text-body); font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+        .batch-empty-state-desc {
+            font-size: 13px; line-height: 1.5; margin-bottom: 18px;
+            max-width: 480px; margin-left: auto; margin-right: auto;
+        }
+        .batch-empty-state-actions { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
+        .batch-empty-state-primary {
+            background: var(--accent); color: var(--cta-text); border: none;
+            padding: 10px 20px; border-radius: 6px; font-size: 13px; font-weight: 600;
+            cursor: pointer; font-family: inherit;
+        }
+        .batch-empty-state-primary:hover { background: var(--accent-hover); }
+        .batch-empty-state-link {
+            background: transparent; border: 1px solid var(--border); color: var(--text-body);
+            padding: 10px 16px; border-radius: 6px; font-size: 13px; font-weight: 500;
+            cursor: pointer; font-family: inherit;
+        }
+        .batch-empty-state-link:hover { border-color: var(--border-hover, var(--accent)); color: var(--text-body); }
         .batch-item {
             background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
             transition: border-color 0.2s, transform 0.2s, background-color 0.2s;
@@ -10050,11 +10074,92 @@ function deleteEmailDraft(id) {
     .catch(function(err) { showToast('Delete failed: ' + err.message, 'error'); });
 }
 
+// ---------------------------------------------------------------------------
+// Step 3 empty / error states.
+//
+// Step 3 (the per-feature review list) used to render with the action bars
+// visible but no feature cards, no progress, and no message — leaving the
+// marketer staring at an empty dark area with a misleading "0/0 approved".
+// We now keep the bars hidden whenever the list is empty and surface a
+// friendly empty state with the right copy + a primary recovery action,
+// so the user always knows why nothing is showing and how to move forward.
+// ---------------------------------------------------------------------------
+function setBatchActionBarsVisible(show) {
+    var top = document.getElementById('batch-actions-top');
+    var bot = document.getElementById('batch-bottom-bar');
+    if (top) top.style.display = show ? 'flex' : 'none';
+    if (bot) bot.style.display = show ? 'flex' : 'none';
+}
+
+function clearBatchEmptyState() {
+    var existing = document.getElementById('batch-empty-state');
+    if (existing) existing.remove();
+}
+
+// variant: 'no-results' | 'failed' | 'restored-empty'
+// opts.message: optional error detail used by the 'failed' variant
+function renderBatchEmptyState(variant, opts) {
+    var list = document.getElementById('batch-results-list');
+    if (!list) return;
+    opts = opts || {};
+    setBatchActionBarsVisible(false);
+    var icon, title, desc, primaryLabel, primaryFn, isError = false, showBack = true;
+    if (variant === 'failed') {
+        icon = '\u26A0\uFE0F';
+        title = 'Generation failed';
+        desc = opts.message
+            ? ('We couldn\'t generate drafts: ' + opts.message + '. Try again, or head back to adjust your selection.')
+            : 'We couldn\'t generate drafts for these features. Try again, or head back to adjust your selection.';
+        primaryLabel = 'Retry generation';
+        primaryFn = 'startBatchGeneration()';
+        isError = true;
+    } else if (variant === 'restored-empty') {
+        icon = '\uD83D\uDCC4';
+        title = 'This saved draft has no results yet';
+        desc = 'The draft you restored doesn\'t contain any generated features. Regenerate to fill it in, or pick different features.';
+        primaryLabel = 'Regenerate all';
+        primaryFn = 'startBatchGeneration()';
+    } else {
+        icon = '\u2728';
+        title = 'No drafts yet';
+        desc = 'There\'s nothing generated for the selected features yet. Kick off a generation to see drafts here.';
+        primaryLabel = 'Regenerate all';
+        primaryFn = 'startBatchGeneration()';
+    }
+    list.innerHTML = '';
+    var wrap = document.createElement('div');
+    wrap.className = 'batch-empty-state' + (isError ? ' is-error' : '');
+    wrap.id = 'batch-empty-state';
+    var backBtn = showBack
+        ? '<button type="button" class="batch-empty-state-link" onclick="prepBatchResults=[];prepGoToStep(2)">&larr; Back to feature selection</button>'
+        : '';
+    wrap.innerHTML =
+        '<div class="batch-empty-state-icon">' + icon + '</div>' +
+        '<div class="batch-empty-state-title">' + escHtml(title) + '</div>' +
+        '<div class="batch-empty-state-desc">' + escHtml(desc) + '</div>' +
+        '<div class="batch-empty-state-actions">' +
+            '<button type="button" class="batch-empty-state-primary" onclick="' + primaryFn + '">' + escHtml(primaryLabel) + '</button>' +
+            backBtn +
+        '</div>';
+    list.appendChild(wrap);
+    var pw = document.getElementById('batch-progress');
+    if (pw) pw.style.display = 'none';
+}
+
 function _rebuildBatchListFromState() {
     var list = document.getElementById('batch-results-list');
     if (!list) return;
     list.innerHTML = '';
     var results = prepBatchResults || [];
+    if (!results.length) {
+        // Restored draft (or any rebuild) with no results — surface the
+        // empty state instead of an empty dark area with bars hovering above.
+        renderBatchEmptyState('restored-empty');
+        try { renderBatchEmailSubjectRow(); } catch (_e) {}
+        try { updateBatchApprovalCount(); } catch (_e) {}
+        return;
+    }
+    clearBatchEmptyState();
     for (var idx = 0; idx < results.length; idx++) {
         var r = results[idx] || {};
         var item = buildBatchItem(r, idx);
@@ -10070,10 +10175,7 @@ function _rebuildBatchListFromState() {
     try { renderDigestModeBanner(); } catch (_e) {}
     try { updateBatchApprovalCount(); } catch (_e) {}
     try { initBatchDragDrop(); } catch (_e) {}
-    var topBar = document.getElementById('batch-actions-top');
-    var botBar = document.getElementById('batch-bottom-bar');
-    if (topBar) topBar.style.display = 'flex';
-    if (botBar) botBar.style.display = 'flex';
+    setBatchActionBarsVisible(true);
 }
 
 function loadEmailDraft(id) {
@@ -10131,6 +10233,12 @@ function loadEmailDraft(id) {
         // (not state), so without this rebuild it would show "No approved items".
         prepGoToStep(3);
         _rebuildBatchListFromState();
+        if (!results.length) {
+            // Saved draft with no generated features — land on the Step 3
+            // empty state so the user can regenerate or back out, instead
+            // of dropping them into a broken Step 4 with nothing to preview.
+            return;
+        }
         // Now jump to step 4 — renderCombinedPreview will see the populated list.
         prepGoToStep(4);
         setTimeout(_applyRestoredCombinedFields, 80);
@@ -10296,19 +10404,30 @@ function prepGoToStep(step) {
     if (step === 1) { renderUseCaseGrid(); renderDraftsBar(); }
     if (step === 2) renderFeaturePicker();
     if (step === 3) {
-        if (prepBatchResults.length === 0) startBatchGeneration();
-        else {
-            // We already have results in memory (e.g. user navigated back from
-            // step 4, or restored a draft). Rebuild the card list into
-            // #batch-results-list — without this, the action bars show but the
-            // body stays empty and the user thinks the screen is broken.
+        if (prepBatchResults.length === 0) {
+            // Only auto-trigger generation when there's something to
+            // generate. With zero selected features we'd otherwise bounce
+            // straight back to step 2 from inside startBatchGeneration —
+            // this lets the user see and act on the empty state instead.
+            var selectedCount = Object.keys(prepSelectedIds || {}).length;
+            if (selectedCount > 0) {
+                startBatchGeneration();
+            } else {
+                renderBatchEmptyState('no-results');
+            }
+        } else {
+            // We already have results in memory (e.g. user navigated back
+            // from step 4, or restored a draft). If the DOM cards are
+            // missing, rebuild them — otherwise just clear any prior empty
+            // state and show the action bars. _rebuildBatchListFromState
+            // already handles bar visibility + empty state internally.
             var _list = document.getElementById('batch-results-list');
-            var _hasCards = _list && _list.children && _list.children.length > 0;
+            var _hasCards = _list && _list.querySelector('.batch-item');
             if (!_hasCards && typeof _rebuildBatchListFromState === 'function') {
                 _rebuildBatchListFromState();
             } else {
-                document.getElementById('batch-actions-top').style.display = 'flex';
-                document.getElementById('batch-bottom-bar').style.display = 'flex';
+                clearBatchEmptyState();
+                setBatchActionBarsVisible(true);
             }
         }
         renderBatchEmailSubjectRow();
@@ -10751,8 +10870,8 @@ function startBatchGeneration() {
     window.prepBatchLinks = {};
     window.prepBatchChannel = prepChannel;
     document.getElementById('batch-results-list').innerHTML = '';
-    document.getElementById('batch-actions-top').style.display = 'none';
-    document.getElementById('batch-bottom-bar').style.display = 'none';
+    clearBatchEmptyState();
+    setBatchActionBarsVisible(false);
 
     var progressWrap = document.getElementById('batch-progress');
     progressWrap.style.display = 'block';
@@ -10767,7 +10886,15 @@ function startBatchGeneration() {
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        if (data.error) { showToast('Batch generation failed: ' + data.error, 'error'); return; }
+        if (data.error) {
+            // Surface a persistent failure state instead of relying on a
+            // toast that fades away — otherwise the user is left staring
+            // at a blank Step 3 with no way to recover.
+            progressWrap.style.display = 'none';
+            showToast('Batch generation failed: ' + data.error, 'error');
+            renderBatchEmptyState('failed', { message: data.error });
+            return;
+        }
 
         prepBatchResults = data.results || [];
         try {
@@ -10884,15 +11011,24 @@ function startBatchGeneration() {
         progressWrap.style.display = 'none';
         document.getElementById('batch-progress-fill').style.width = '100%';
         document.getElementById('batch-progress-text').textContent = 'Done! ' + data.succeeded + '/' + data.total + ' succeeded';
-        document.getElementById('batch-actions-top').style.display = 'flex';
-        document.getElementById('batch-bottom-bar').style.display = 'flex';
+        if (!prepBatchResults.length) {
+            // Backend returned no results at all — surface the failure state
+            // so the user has somewhere to retry from instead of an empty
+            // dark area beneath bars that read "0/0 approved".
+            renderBatchEmptyState('failed', { message: 'no drafts were generated' });
+            return;
+        }
+        setBatchActionBarsVisible(true);
         renderDigestModeBanner();
         updateBatchApprovalCount();
         initBatchDragDrop();
     })
     .catch(function(err) {
+        // Persist the failure as a visible empty/error state in the list
+        // area instead of relying solely on a transient toast.
         progressWrap.style.display = 'none';
         showToast('Error: ' + err.message, 'error');
+        renderBatchEmptyState('failed', { message: err && err.message ? err.message : '' });
     });
 }
 
@@ -11390,6 +11526,11 @@ function updateBatchApprovalCount() {
     var el2 = document.getElementById('batch-approved-count-bottom');
     if (el1) el1.textContent = txt;
     if (el2) el2.textContent = txt;
+    // Defensive: never let the action bars (and their misleading
+    // "0/0 approved" counter) sit on screen with an empty results list.
+    // Every path that builds the list is responsible for showing the
+    // bars, but this guarantees we don't regress that invariant.
+    if (total === 0) setBatchActionBarsVisible(false);
     var btn = document.getElementById('btn-preview-combined');
     if (btn) {
         btn.disabled = approved === 0;
