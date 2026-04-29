@@ -9816,12 +9816,23 @@ function doPublishToChannel(chKey) {
             // recipient out of this topic only, not the audience.
             if (topicId) payload.topic_id = topicId;
         } else if (audId && audId !== '__custom__') {
-            // The marketer picked a real audience but the contact list
-            // failed to resolve (most often because the topic filter
-            // could not verify subscriptions and fail-safed). Block
-            // the send instead of silently downgrading to a test send,
-            // which would skip the recipient list entirely.
-            showToast('We could not load this audience under the picked topic, so the send was blocked. Try again or pick a different topic.', 'error');
+            // The marketer picked a real audience but the contact
+            // list isn't usable. Two distinct cases land here, both
+            // must block the send (no silent test-send downgrade):
+            //   - audContacts === null   -> contact load failed
+            //                                (most often because the
+            //                                topic filter could not
+            //                                verify subscriptions).
+            //   - audContacts.length === 0 -> load succeeded but every
+            //                                eligible recipient is
+            //                                opted out of this topic.
+            var msg;
+            if (audContacts === null) {
+                msg = 'We could not load this audience under the picked topic, so the send was blocked. Try again or pick a different topic.';
+            } else {
+                msg = 'Everyone in this audience is opted out of the picked topic, so there is nobody to send to.';
+            }
+            showToast(msg, 'error');
             publishingInFlight[chKey] = false;
             return;
         } else {
@@ -13601,11 +13612,17 @@ function publishCombinedEmail() {
             + _buildRecipientPreviewHtml(audContacts, audContacts.length)
             + '</div>';
     } else if (audId && audId !== '__custom__') {
-        // Audience picked but the contact list never loaded (most often
-        // because the topic filter fail-safed). Surface that explicitly
-        // so the marketer doesn't think the dropdown is empty by
-        // accident.
-        showToast('We could not load this audience under the picked topic, so the send was blocked. Try again or pick a different topic.', 'error');
+        // Audience picked but the contact list isn't usable. Same two
+        // distinct cases as the single-channel send path; tell the
+        // marketer which one happened so they know whether to retry
+        // or to pick a different topic.
+        var combinedMsg;
+        if (audContacts === null) {
+            combinedMsg = 'We could not load this audience under the picked topic, so the send was blocked. Try again or pick a different topic.';
+        } else {
+            combinedMsg = 'Everyone in this audience is opted out of the picked topic, so there is nobody to send to.';
+        }
+        showToast(combinedMsg, 'error');
         return;
     } else {
         showToast('Pick a segment or choose "Custom emails..." before sending', 'error');
