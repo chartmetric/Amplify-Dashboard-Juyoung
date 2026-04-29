@@ -2604,7 +2604,20 @@ def preview_email():
     from integrations.sendgrid_client import _save_hosted_email, _build_view_in_browser_url
     view_token = _secrets.token_urlsafe(16)
     view_url = _build_view_in_browser_url(view_token)
-    html = render_email_html(subject, content, images=images, from_name=from_name, videos=videos, view_url=view_url)
+    # Show the "Unsubscribe" link in the preview footer so the marketer
+    # can verify it's there before sending. Real sends substitute a
+    # signed per-recipient URL into UNSUBSCRIBE_PLACEHOLDER; for preview
+    # we point at "#" so the link renders but clicking it does nothing
+    # (the preview has no recipient context to unsubscribe).
+    html = render_email_html(
+        subject,
+        content,
+        images=images,
+        from_name=from_name,
+        videos=videos,
+        view_url=view_url,
+        unsubscribe_placeholder="#",
+    )
     _save_hosted_email(view_token, html)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
