@@ -247,12 +247,18 @@ def _b64url_decode(s: str) -> bytes:
     return base64.urlsafe_b64decode((s + pad).encode("ascii"))
 
 
-def make_unsubscribe_token(audience_id: str, email: str) -> str:
-    """Sign (audience_id, email, issued_at) so a recipient cannot tamper with
-    the unsubscribe URL or unsubscribe someone else.
+def make_unsubscribe_token(audience_id: str, email: str, topic_id: str = "") -> str:
+    """Sign (audience_id, email, topic_id, issued_at) so a recipient cannot
+    tamper with the unsubscribe URL or unsubscribe someone else.
 
     Token format: base64url(payload_json) + "." + base64url(hmac_sha256).
     No expiry is enforced — recipients sometimes open emails months later.
+
+    The ``topic_id`` field was added when we moved from audience-wide
+    unsubscribe (Task #73) to per-topic opt-out (Task #77). Tokens minted
+    before that change had no ``tp`` field; ``verify_unsubscribe_token``
+    returns those with an empty ``topic_id`` and the route falls back to
+    the legacy audience-wide unsubscribe path so old links still work.
 
     Returns an empty string when SESSION_SECRET is missing or set to a
     known insecure default; callers should treat that as "skip the link".
@@ -266,6 +272,7 @@ def make_unsubscribe_token(audience_id: str, email: str) -> str:
         "a": (audience_id or "").strip(),
         "e": (email or "").strip().lower(),
         "t": int(_t.time()),
+        "tp": (topic_id or "").strip(),
     }
     payload_b = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     sig = hmac.new(key, payload_b, hashlib.sha256).digest()
@@ -273,8 +280,13 @@ def make_unsubscribe_token(audience_id: str, email: str) -> str:
 
 
 def verify_unsubscribe_token(token: str) -> dict | None:
-    """Return ``{"audience_id", "email", "issued_at"}`` if the token is valid
-    and untampered, else ``None``.
+    """Return ``{"audience_id", "email", "topic_id", "issued_at"}`` if the
+    token is valid and untampered, else ``None``.
+
+    Tokens minted before per-topic unsubscribe (Task #77) have no ``tp``
+    field; this returns ``topic_id=""`` for those so the route can fall
+    back to the legacy audience-wide unsubscribe path. Newer tokens
+    always carry ``tp``.
 
     Returns ``None`` when SESSION_SECRET is missing or insecure, so any
     forged or replayed token is rejected (fail closed).
@@ -298,19 +310,21 @@ def verify_unsubscribe_token(token: str) -> dict | None:
         return None
     email = (payload.get("e") or "").strip().lower()
     audience_id = (payload.get("a") or "").strip()
+    topic_id = (payload.get("tp") or "").strip()
     if not email:
         return None
     return {
         "audience_id": audience_id,
         "email": email,
+        "topic_id": topic_id,
         "issued_at": int(payload.get("t") or 0),
     }
 
 
-def build_unsubscribe_url(audience_id: str, email: str) -> str:
+def build_unsubscribe_url(audience_id: str, email: str, topic_id: str = "") -> str:
     """Return the full hosted unsubscribe URL for a recipient, or an empty
     string when no token can be safely minted (insecure SESSION_SECRET)."""
-    token = make_unsubscribe_token(audience_id, email)
+    token = make_unsubscribe_token(audience_id, email, topic_id=topic_id)
     if not token:
         return ""
     return f"{_get_base_url()}/email/unsubscribe?token={token}"
@@ -965,7 +979,7 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 </html>"""
 
 
-def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: bool, attachments: list = None, from_name: str = None, template_id: str = None, bcc_emails: list = None, audience_id: str = None) -> dict | None:
+def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: bool, attachments: list = None, from_name: str = None, template_id: str = None, bcc_emails: list = None, audience_id: str = None, topic_id: str = None) -> dict | None:
     import time as _time
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
@@ -978,6 +992,7 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
     display_name = from_name or "Chartmetric"
     sender = f"{display_name} <{from_email}>"
     aud_id_clean = (audience_id or "").strip()
+    topic_id_clean = (topic_id or "").strip()
     has_placeholder = bool(aud_id_clean) and (UNSUBSCRIBE_PLACEHOLDER in (html_content or ""))
     email_list = []
     for addr in to_emails:
@@ -992,8 +1007,12 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
         # and custom one-off addresses we pass no audience_id, the footer
         # has no placeholder, and we skip the List-Unsubscribe header so
         # mail clients don't show a non-functional opt-out button.
+        # When topic_id is set, the link/header opt the recipient out of
+        # this topic only (workspace-wide, across audiences). Without a
+        # topic_id, the link falls back to audience-wide unsubscribe so
+        # legacy callers still work.
         if aud_id_clean:
-            unsub_url = build_unsubscribe_url(aud_id_clean, addr)
+            unsub_url = build_unsubscribe_url(aud_id_clean, addr, topic_id=topic_id_clean)
             if unsub_url:
                 if has_placeholder and per_recipient_html:
                     per_recipient_html = per_recipient_html.replace(UNSUBSCRIBE_PLACEHOLDER, unsub_url)
@@ -1098,7 +1117,7 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
     return None
 
 
-def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None, from_name: str = None, template_id: str = None, videos: dict = None, bcc_email: str = None, audience_id: str = None) -> dict:
+def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None, from_name: str = None, template_id: str = None, videos: dict = None, bcc_email: str = None, audience_id: str = None, topic_id: str = None) -> dict:
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
     test_email = os.environ.get("SENDGRID_TEST_EMAIL", "") or os.environ.get("RESEND_FROM_EMAIL", "")
@@ -1165,10 +1184,55 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     view_url = _build_view_in_browser_url(view_token)
 
     aud_id_clean = (audience_id or "").strip()
-    # Only emit the unsubscribe footer link when we have an audience to flip
-    # the contact's unsubscribed flag on. Test sends and custom typed-in
+    topic_id_clean = (topic_id or "").strip()
+    # Only emit the unsubscribe footer link when we have an audience to
+    # flip a topic subscription on. Test sends and custom typed-in
     # recipient lists render without the link so we never ship a dead URL.
     unsub_placeholder = UNSUBSCRIBE_PLACEHOLDER if aud_id_clean else None
+
+    # Per-topic opt-out filter (Task #77): drop recipients who have
+    # opted out of this topic before we render or send. Topic state is
+    # workspace-level in Resend, so a recipient who opted out of
+    # "Product Update" in Audience A is also dropped from Audience B's
+    # next "Product Update" send. The audience-wide ``unsubscribed``
+    # flag is already filtered upstream in
+    # ``/api/resend/audiences/<id>/contacts``; this is the second layer
+    # specific to the topic.
+    if aud_id_clean and topic_id_clean and recipients:
+        before_n = len(recipients)
+        topic_filter = filter_emails_by_topic_subscription(recipients, topic_id_clean)
+        # Fail-safe: if any recipient could not be resolved against
+        # Resend topics, abort the whole send. Sending to a partial
+        # subset would risk emailing an opted-out contact.
+        if not topic_filter.get("ok"):
+            logger.error(
+                f"[email] Topic filter could not resolve all recipients for topic "
+                f"<{topic_id_clean[:8]}...>; aborting send. errors={topic_filter.get('errors')}"
+            )
+            return {
+                "success": False,
+                "error": topic_filter.get("error") or (
+                    "Could not verify topic subscriptions. The send was blocked."
+                ),
+                "topic_filter_error": True,
+            }
+        recipients = topic_filter.get("kept") or []
+        if len(recipients) < before_n:
+            logger.info(
+                f"[email] Topic filter dropped {before_n - len(recipients)} recipient(s) "
+                f"opted out of topic <{topic_id_clean[:8]}...> "
+                f"(kept {len(recipients)}/{before_n}, default={topic_filter.get('default_subscription')!r})"
+            )
+        if not recipients:
+            logger.warning(
+                f"[email] All recipients opted out of topic <{topic_id_clean[:8]}...>; nothing to send"
+            )
+            return {
+                "success": False,
+                "error": "Every recipient is opted out of this topic, so no email was sent.",
+                "topic_filtered": True,
+            }
+        recipients_str = ", ".join(recipients)
     try:
         html_content = render_email_html(
             final_subject, body, images=hosted_images, from_name=from_name,
@@ -1202,7 +1266,7 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
         video_attachments, skipped_videos = _build_video_attachments(videos)
     else:
         video_attachments, skipped_videos = [], []
-    result = _send_via_resend(final_subject, html_content, recipients, is_test, attachments=video_attachments or None, from_name=from_name, template_id=template_id, bcc_emails=bcc_list, audience_id=aud_id_clean or None)
+    result = _send_via_resend(final_subject, html_content, recipients, is_test, attachments=video_attachments or None, from_name=from_name, template_id=template_id, bcc_emails=bcc_list, audience_id=aud_id_clean or None, topic_id=topic_id_clean or None)
     if result:
         if skipped_videos:
             result["skipped_videos"] = skipped_videos
@@ -1385,3 +1449,273 @@ def list_resend_templates() -> list:
     except Exception as e:
         logger.error(f"[resend] Failed to list templates: {e}")
         return []
+
+
+# ---------------------------------------------------------------------------
+# Resend Topics (per-topic unsubscribe — Task #77)
+# ---------------------------------------------------------------------------
+#
+# Resend's Topics API stores subscription state at the workspace level
+# (per email + topic), not per audience. That means an opt-out on
+# "Product Update" applies to every audience that sends the same topic.
+# We use it instead of custom contact properties because custom
+# properties only work on global contacts, not on audience contacts.
+#
+# Helpers below are thin wrappers around the SDK so the route + send
+# code never has to know about resend SDK internals or response shapes.
+
+
+def _topic_to_dict(t) -> dict:
+    """Normalize a Topic (dict or model) to a plain dict for JSON output."""
+    if isinstance(t, dict):
+        return {
+            "id": t.get("id", "") or "",
+            "name": t.get("name", "") or "",
+            "description": t.get("description", "") or "",
+            "default_subscription": (t.get("default_subscription") or "opt_in"),
+        }
+    return {
+        "id": getattr(t, "id", "") or "",
+        "name": getattr(t, "name", "") or "",
+        "description": getattr(t, "description", "") or "",
+        "default_subscription": getattr(t, "default_subscription", "opt_in") or "opt_in",
+    }
+
+
+def list_resend_topics() -> list:
+    """Return all workspace topics as a list of plain dicts.
+
+    Topics are managed in the Resend dashboard. The dashboard's topic
+    picker calls this to populate its dropdown.
+    """
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    if not resend_api_key:
+        return []
+    import resend
+    resend.api_key = resend_api_key
+    try:
+        resp = resend.Topics.list()
+        if isinstance(resp, dict):
+            data = resp.get("data", []) or []
+        elif isinstance(resp, list):
+            data = resp
+        else:
+            data = list(getattr(resp, "data", []) or [])
+        return [_topic_to_dict(t) for t in data]
+    except Exception as e:
+        logger.error(f"[resend] Failed to list topics: {e}")
+        return []
+
+
+def get_resend_topic(topic_id: str) -> dict | None:
+    """Fetch a single topic by id, or ``None`` on failure.
+
+    Used by the hosted unsubscribe page so we can show the topic's name
+    in the confirmation message ("Confirm unsubscribe from Product
+    Update emails").
+    """
+    tid = (topic_id or "").strip()
+    if not tid:
+        return None
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    if not resend_api_key:
+        return None
+    import resend
+    resend.api_key = resend_api_key
+    try:
+        resp = resend.Topics.get(tid)
+        return _topic_to_dict(resp) if resp else None
+    except Exception as e:
+        logger.warning(f"[resend] Failed to fetch topic <{tid[:8]}...>: {e}")
+        return None
+
+
+def _list_contact_topic_subs(email: str) -> tuple:
+    """Return ``(subs, status)`` for a contact's topic subscriptions.
+
+    ``status`` is one of:
+      * ``"ok"``      — list returned (possibly empty); treat the
+                        absence of an entry for a given topic as "no
+                        explicit record, fall back to topic default".
+      * ``"not_found"`` — contact has no global ContactsTopics record
+                        yet (HTTP 404). Identical effect to ``ok`` with
+                        an empty list.
+      * ``"error"``   — Resend was reached but failed for another
+                        reason, OR the SDK is missing/misconfigured. The
+                        caller MUST fail-safe (do not assume
+                        subscribed).
+    """
+    em = (email or "").strip().lower()
+    if not em:
+        return ([], "ok")
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    if not resend_api_key:
+        # No API key means we cannot prove subscription state. Fail-safe
+        # so we don't silently send to opted-out contacts after a config
+        # rotation.
+        return ([], "error")
+    import resend
+    resend.api_key = resend_api_key
+    try:
+        resp = resend.ContactsTopics.list(email=em)
+        if isinstance(resp, dict):
+            return (resp.get("data", []) or [], "ok")
+        if isinstance(resp, list):
+            return (resp, "ok")
+        return (list(getattr(resp, "data", []) or []), "ok")
+    except Exception as e:
+        err_str = str(e).lower()
+        if "not found" in err_str or "404" in err_str:
+            return ([], "not_found")
+        logger.warning(f"[resend] Failed to list contact topics for <{em[:3]}...>: {e}")
+        return ([], "error")
+
+
+def filter_emails_by_topic_subscription(emails: list, topic_id: str) -> dict:
+    """Return effective opt-in recipients for ``topic_id``.
+
+    Effective subscription resolution per recipient:
+      1. If the contact has an explicit ContactTopic entry for
+         ``topic_id``, use it (``opt_in`` / ``opt_out``).
+      2. Otherwise fall back to the topic's ``default_subscription``.
+      3. If the recipient's subscription state cannot be resolved
+         reliably (Resend API error, missing key, or the topic itself
+         could not be fetched), the recipient is reported as an error
+         so the caller can fail-safe and abort the send. CAN-SPAM /
+         compliance: when in doubt, do not send.
+
+    Returns a dict::
+
+        {
+          "ok": bool,                # False if any errors OR topic
+                                     # itself could not be fetched
+          "kept": list[str],         # effective opt-ins
+          "dropped_opt_out": int,    # explicitly opted out
+          "errors": int,             # could not resolve (fail-safe)
+          "default_subscription": str,  # "opt_in" | "opt_out" | ""
+          "error": str | None,
+        }
+
+    v1 N+1 implementation: one ``ContactsTopics.list`` call per
+    recipient. Acceptable at current audience sizes; can be batched
+    later.
+    """
+    if not emails or not (topic_id or "").strip():
+        return {
+            "ok": True,
+            "kept": list(emails or []),
+            "dropped_opt_out": 0,
+            "errors": 0,
+            "default_subscription": "",
+            "error": None,
+        }
+    tid = topic_id.strip()
+    # Look up the topic so we know the default subscription. If we can't
+    # fetch it, fail-safe: we don't know what to do with contacts that
+    # have no explicit record, so refuse the whole send.
+    topic = get_resend_topic(tid)
+    if not topic:
+        return {
+            "ok": False,
+            "kept": [],
+            "dropped_opt_out": 0,
+            "errors": len([e for e in emails if (e or "").strip()]),
+            "default_subscription": "",
+            "error": (
+                "Could not look up the topic in Resend, so we cannot "
+                "verify who is opted in. The send was blocked to avoid "
+                "emailing people who may have unsubscribed."
+            ),
+        }
+    default_sub = (topic.get("default_subscription") or "opt_in").lower()
+    if default_sub not in ("opt_in", "opt_out"):
+        default_sub = "opt_in"
+    kept = []
+    dropped = 0
+    errors = 0
+    # Resend allows ~5 contact-topic reads/sec. Space requests so a
+    # mid-size audience doesn't get partially rate-limited and trip
+    # the fail-safe abort on transient 429s.
+    import time as _time_mod
+    _MIN_INTERVAL_S = 0.22
+    _last_call_at = 0.0
+    for em in emails:
+        em_clean = (em or "").strip()
+        if not em_clean:
+            continue
+        _gap = _time_mod.monotonic() - _last_call_at
+        if _gap < _MIN_INTERVAL_S:
+            _time_mod.sleep(_MIN_INTERVAL_S - _gap)
+        _last_call_at = _time_mod.monotonic()
+        subs, status = _list_contact_topic_subs(em_clean)
+        if status == "error":
+            errors += 1
+            # Fail-safe: do not send to a recipient whose subscription
+            # we cannot prove. Counted as an error so the caller can
+            # decide to abort.
+            continue
+        explicit_sub = ""
+        for s in subs:
+            sid = s.get("id") if isinstance(s, dict) else getattr(s, "id", "")
+            sub_val = (s.get("subscription") if isinstance(s, dict) else getattr(s, "subscription", "")) or ""
+            if (sid or "").strip() == tid:
+                explicit_sub = sub_val.lower()
+                break
+        effective = explicit_sub if explicit_sub in ("opt_in", "opt_out") else default_sub
+        if effective == "opt_out":
+            dropped += 1
+        else:
+            kept.append(em_clean)
+    if dropped or errors:
+        logger.info(
+            f"[resend] Topic filter: kept {len(kept)} opt-in, dropped {dropped} opt-out, "
+            f"{errors} unresolved (default={default_sub})"
+        )
+    return {
+        "ok": errors == 0,
+        "kept": kept,
+        "dropped_opt_out": dropped,
+        "errors": errors,
+        "default_subscription": default_sub,
+        "error": (
+            f"{errors} recipient(s) could not be resolved against Resend "
+            "topics. The send was blocked to avoid emailing people who "
+            "may have unsubscribed."
+        ) if errors else None,
+    }
+
+
+def unsubscribe_resend_topic(email: str, topic_id: str) -> dict:
+    """Set a contact's subscription for ``topic_id`` to ``opt_out``.
+
+    Mirrors ``unsubscribe_resend_contact``'s return shape so the route
+    can treat both the legacy (audience-wide) and new (per-topic)
+    branches the same way: ``{"success": bool, "status": "ok" |
+    "not_configured" | "not_found" | "invalid_request" |
+    "update_failed", "error"?: str}``. The topics API works by email,
+    so no audience-id round-trip is needed.
+    """
+    em = (email or "").strip().lower()
+    tid = (topic_id or "").strip()
+    if not em or not tid:
+        return {"success": False, "status": "invalid_request", "error": "email and topic_id are required"}
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    if not resend_api_key:
+        return {"success": False, "status": "not_configured", "error": "Resend is not configured (missing RESEND_API_KEY)"}
+    import resend
+    resend.api_key = resend_api_key
+    try:
+        resend.ContactsTopics.update({
+            "email": em,
+            "topics": [{"id": tid, "subscription": "opt_out"}],
+        })
+        return {"success": True, "status": "ok"}
+    except Exception as e:
+        err_str = str(e).lower()
+        if "not found" in err_str or "404" in err_str:
+            return {"success": False, "status": "not_found", "error": "Contact or topic not found"}
+        logger.exception(
+            f"[resend] Failed to opt out of topic: type={type(e).__name__} repr={e!r} "
+            f"email=<{em[:3]}...> topic=<{tid[:8]}...>"
+        )
+        return {"success": False, "status": "update_failed", "error": str(e)}

@@ -2496,6 +2496,18 @@ def publish_email():
     # List-Unsubscribe header. Empty / missing means "test send" or
     # "custom typed-in addresses" — no unsubscribe link rendered.
     audience_id = (data.get("audience_id") or data.get("audienceId") or "").strip() or None
+    # Per-topic opt-out (Task #77). Required when sending to an
+    # audience so the unsubscribe link/button has a topic to flip and
+    # so we can drop topic-opt-outs before dispatch. Test sends and
+    # custom one-off addresses ignore topic_id (they don't render a
+    # link in the first place).
+    topic_id = (data.get("topic_id") or data.get("topicId") or "").strip() or None
+    if audience_id and not topic_id:
+        logger.warning("[publish/email] REJECT audience send without topic_id (per-topic opt-out is required)")
+        return jsonify({
+            "success": False,
+            "error": "Pick a topic for this audience send. Recipients use the topic to opt out of one type of email without losing the rest.",
+        }), 400
 
     try:
         if feature_ids:
@@ -2515,7 +2527,7 @@ def publish_email():
                 f"(kept {len(videos)} referenced in body)"
             )
         logger.info(f"[publish/email] videos_attached={len(videos)} keys={list(videos.keys())[:5]}")
-        result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id, videos=videos, bcc_email=bcc_email, audience_id=audience_id)
+        result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id, videos=videos, bcc_email=bcc_email, audience_id=audience_id, topic_id=topic_id)
     except Exception as _e:
         logger.exception(f"[publish/email] UNCAUGHT exception during send: type={type(_e).__name__} repr={_e!r}")
         return jsonify({"success": False, "error": f"Server error: {type(_e).__name__}: {_e}"}), 500
@@ -2530,6 +2542,13 @@ def publish_email():
         # Unresolved [image:]/[video:] markers — return 400 so the UI
         # treats it as a user-fixable validation error, not a server
         # crash, and surfaces the names of the offending markers.
+        status_code = 400
+    elif not result.get("success") and (result.get("topic_filtered") or result.get("topic_filter_error")):
+        # Per-topic opt-out outcomes are handled business outcomes
+        # (everyone opted out, or we couldn't verify subscription
+        # state and fail-safed). They are not server crashes — 400
+        # so the UI shows the message inline instead of a generic
+        # "server error" toast.
         status_code = 400
     else:
         status_code = 200 if result.get("success") else 500
@@ -2663,6 +2682,8 @@ def email_unsubscribe():
     from integrations.sendgrid_client import (
         verify_unsubscribe_token,
         unsubscribe_resend_contact,
+        unsubscribe_resend_topic,
+        get_resend_topic,
     )
     token = (request.values.get("token") or "").strip()
     token_dbg = f"<{token[:4]}...>" if token else "<empty>"
@@ -2679,14 +2700,40 @@ def email_unsubscribe():
 
     email = payload["email"]
     audience_id = payload["audience_id"]
+    topic_id = payload.get("topic_id", "") or ""
     masked = _mask_email_for_display(email)
+
+    # Look the topic up once (per request) so both GET and POST can show
+    # the topic name. Fail soft: if the topic was deleted in Resend or
+    # the API is briefly down, we still let the unsubscribe proceed
+    # using a generic "this type of email" wording.
+    topic_name = ""
+    if topic_id:
+        topic = get_resend_topic(topic_id)
+        if topic:
+            topic_name = (topic.get("name") or "").strip()
 
     if request.method == "GET":
         action_url = f"/email/unsubscribe?token={token}"
+        if topic_id:
+            scope_label = f"<strong>{html.escape(topic_name)}</strong> emails" if topic_name else "this type of email"
+            heading = html.escape(f"Confirm unsubscribe from {topic_name} emails") if topic_name else "Confirm unsubscribe"
+            intro = (
+                f"<p style='margin:0 0 18px 0;'>You are about to unsubscribe <strong>{masked}</strong> "
+                f"from {scope_label} from Chartmetric. You will keep receiving other Chartmetric emails "
+                "you have signed up for.</p>"
+            )
+        else:
+            # Legacy token (audience-wide unsubscribe). Old links in old
+            # inboxes still work and still flip the audience flag below.
+            heading = "Confirm your unsubscribe"
+            intro = (
+                f"<p style='margin:0 0 18px 0;'>You are about to unsubscribe <strong>{masked}</strong> "
+                "from this Chartmetric mailing list. You will not receive future emails from this list once you confirm.</p>"
+            )
         body_html = (
-            f"<p style='margin:0 0 18px 0;'>You are about to unsubscribe <strong>{masked}</strong> "
-            "from this Chartmetric mailing list. You will not receive future emails from this list once you confirm.</p>"
-            f"<form method='POST' action='{action_url}' style='margin:0;'>"
+            intro
+            + f"<form method='POST' action='{action_url}' style='margin:0;'>"
             "<button type='submit' style='display:inline-block;background:#1a1d23;color:#ffffff;border:none;"
             "padding:12px 22px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;'>"
             "Confirm unsubscribe</button>"
@@ -2696,40 +2743,67 @@ def email_unsubscribe():
         )
         return _render_unsubscribe_page(
             "Confirm unsubscribe",
-            "Confirm your unsubscribe",
+            heading,
             body_html,
         )
 
     # POST — perform the unsubscribe.
-    if not audience_id:
-        # Tokens minted before audience plumbing was added, or for a
-        # test/custom send that should not have produced a link.
-        logger.warning(f"[unsubscribe] POST token={token_dbg} has no audience_id; nothing to update")
+    # Per-topic path (current). When the token carries a topic id we flip
+    # the contact's subscription for that topic to opt_out. State is
+    # workspace-level in Resend, so the same topic in any audience now
+    # excludes this contact at our send-time filter.
+    if topic_id:
+        result = unsubscribe_resend_topic(email, topic_id)
+        if result.get("success"):
+            logger.info(
+                f"[unsubscribe] OK (topic) token={token_dbg} topic=<{topic_id[:8]}...> "
+                f"email_prefix={email[:3]!r}"
+            )
+            scope_label = f"<strong>{html.escape(topic_name)}</strong> emails" if topic_name else "these emails"
+            return _render_unsubscribe_page(
+                "You have been unsubscribed",
+                "You have been unsubscribed",
+                f"<p style='margin:0 0 12px 0;'><strong>{masked}</strong> will no longer receive {scope_label} from Chartmetric.</p>"
+                "<p style='margin:0;color:#7a7f8a;font-size:14px;'>You can close this page now.</p>",
+            )
+        status = result.get("status", "update_failed")
+        logger.warning(
+            f"[unsubscribe] FAIL (topic) token={token_dbg} topic=<{topic_id[:8]}...> "
+            f"email_prefix={email[:3]!r} status={status} error={result.get('error')!r}"
+        )
+        # Topic-path errors share the legacy error pages below by
+        # falling through to the same status handling.
+    elif not audience_id:
+        # Tokens minted for a test/custom send that should not have
+        # produced a link, or somehow stripped of both fields.
+        logger.warning(f"[unsubscribe] POST token={token_dbg} has no audience_id and no topic_id; nothing to update")
         return _render_unsubscribe_page(
             "You have been unsubscribed",
             "You have been unsubscribed",
             "<p style='margin:0;'>This was a one-off message and is not part of an audience. "
             "We will not send you any more emails from this thread.</p>",
         )
-
-    result = unsubscribe_resend_contact(audience_id, email)
-    if result.get("success"):
-        logger.info(
-            f"[unsubscribe] OK token={token_dbg} audience=<{audience_id[:8]}...> "
-            f"email_prefix={email[:3]!r}"
+    else:
+        # Legacy fallback: tokens minted before Task #77 only carry
+        # audience_id. Honor them by flipping the audience-wide
+        # unsubscribed flag exactly like before.
+        result = unsubscribe_resend_contact(audience_id, email)
+        if result.get("success"):
+            logger.info(
+                f"[unsubscribe] OK (legacy audience) token={token_dbg} audience=<{audience_id[:8]}...> "
+                f"email_prefix={email[:3]!r}"
+            )
+            return _render_unsubscribe_page(
+                "You have been unsubscribed",
+                "You have been unsubscribed",
+                f"<p style='margin:0 0 12px 0;'><strong>{masked}</strong> has been removed from this mailing list.</p>"
+                "<p style='margin:0;color:#7a7f8a;font-size:14px;'>You can close this page now.</p>",
+            )
+        status = result.get("status", "update_failed")
+        logger.warning(
+            f"[unsubscribe] FAIL (legacy audience) token={token_dbg} audience=<{audience_id[:8]}...> "
+            f"email_prefix={email[:3]!r} status={status} error={result.get('error')!r}"
         )
-        return _render_unsubscribe_page(
-            "You have been unsubscribed",
-            "You have been unsubscribed",
-            f"<p style='margin:0 0 12px 0;'><strong>{masked}</strong> has been removed from this mailing list.</p>"
-            "<p style='margin:0;color:#7a7f8a;font-size:14px;'>You can close this page now.</p>",
-        )
-
-    status = result.get("status", "update_failed")
-    logger.warning(
-        f"[unsubscribe] FAIL token={token_dbg} audience=<{audience_id[:8]}...> "
-        f"email_prefix={email[:3]!r} status={status} error={result.get('error')!r}"
-    )
     if status == "not_found":
         # Already removed from the audience — treat as success from the
         # recipient's perspective so they don't keep retrying.
@@ -2801,19 +2875,55 @@ def get_resend_audiences():
     return jsonify({"success": True, "audiences": audiences}), 200
 
 
+@app.route("/api/resend/topics", methods=["GET"])
+def get_resend_topics():
+    """Return workspace-level Resend topics for the dashboard's topic
+    picker. Topics are managed in the Resend dashboard; this endpoint is
+    read-only.
+    """
+    from integrations.sendgrid_client import list_resend_topics
+    topics = list_resend_topics()
+    return jsonify({"success": True, "topics": topics}), 200
+
+
 @app.route("/api/resend/audiences/<audience_id>/contacts", methods=["GET"])
 def get_resend_contacts(audience_id):
-    from integrations.sendgrid_client import list_resend_contacts
+    from integrations.sendgrid_client import (
+        list_resend_contacts,
+        filter_emails_by_topic_subscription,
+    )
     contacts = list_resend_contacts(audience_id)
-    # This filter is the single enforcement point for "do not send to
-    # unsubscribed contacts". When a recipient clicks the footer link or
-    # uses Gmail's one-click unsubscribe button (see /email/unsubscribe
-    # below), Resend's contact record gets `unsubscribed=True`, and the
-    # next time the dashboard pulls this audience the contact is dropped
-    # from the recipient list automatically. No extra send-time filtering
-    # is required.
-    subscribed = [{"email": c.get("email", "")} for c in contacts if not c.get("unsubscribed", False) and c.get("email")]
-    return jsonify({"success": True, "contacts": subscribed, "total": len(subscribed)}), 200
+    # First filter: drop audience-wide unsubscribes. The audience flag
+    # remains a hard kill switch even after Task #77 introduced
+    # per-topic opt-out — if a contact has both, either one excludes
+    # them. The flag is flipped by the legacy unsubscribe path (old
+    # tokens still in inboxes from before Task #77).
+    subscribed = [c for c in contacts if not c.get("unsubscribed", False) and c.get("email")]
+    # Second filter (optional, per topic): when the dashboard passes
+    # `?topic_id=...`, also drop anyone who has explicitly opted out of
+    # that topic. Without it, callers (for example the BCC segment
+    # picker) get the unfiltered audience-eligible list.
+    topic_id = (request.args.get("topic_id") or "").strip()
+    if topic_id:
+        emails = [c.get("email", "") for c in subscribed]
+        topic_filter = filter_emails_by_topic_subscription(emails, topic_id)
+        if not topic_filter.get("ok"):
+            # Fail-safe: don't show a count we can't trust. The badge
+            # surfaces the error and the send button will block.
+            logger.warning(
+                f"[contacts] Topic filter could not resolve all subscribers "
+                f"for audience=<{audience_id[:8]}...> topic=<{topic_id[:8]}...>: "
+                f"errors={topic_filter.get('errors')}"
+            )
+            return jsonify({
+                "success": False,
+                "error": topic_filter.get("error") or "Could not verify topic subscriptions.",
+                "topic_filter_error": True,
+            }), 502
+        kept_set = set(topic_filter.get("kept") or [])
+        subscribed = [c for c in subscribed if c.get("email", "") in kept_set]
+    out = [{"email": c.get("email", "")} for c in subscribed]
+    return jsonify({"success": True, "contacts": out, "total": len(out)}), 200
 
 
 @app.route("/api/publish/inapp", methods=["POST"])
