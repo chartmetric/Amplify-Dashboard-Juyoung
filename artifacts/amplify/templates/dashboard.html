@@ -9672,6 +9672,11 @@ function doPublishToChannel(chKey) {
             }
             payload.to_email = emails.join(',');
             payload.is_test = false;
+            // Pass the audience id so the server can mint a personal,
+            // signed unsubscribe link per recipient and add the
+            // List-Unsubscribe header. Test sends and "Custom emails"
+            // intentionally skip this.
+            payload.audience_id = audId;
         } else {
             payload.is_test = true;
         }
@@ -13338,6 +13343,9 @@ function publishCombinedEmail() {
         }
         payload.to_email = emails.join(',');
         payload.is_test = false;
+        // Pass the audience id so the server can mint per-recipient
+        // unsubscribe links (footer + List-Unsubscribe header).
+        payload.audience_id = audId;
         confirmMsg = '<div style="text-align:left;">'
             + '<p style="margin:0 0 10px 0;color:#ccc;font-size:14px;line-height:1.5;">'
             + 'Send this combined email (<strong>' + data.featureIds.length + ' feature' + (data.featureIds.length === 1 ? '' : 's') + '</strong>) to '

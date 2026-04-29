@@ -209,15 +209,139 @@ def _build_view_in_browser_url(token: str) -> str:
     return f"{_get_base_url()}/email/view/{token}"
 
 
-def _render_footer_links_html(view_url: str = None) -> str:
-    """Render the "View in browser · Privacy Policy" footer line.
+# Sentinel substituted per-recipient inside _send_via_resend so each recipient's
+# email has a personal, signed unsubscribe URL while we only render the body
+# HTML once per send batch.
+UNSUBSCRIBE_PLACEHOLDER = "{{AMPLIFY_UNSUBSCRIBE_URL}}"
+
+
+_UNSAFE_SESSION_SECRETS = {"", "amplify-dev-secret", "change-me", "dev", "secret"}
+
+
+def _unsubscribe_signing_key() -> bytes | None:
+    """Server-side HMAC key for unsubscribe tokens.
+
+    Reuses SESSION_SECRET so we don't introduce a separate env var. If it's
+    ever rotated, outstanding unsubscribe links become invalid (they verify
+    as tampered and the page shows the friendly error).
+
+    Returns ``None`` when SESSION_SECRET is missing or set to a known
+    insecure default. Callers that mint or verify tokens fail closed in
+    that case (no link rendered, all submitted tokens reject) so we
+    cannot ship forgeable unsubscribe URLs to recipients.
+    """
+    secret = (os.environ.get("SESSION_SECRET") or "").strip()
+    if secret.lower() in _UNSAFE_SESSION_SECRETS:
+        return None
+    return secret.encode("utf-8")
+
+
+def _b64url_encode(raw: bytes) -> str:
+    import base64
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _b64url_decode(s: str) -> bytes:
+    import base64
+    pad = "=" * (-len(s) % 4)
+    return base64.urlsafe_b64decode((s + pad).encode("ascii"))
+
+
+def make_unsubscribe_token(audience_id: str, email: str) -> str:
+    """Sign (audience_id, email, issued_at) so a recipient cannot tamper with
+    the unsubscribe URL or unsubscribe someone else.
+
+    Token format: base64url(payload_json) + "." + base64url(hmac_sha256).
+    No expiry is enforced — recipients sometimes open emails months later.
+
+    Returns an empty string when SESSION_SECRET is missing or set to a
+    known insecure default; callers should treat that as "skip the link".
+    """
+    import hmac, hashlib, json, time as _t
+    key = _unsubscribe_signing_key()
+    if not key:
+        logger.error("[unsubscribe] SESSION_SECRET is missing or set to an insecure default; refusing to mint unsubscribe token")
+        return ""
+    payload = {
+        "a": (audience_id or "").strip(),
+        "e": (email or "").strip().lower(),
+        "t": int(_t.time()),
+    }
+    payload_b = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    sig = hmac.new(key, payload_b, hashlib.sha256).digest()
+    return f"{_b64url_encode(payload_b)}.{_b64url_encode(sig)}"
+
+
+def verify_unsubscribe_token(token: str) -> dict | None:
+    """Return ``{"audience_id", "email", "issued_at"}`` if the token is valid
+    and untampered, else ``None``.
+
+    Returns ``None`` when SESSION_SECRET is missing or insecure, so any
+    forged or replayed token is rejected (fail closed).
+    """
+    import hmac, hashlib, json
+    if not token or "." not in token:
+        return None
+    key = _unsubscribe_signing_key()
+    if not key:
+        logger.error("[unsubscribe] SESSION_SECRET is missing or set to an insecure default; rejecting all tokens")
+        return None
+    try:
+        payload_part, sig_part = token.split(".", 1)
+        payload_b = _b64url_decode(payload_part)
+        sig = _b64url_decode(sig_part)
+        expected = hmac.new(key, payload_b, hashlib.sha256).digest()
+        if not hmac.compare_digest(sig, expected):
+            return None
+        payload = json.loads(payload_b.decode("utf-8"))
+    except Exception:
+        return None
+    email = (payload.get("e") or "").strip().lower()
+    audience_id = (payload.get("a") or "").strip()
+    if not email:
+        return None
+    return {
+        "audience_id": audience_id,
+        "email": email,
+        "issued_at": int(payload.get("t") or 0),
+    }
+
+
+def build_unsubscribe_url(audience_id: str, email: str) -> str:
+    """Return the full hosted unsubscribe URL for a recipient, or an empty
+    string when no token can be safely minted (insecure SESSION_SECRET)."""
+    token = make_unsubscribe_token(audience_id, email)
+    if not token:
+        return ""
+    return f"{_get_base_url()}/email/unsubscribe?token={token}"
+
+
+def _render_footer_links_html(view_url: str = None, unsubscribe_placeholder: str = None) -> str:
+    """Render the "View in browser · Privacy Policy [· Unsubscribe]" footer line.
 
     When ``view_url`` is provided, "View in browser" links to that hosted
     HTML page (the same content the recipient just opened, served from
     /email/view/<token>). When it's None, we fall back to the marketing
     homepage rather than emitting a dead link.
+
+    When ``unsubscribe_placeholder`` is provided (typically
+    :data:`UNSUBSCRIBE_PLACEHOLDER`), an "Unsubscribe" link is appended
+    pointing at that placeholder string. The send loop substitutes a
+    personal, signed unsubscribe URL per recipient before delivery. When
+    no placeholder is given (test sends, custom one-off recipients with
+    no audience), the link is omitted so we never ship a dead URL.
     """
     safe_view = _esc(view_url) if view_url else "https://chartmetric.com"
+    unsub_html = ""
+    if unsubscribe_placeholder:
+        # The placeholder is substituted as-is per recipient before send;
+        # don't HTML-escape it or the "{{...}}" braces would survive into
+        # the final HTML.
+        unsub_html = (
+            '&nbsp;&middot;&nbsp;'
+            f'<a href="{unsubscribe_placeholder}" target="_blank" rel="noopener noreferrer" '
+            'style="color:#999999;text-decoration:underline;">Unsubscribe</a>'
+        )
     return (
         '<p style="margin:0 0 6px 0;color:#999999;font-size:12px;line-height:1.6;">'
         f'<a href="{safe_view}" target="_blank" rel="noopener noreferrer" '
@@ -225,6 +349,7 @@ def _render_footer_links_html(view_url: str = None) -> str:
         '&nbsp;&middot;&nbsp;'
         '<a href="https://chartmetric.com/privacy-policy" target="_blank" '
         'rel="noopener noreferrer" style="color:#999999;text-decoration:underline;">Privacy Policy</a>'
+        f'{unsub_html}'
         '</p>'
     )
 
@@ -584,7 +709,7 @@ def _resolve_video_marker(vid_ref: str, video_map: dict) -> tuple:
     return (None, None)
 
 
-def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None, from_name: str = None, videos: dict = None, strict: bool = False, view_url: str = None) -> str:
+def render_email_html(subject: str, body: str, images: dict = None, cid_map: dict = None, from_name: str = None, videos: dict = None, strict: bool = False, view_url: str = None, unsubscribe_placeholder: str = None) -> str:
     """Render an email body to HTML.
 
     When ``strict`` is True, raise ``MediaResolutionError`` if any
@@ -830,7 +955,7 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 <tr><td style="background:#ffffff;padding:32px;border-radius:{body_radius};">
 {body_html}
 <hr style="border:none;border-top:1px solid #e8e8eb;margin:28px 0 16px 0;">
-{_render_footer_links_html(view_url)}
+{_render_footer_links_html(view_url, unsubscribe_placeholder)}
 <p style="margin:0;color:#999999;font-size:12px;line-height:1.6;">&copy; {_current_year()} Chartmetric, Inc.</p>
 </td></tr>
 </table>
@@ -840,7 +965,7 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 </html>"""
 
 
-def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: bool, attachments: list = None, from_name: str = None, template_id: str = None, bcc_emails: list = None) -> dict | None:
+def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: bool, attachments: list = None, from_name: str = None, template_id: str = None, bcc_emails: list = None, audience_id: str = None) -> dict | None:
     import time as _time
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
@@ -852,6 +977,8 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
 
     display_name = from_name or "Chartmetric"
     sender = f"{display_name} <{from_email}>"
+    aud_id_clean = (audience_id or "").strip()
+    has_placeholder = bool(aud_id_clean) and (UNSUBSCRIBE_PLACEHOLDER in (html_content or ""))
     email_list = []
     for addr in to_emails:
         params = {
@@ -859,15 +986,67 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
             "to": [addr],
             "subject": subject,
         }
-        if bcc_emails:
+        per_recipient_html = html_content
+        # Personal, signed unsubscribe URL per recipient. Only applies when
+        # the send was initiated against a Resend audience — for test sends
+        # and custom one-off addresses we pass no audience_id, the footer
+        # has no placeholder, and we skip the List-Unsubscribe header so
+        # mail clients don't show a non-functional opt-out button.
+        if aud_id_clean:
+            unsub_url = build_unsubscribe_url(aud_id_clean, addr)
+            if unsub_url:
+                if has_placeholder and per_recipient_html:
+                    per_recipient_html = per_recipient_html.replace(UNSUBSCRIBE_PLACEHOLDER, unsub_url)
+                # RFC 2369 + RFC 8058: List-Unsubscribe-Post enables Gmail's
+                # one-click unsubscribe button at the top of the message.
+                params["headers"] = {
+                    "List-Unsubscribe": f"<{unsub_url}>",
+                    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+                }
+            else:
+                # SESSION_SECRET missing/insecure: don't ship a link we can't
+                # verify later. Strip the placeholder so recipients don't see
+                # a literal token in the footer.
+                if has_placeholder and per_recipient_html:
+                    per_recipient_html = per_recipient_html.replace(UNSUBSCRIBE_PLACEHOLDER, "https://chartmetric.com")
+            # NOTE: do NOT attach BCC to per-recipient audience sends.
+            # If we did, every BCC inbox would receive N copies (one per
+            # TO recipient), each carrying a different recipient's signed
+            # unsubscribe token in the footer and List-Unsubscribe header.
+            # A BCC viewer clicking that link would unsubscribe the wrong
+            # contact (token confusion). BCC for audience sends is handled
+            # below as a single archival copy.
+        elif bcc_emails:
             params["bcc"] = bcc_emails
         if template_id:
             params["template"] = {"id": template_id}
         else:
-            params["html"] = html_content
+            params["html"] = per_recipient_html
         if attachments:
             params["attachments"] = attachments
         email_list.append(params)
+
+    # Audience-mode BCC archival copy: one message with the BCC list in BCC
+    # (preserving BCC privacy) and the from address as the TO. The body is
+    # the original HTML with the unsubscribe placeholder swapped to the
+    # static fallback URL so we never ship a literal placeholder.
+    if aud_id_clean and bcc_emails:
+        archival_html = (html_content or "").replace(
+            UNSUBSCRIBE_PLACEHOLDER, "https://chartmetric.com"
+        )
+        archival_params = {
+            "from": sender,
+            "to": [from_email],
+            "bcc": list(bcc_emails),
+            "subject": subject,
+        }
+        if template_id:
+            archival_params["template"] = {"id": template_id}
+        else:
+            archival_params["html"] = archival_html
+        if attachments:
+            archival_params["attachments"] = attachments
+        email_list.append(archival_params)
 
     max_retries = 3
     for attempt in range(max_retries):
@@ -919,7 +1098,7 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
     return None
 
 
-def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None, from_name: str = None, template_id: str = None, videos: dict = None, bcc_email: str = None) -> dict:
+def send_email(subject: str, body: str, to_email: str = None, is_test: bool = True, images: dict = None, from_name: str = None, template_id: str = None, videos: dict = None, bcc_email: str = None, audience_id: str = None) -> dict:
     resend_api_key = os.environ.get("RESEND_API_KEY", "")
     from_email = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
     test_email = os.environ.get("SENDGRID_TEST_EMAIL", "") or os.environ.get("RESEND_FROM_EMAIL", "")
@@ -985,10 +1164,16 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
     view_token = _secrets.token_urlsafe(16)
     view_url = _build_view_in_browser_url(view_token)
 
+    aud_id_clean = (audience_id or "").strip()
+    # Only emit the unsubscribe footer link when we have an audience to flip
+    # the contact's unsubscribed flag on. Test sends and custom typed-in
+    # recipient lists render without the link so we never ship a dead URL.
+    unsub_placeholder = UNSUBSCRIBE_PLACEHOLDER if aud_id_clean else None
     try:
         html_content = render_email_html(
             final_subject, body, images=hosted_images, from_name=from_name,
             videos=videos, strict=True, view_url=view_url,
+            unsubscribe_placeholder=unsub_placeholder,
         )
     except MediaResolutionError as _mre:
         logger.warning(
@@ -1017,7 +1202,7 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
         video_attachments, skipped_videos = _build_video_attachments(videos)
     else:
         video_attachments, skipped_videos = [], []
-    result = _send_via_resend(final_subject, html_content, recipients, is_test, attachments=video_attachments or None, from_name=from_name, template_id=template_id, bcc_emails=bcc_list)
+    result = _send_via_resend(final_subject, html_content, recipients, is_test, attachments=video_attachments or None, from_name=from_name, template_id=template_id, bcc_emails=bcc_list, audience_id=aud_id_clean or None)
     if result:
         if skipped_videos:
             result["skipped_videos"] = skipped_videos
@@ -1027,7 +1212,14 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
         # to dispatch (the token in the HTML is now effectively dead in
         # that case, which is the desired behavior).
         if result.get("success"):
-            _save_hosted_email(view_token, html_content)
+            # The hosted "View in browser" page is shared (one URL per send,
+            # not per recipient), so we cannot embed a personal unsubscribe
+            # token here. Strip the placeholder to a static fallback URL so
+            # the saved snapshot never ships a literal "{{AMPLIFY_UNSUBSCRIBE_URL}}".
+            hosted_html = (html_content or "").replace(
+                UNSUBSCRIBE_PLACEHOLDER, "https://chartmetric.com"
+            )
+            _save_hosted_email(view_token, hosted_html)
             result["view_url"] = view_url
             result["view_token"] = view_token
         return result
@@ -1102,6 +1294,44 @@ def list_resend_contacts(audience_id: str) -> list:
     except Exception as e:
         logger.error(f"[resend] Failed to list contacts for audience {audience_id}: {e}")
         return []
+
+
+def unsubscribe_resend_contact(audience_id: str, email: str) -> dict:
+    """Flip ``unsubscribed=True`` on a contact in a Resend audience.
+
+    Returns a dict with ``success`` (bool) plus, on failure, ``error``
+    (string) and ``status`` ("not_configured" | "not_found" |
+    "update_failed"). The audience-fetch endpoint already filters out
+    unsubscribed contacts, so flipping the flag is enough to keep the
+    contact out of all future sends to this audience.
+    """
+    aud = (audience_id or "").strip()
+    em = (email or "").strip().lower()
+    if not aud or not em:
+        return {"success": False, "status": "invalid_request", "error": "audience_id and email are required"}
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    if not resend_api_key:
+        return {"success": False, "status": "not_configured", "error": "Resend is not configured (missing RESEND_API_KEY)"}
+    import resend
+    resend.api_key = resend_api_key
+    try:
+        # Resend's update-contact accepts either id or email; passing email
+        # directly avoids a round-trip list call.
+        resend.Contacts.update({
+            "audience_id": aud,
+            "email": em,
+            "unsubscribed": True,
+        })
+        return {"success": True, "status": "ok"}
+    except Exception as e:
+        err_str = str(e).lower()
+        if "not found" in err_str or "404" in err_str:
+            return {"success": False, "status": "not_found", "error": "Contact not found in this audience"}
+        logger.exception(
+            f"[resend] Failed to unsubscribe contact: type={type(e).__name__} repr={e!r} "
+            f"audience=<{aud[:8]}...> email=<{em[:3]}...>"
+        )
+        return {"success": False, "status": "update_failed", "error": str(e)}
 
 
 def get_resend_template(template_id: str) -> dict:

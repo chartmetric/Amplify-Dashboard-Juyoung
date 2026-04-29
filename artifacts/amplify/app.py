@@ -2491,6 +2491,11 @@ def publish_email():
     from_name = data.get("from_name", "").strip() or None
     template_id = data.get("template_id", "").strip() or None
     bcc_email = data.get("bcc_email", "").strip() or None
+    # Forward the selected Resend audience so the send loop can mint a
+    # personal, signed unsubscribe URL for each recipient and add the
+    # List-Unsubscribe header. Empty / missing means "test send" or
+    # "custom typed-in addresses" — no unsubscribe link rendered.
+    audience_id = (data.get("audience_id") or data.get("audienceId") or "").strip() or None
 
     try:
         if feature_ids:
@@ -2510,7 +2515,7 @@ def publish_email():
                 f"(kept {len(videos)} referenced in body)"
             )
         logger.info(f"[publish/email] videos_attached={len(videos)} keys={list(videos.keys())[:5]}")
-        result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id, videos=videos, bcc_email=bcc_email)
+        result = send_email(subject=subject, body=content, to_email=to_email, is_test=is_test, images=images, from_name=from_name, template_id=template_id, videos=videos, bcc_email=bcc_email, audience_id=audience_id)
     except Exception as _e:
         logger.exception(f"[publish/email] UNCAUGHT exception during send: type={type(_e).__name__} repr={_e!r}")
         return jsonify({"success": False, "error": f"Server error: {type(_e).__name__}: {_e}"}), 500
@@ -2611,6 +2616,146 @@ def view_hosted_email(token):
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
+def _render_unsubscribe_page(title: str, heading: str, body_html: str, status: int = 200):
+    """Render a minimal Resend-style hosted page for unsubscribe flows."""
+    page = f"""<!doctype html>
+<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1.0'>
+<title>{title}</title></head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1d23;">
+<table width='100%' cellpadding='0' cellspacing='0' style='padding:48px 16px;'><tr><td align='center'>
+<table width='480' cellpadding='0' cellspacing='0' style='max-width:480px;width:100%;background:#ffffff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.06);'>
+<tr><td style='padding:32px 32px 12px 32px;text-align:left;'>
+<div style='font-size:13px;color:#7a7f8a;letter-spacing:0.4px;text-transform:uppercase;font-weight:700;margin-bottom:12px;'>Chartmetric</div>
+<h1 style='margin:0 0 12px 0;font-size:22px;line-height:1.3;color:#1a1d23;'>{heading}</h1>
+</td></tr>
+<tr><td style='padding:0 32px 32px 32px;color:#3a3f4a;font-size:15px;line-height:1.6;'>
+{body_html}
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+    return page, status, {"Content-Type": "text/html; charset=utf-8"}
+
+
+def _mask_email_for_display(email: str) -> str:
+    """Show "j****@example.com" so the page confirms identity without
+    exposing the full address to a casual onlooker.
+    """
+    if not email or "@" not in email:
+        return email or ""
+    local, _, domain = email.partition("@")
+    if len(local) <= 1:
+        return f"{local}***@{domain}"
+    return f"{local[0]}{'*' * max(3, len(local) - 1)}@{domain}"
+
+
+@app.route("/email/unsubscribe", methods=["GET", "POST"])
+def email_unsubscribe():
+    """Hosted unsubscribe flow.
+
+    GET  -> confirmation page with a single "Confirm unsubscribe" button.
+    POST -> performs the unsubscribe via Resend's contact API. Also serves
+            the RFC 8058 one-click POST from mail clients (Gmail / Apple
+            Mail), which arrives without a session and without a CSRF
+            token. Auth is the signed token in the URL itself; nothing
+            else is required.
+    """
+    from integrations.sendgrid_client import (
+        verify_unsubscribe_token,
+        unsubscribe_resend_contact,
+    )
+    token = (request.values.get("token") or "").strip()
+    token_dbg = f"<{token[:4]}...>" if token else "<empty>"
+    payload = verify_unsubscribe_token(token)
+    if not payload:
+        logger.warning(f"[unsubscribe] {request.method} invalid/tampered token={token_dbg}")
+        return _render_unsubscribe_page(
+            "Unsubscribe link not valid",
+            "This unsubscribe link is not valid",
+            "<p style='margin:0;'>The link may have been altered, copied incorrectly, or is from an old test message. "
+            "If you keep receiving emails you do not want, reply to the sender directly.</p>",
+            status=400,
+        )
+
+    email = payload["email"]
+    audience_id = payload["audience_id"]
+    masked = _mask_email_for_display(email)
+
+    if request.method == "GET":
+        action_url = f"/email/unsubscribe?token={token}"
+        body_html = (
+            f"<p style='margin:0 0 18px 0;'>You are about to unsubscribe <strong>{masked}</strong> "
+            "from this Chartmetric mailing list. You will not receive future emails from this list once you confirm.</p>"
+            f"<form method='POST' action='{action_url}' style='margin:0;'>"
+            "<button type='submit' style='display:inline-block;background:#1a1d23;color:#ffffff;border:none;"
+            "padding:12px 22px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;'>"
+            "Confirm unsubscribe</button>"
+            "</form>"
+            "<p style='margin:18px 0 0 0;color:#7a7f8a;font-size:13px;'>"
+            "Changed your mind? Just close this page.</p>"
+        )
+        return _render_unsubscribe_page(
+            "Confirm unsubscribe",
+            "Confirm your unsubscribe",
+            body_html,
+        )
+
+    # POST — perform the unsubscribe.
+    if not audience_id:
+        # Tokens minted before audience plumbing was added, or for a
+        # test/custom send that should not have produced a link.
+        logger.warning(f"[unsubscribe] POST token={token_dbg} has no audience_id; nothing to update")
+        return _render_unsubscribe_page(
+            "You have been unsubscribed",
+            "You have been unsubscribed",
+            "<p style='margin:0;'>This was a one-off message and is not part of an audience. "
+            "We will not send you any more emails from this thread.</p>",
+        )
+
+    result = unsubscribe_resend_contact(audience_id, email)
+    if result.get("success"):
+        logger.info(
+            f"[unsubscribe] OK token={token_dbg} audience=<{audience_id[:8]}...> "
+            f"email_prefix={email[:3]!r}"
+        )
+        return _render_unsubscribe_page(
+            "You have been unsubscribed",
+            "You have been unsubscribed",
+            f"<p style='margin:0 0 12px 0;'><strong>{masked}</strong> has been removed from this mailing list.</p>"
+            "<p style='margin:0;color:#7a7f8a;font-size:14px;'>You can close this page now.</p>",
+        )
+
+    status = result.get("status", "update_failed")
+    logger.warning(
+        f"[unsubscribe] FAIL token={token_dbg} audience=<{audience_id[:8]}...> "
+        f"email_prefix={email[:3]!r} status={status} error={result.get('error')!r}"
+    )
+    if status == "not_found":
+        # Already removed from the audience — treat as success from the
+        # recipient's perspective so they don't keep retrying.
+        return _render_unsubscribe_page(
+            "You are already unsubscribed",
+            "You are already unsubscribed",
+            f"<p style='margin:0;'>We do not have <strong>{masked}</strong> on this list anymore. "
+            "No further action is needed.</p>",
+        )
+    if status == "not_configured":
+        return _render_unsubscribe_page(
+            "Unsubscribe temporarily unavailable",
+            "We could not process your unsubscribe right now",
+            "<p style='margin:0;'>Our email provider is not reachable. Please try again in a few minutes "
+            "or reply to the sender directly to be removed.</p>",
+            status=503,
+        )
+    return _render_unsubscribe_page(
+        "Unsubscribe failed",
+        "Something went wrong",
+        "<p style='margin:0;'>We could not unsubscribe you right now. Please try again in a few minutes "
+        "or reply to the sender directly to be removed.</p>",
+        status=500,
+    )
+
+
 @app.route("/api/resend/templates/<template_id>/preview", methods=["GET"])
 def get_resend_template_preview(template_id):
     """Read-only: fetch a Resend template's name and HTML body.
@@ -2660,6 +2805,13 @@ def get_resend_audiences():
 def get_resend_contacts(audience_id):
     from integrations.sendgrid_client import list_resend_contacts
     contacts = list_resend_contacts(audience_id)
+    # This filter is the single enforcement point for "do not send to
+    # unsubscribed contacts". When a recipient clicks the footer link or
+    # uses Gmail's one-click unsubscribe button (see /email/unsubscribe
+    # below), Resend's contact record gets `unsubscribed=True`, and the
+    # next time the dashboard pulls this audience the contact is dropped
+    # from the recipient list automatically. No extra send-time filtering
+    # is required.
     subscribed = [{"email": c.get("email", "")} for c in contacts if not c.get("unsubscribed", False) and c.get("email")]
     return jsonify({"success": True, "contacts": subscribed, "total": len(subscribed)}), 200
 
