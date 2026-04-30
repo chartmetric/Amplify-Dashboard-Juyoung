@@ -12852,6 +12852,29 @@ function initBatchDragDrop() {
         e.dataTransfer.dropEffect = 'move';
         if (!prepDragItem) return;
         var target = e.target.closest('.batch-item');
+        // Dead-zone fallback: when the user grabs a tall card (especially
+        // the bottom one) it collapses to just its header, leaving the
+        // cursor either over empty space below the list or over the
+        // dragged card itself. In both cases the original logic did
+        // nothing, so the user had to physically move the cursor a long
+        // way before any reorder fired and it felt like the card "could
+        // not be dragged". Instead, find the nearest non-dragged card by
+        // vertical distance and treat that as the target so reorders
+        // respond as soon as the cursor moves.
+        if (!target || target === prepDragItem) {
+            var siblings = list.querySelectorAll('.batch-item');
+            var best = null;
+            var bestDist = Infinity;
+            for (var i = 0; i < siblings.length; i++) {
+                var s = siblings[i];
+                if (s === prepDragItem) continue;
+                var sr = s.getBoundingClientRect();
+                var sc = sr.top + sr.height / 2;
+                var d = Math.abs(e.clientY - sc);
+                if (d < bestDist) { bestDist = d; best = s; }
+            }
+            target = best;
+        }
         if (target && target !== prepDragItem) {
             var rect = target.getBoundingClientRect();
             var mid = rect.top + rect.height / 2;
