@@ -1839,6 +1839,12 @@
                         <span class="lab-item-label">Did You Know?</span>
                         <span class="lab-item-status" id="lab-dyk-status"></span>
                     </button>
+                    <div class="lab-dropdown-divider"></div>
+                    <button class="lab-dropdown-item" onclick="labOpenAttachmentsPanel()">
+                        <span class="lab-item-icon">&#128193;</span>
+                        <span class="lab-item-label">Attachment Storage</span>
+                        <span class="lab-item-status" id="lab-attachments-status"></span>
+                    </button>
                 </div>
             </div>
             <button class="btn-analytics" onclick="toggleAnalytics()">&#128202; Analytics</button>
@@ -15396,6 +15402,152 @@ function labToggleDyk() {
 function labGenerateAll() {
     closeLabDropdown();
     generateAllTopFeatures();
+}
+
+// ----------------------------------------------------------------------
+// Attachment Storage panel (Task #99)
+// ----------------------------------------------------------------------
+function _attachAdminToken() {
+    var t = '';
+    try { t = localStorage.getItem('amplify_admin_token') || ''; } catch (e) {}
+    if (!t) {
+        t = (window.prompt('Enter AMPLIFY_ADMIN_TOKEN to view attachment storage status:') || '').trim();
+        if (t) {
+            try { localStorage.setItem('amplify_admin_token', t); } catch (e) {}
+        }
+    }
+    return t;
+}
+
+function labOpenAttachmentsPanel() {
+    closeLabDropdown();
+    var overlay = document.getElementById('attachments-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'attachments-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;display:flex;align-items:center;justify-content:center;';
+        overlay.innerHTML = '' +
+            '<div style="background:var(--bg-card,#fff);color:var(--text-body,#111);max-width:760px;width:92%;max-height:88vh;overflow:auto;border-radius:12px;padding:22px 24px;box-shadow:0 12px 40px rgba(0,0,0,0.35);font-family:inherit;">' +
+            '  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+            '    <div style="font-size:16px;font-weight:700;">&#128193; Attachment Storage</div>' +
+            '    <div>' +
+            '      <button id="attach-refresh" style="margin-right:6px;padding:6px 12px;border-radius:6px;border:1px solid var(--border,#ddd);background:var(--bg-input,#fafafa);cursor:pointer;font-family:inherit;">Refresh</button>' +
+            '      <button id="attach-close" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border,#ddd);background:var(--bg-input,#fafafa);cursor:pointer;font-family:inherit;">Close</button>' +
+            '    </div>' +
+            '  </div>' +
+            '  <div id="attach-body" style="font-size:13px;line-height:1.55;">Loading...</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+        document.getElementById('attach-close').onclick = function() { overlay.remove(); };
+        document.getElementById('attach-refresh').onclick = function() { _attachLoadStatus(); };
+    }
+    _attachLoadStatus();
+}
+
+function _attachLoadStatus() {
+    var token = _attachAdminToken();
+    var body = document.getElementById('attach-body');
+    if (!body) return;
+    if (!token) { body.textContent = 'Admin token required.'; return; }
+    body.innerHTML = 'Loading status...';
+    fetch('/api/admin/attachments/status', { headers: { 'X-Admin-Token': token } })
+        .then(function(r) {
+            if (r.status === 401) {
+                try { localStorage.removeItem('amplify_admin_token'); } catch (e) {}
+                throw new Error('Unauthorized — token cleared, please retry.');
+            }
+            return r.json();
+        })
+        .then(function(data) { _attachRender(data); })
+        .catch(function(e) { body.textContent = 'Error: ' + (e.message || e); });
+}
+
+function _attachRender(data) {
+    var body = document.getElementById('attach-body');
+    if (!body) return;
+    var secrets = data.secrets_present || {};
+    var pending = data.pending || {};
+    var recent = data.recent || [];
+    var html = '';
+    html += '<div style="margin-bottom:14px;padding:10px 12px;border:1px solid var(--border,#e5e5e5);border-radius:8px;">';
+    html += '<div><b>Backend:</b> ' + (data.backend || 'local');
+    html += ' &nbsp; <b>S3 enabled:</b> ' + (data.s3_enabled ? '<span style="color:#0a8a3a;">yes</span>' : '<span style="color:#b54;">no</span>');
+    html += '</div>';
+    html += '<div style="margin-top:6px;font-size:12px;color:var(--text-muted,#666);">Secrets: ';
+    var sk = ['S3_Bucket_name', 'S3_Region', 'S3_Access_Key', 'S3_Secret_Access_Key'];
+    for (var i = 0; i < sk.length; i++) {
+        html += sk[i] + '=' + (secrets[sk[i]] ? '&#10003;' : '&#10007;') + (i < sk.length - 1 ? ', ' : '');
+    }
+    html += '</div></div>';
+
+    html += '<div style="margin-bottom:14px;"><b>Pending (still on local disk):</b></div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px;">';
+    html += '<thead><tr><th style="text-align:left;border-bottom:1px solid var(--border,#ddd);padding:6px 4px;">Kind</th><th style="text-align:right;border-bottom:1px solid var(--border,#ddd);padding:6px 4px;">Pending</th><th style="border-bottom:1px solid var(--border,#ddd);padding:6px 4px;"></th></tr></thead><tbody>';
+    var kinds = ['feature-images', 'videos', 'video-thumbs', 'external-thumbs', 'hosted-emails', 'announcements'];
+    for (var k = 0; k < kinds.length; k++) {
+        var kind = kinds[k];
+        var n = pending[kind] || 0;
+        html += '<tr>' +
+            '<td style="padding:6px 4px;">' + kind + '</td>' +
+            '<td style="padding:6px 4px;text-align:right;font-variant-numeric:tabular-nums;">' + n + '</td>' +
+            '<td style="padding:6px 4px;text-align:right;">' +
+            '<button class="attach-backfill" data-kind="' + kind + '" ' + (data.s3_enabled ? '' : 'disabled') +
+            ' style="padding:4px 10px;border-radius:6px;border:1px solid var(--border,#ddd);background:var(--bg-input,#fafafa);cursor:pointer;font-family:inherit;font-size:12px;' +
+            (data.s3_enabled ? '' : 'opacity:0.5;cursor:not-allowed;') + '">Backfill 50</button>' +
+            '</td>' +
+            '</tr>';
+    }
+    html += '</tbody></table>';
+
+    html += '<div style="margin-bottom:6px;"><b>Recent uploads (in-memory, last 25):</b></div>';
+    if (recent.length === 0) {
+        html += '<div style="color:var(--text-muted,#666);font-size:12px;">No uploads since process start.</div>';
+    } else {
+        html += '<div style="max-height:220px;overflow:auto;border:1px solid var(--border,#e5e5e5);border-radius:6px;">';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+        html += '<thead><tr style="background:var(--bg-input,#f5f5f5);"><th style="text-align:left;padding:5px;">When</th><th style="text-align:left;padding:5px;">Kind</th><th style="text-align:left;padding:5px;">Backend</th><th style="text-align:right;padding:5px;">Bytes</th><th style="text-align:left;padding:5px;">Key / Error</th></tr></thead><tbody>';
+        for (var r = 0; r < recent.length; r++) {
+            var rec = recent[r];
+            var when = '';
+            try { when = new Date((rec.ts || 0) * 1000).toLocaleString(); } catch (e) {}
+            var keyOrErr = rec.error ? ('<span style="color:#b54;">' + (rec.error + '').replace(/</g, '&lt;') + '</span>') :
+                ((rec.key || '') + '').replace(/</g, '&lt;');
+            html += '<tr>' +
+                '<td style="padding:4px 5px;white-space:nowrap;">' + when + '</td>' +
+                '<td style="padding:4px 5px;">' + (rec.kind || '') + '</td>' +
+                '<td style="padding:4px 5px;">' + (rec.backend || '') + '</td>' +
+                '<td style="padding:4px 5px;text-align:right;font-variant-numeric:tabular-nums;">' + (rec.bytes || 0) + '</td>' +
+                '<td style="padding:4px 5px;font-family:ui-monospace,monospace;">' + keyOrErr + '</td>' +
+                '</tr>';
+        }
+        html += '</tbody></table></div>';
+    }
+
+    body.innerHTML = html;
+    var btns = body.querySelectorAll('.attach-backfill');
+    for (var b = 0; b < btns.length; b++) {
+        btns[b].onclick = function(ev) { _attachBackfill(ev.currentTarget.getAttribute('data-kind')); };
+    }
+}
+
+function _attachBackfill(kind) {
+    var token = _attachAdminToken();
+    if (!token) return;
+    var body = document.getElementById('attach-body');
+    if (body) body.innerHTML = 'Backfilling ' + kind + '...';
+    fetch('/api/admin/attachments/backfill?kind=' + encodeURIComponent(kind) + '&limit=50', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': token }
+    })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            window.alert('Backfill ' + kind + ': ' + JSON.stringify(data));
+            _attachLoadStatus();
+        })
+        .catch(function(e) {
+            window.alert('Backfill failed: ' + (e.message || e));
+            _attachLoadStatus();
+        });
 }
 
 function toggleAnalytics() {

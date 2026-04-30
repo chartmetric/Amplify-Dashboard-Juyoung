@@ -307,15 +307,66 @@ def upload_media_endpoint():
     except Exception as e:
         logger.exception("[announcements] write %s failed: %s", target_path, e)
         return jsonify({"success": False, "error": str(e)}), 500
+    # Best-effort S3 upload (Task #99). Drop a sidecar so serve_upload can
+    # 302-redirect even after the local file is gone.
+    s3_key = ""
+    s3_url = ""
+    try:
+        from integrations import attachment_store as _astore
+        ctype = (f.mimetype or mimetypes.guess_type(name)[0]
+                 or "application/octet-stream")
+        res = _astore.put(
+            kind="announcements",
+            key_hint=f"announcements/{stored_name}",
+            raw_bytes=raw,
+            content_type=ctype,
+        )
+        if res.get("backend") == "s3" and res.get("key"):
+            s3_key = res["key"]
+            s3_url = res.get("url") or ""
+            try:
+                with open(target_path + ".s3", "w") as sc:
+                    sc.write(f"{s3_key}\n{s3_url}\n")
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning("[attachments] kind=announcements S3 upload skipped: %s", e)
     url = f"/api/admin/announcement-uploads/{stored_name}"
     return jsonify({"success": True, "url": url, "kind": kind,
                     "filename": name, "size": len(raw),
                     "stored_as": stored_name}), 201
 
 
+def _read_announcement_s3_sidecar(stored_name: str):
+    """Return ``(s3_key, s3_url)`` for an announcement upload, or ``("", "")``."""
+    safe = os.path.basename(stored_name)
+    sidecar = os.path.join(UPLOAD_DIR, safe + ".s3")
+    if not os.path.isfile(sidecar):
+        return ("", "")
+    try:
+        with open(sidecar, "r") as f:
+            lines = [ln.strip() for ln in f.readlines()]
+        s3_key = lines[0] if lines else ""
+        s3_url = lines[1] if len(lines) > 1 else ""
+        return (s3_key, s3_url)
+    except Exception:
+        return ("", "")
+
+
 @bp.route("/api/admin/announcement-uploads/<path:filename>", methods=["GET"])
 def serve_upload(filename: str):
+    from flask import redirect
     safe = os.path.basename(filename)
+    # Prefer S3 redirect when sidecar exists (Task #99).
+    s3_key, s3_url = _read_announcement_s3_sidecar(safe)
+    if s3_key or s3_url:
+        try:
+            from integrations import attachment_store as _astore
+            target = s3_url or _astore.s3_public_url(s3_key)
+            if target:
+                return redirect(target, code=302)
+        except Exception:
+            pass
     full = os.path.join(UPLOAD_DIR, safe)
     if not os.path.isfile(full):
         return abort(404)

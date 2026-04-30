@@ -126,6 +126,14 @@ def _ensure_videos_table(conn) -> bool:
                 "CREATE INDEX IF NOT EXISTS published_videos_feature_idx "
                 "ON published_videos(feature_id)"
             )
+            # Add the S3 columns idempotently for older databases (Task #99).
+            for col, ddl in (
+                ("s3_key", "ALTER TABLE published_videos ADD COLUMN IF NOT EXISTS s3_key TEXT"),
+                ("s3_url", "ALTER TABLE published_videos ADD COLUMN IF NOT EXISTS s3_url TEXT"),
+                ("s3_thumb_key", "ALTER TABLE published_videos ADD COLUMN IF NOT EXISTS s3_thumb_key TEXT"),
+                ("s3_thumb_url", "ALTER TABLE published_videos ADD COLUMN IF NOT EXISTS s3_thumb_url TEXT"),
+            ):
+                cur.execute(ddl)
             conn.commit()
         _videos_db_initialized = True
         return True
@@ -139,8 +147,12 @@ def _ensure_videos_table(conn) -> bool:
 
 
 def _meta_from_row(row) -> dict:
-    """Map a published_videos row to the on-disk-style meta dict."""
-    return {
+    """Map a published_videos row to the on-disk-style meta dict.
+
+    Tolerant of older rows that pre-date the S3 columns: anything past
+    ``external_thumb_url`` is read positionally only when it's there.
+    """
+    out = {
         "video_id": row[0],
         "feature_id": row[1],
         "filename": row[2],
@@ -151,6 +163,10 @@ def _meta_from_row(row) -> dict:
         "external_url": row[7] or "",
         "external_thumb_url": row[8] or "",
     }
+    # Optional S3 columns appear after the BYTEA cols when include_bytes
+    # is true; otherwise they sit at indices 9..12 in the no-bytes select.
+    # Callers that need them use _db_load_video_row(include_bytes=False).
+    return out
 
 
 def _db_upsert_video(meta: dict, video_bytes: bytes | None, thumb_bytes: bytes | None) -> None:
@@ -168,8 +184,9 @@ def _db_upsert_video(meta: dict, video_bytes: bytes | None, thumb_bytes: bytes |
                 INSERT INTO published_videos (
                     video_id, feature_id, filename, ext, size, has_thumb,
                     is_url, external_url, external_thumb_url,
-                    video_data, thumb_data, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    video_data, thumb_data, created_at,
+                    s3_key, s3_url, s3_thumb_key, s3_thumb_url
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (video_id) DO UPDATE SET
                     feature_id = EXCLUDED.feature_id,
                     filename = EXCLUDED.filename,
@@ -180,7 +197,11 @@ def _db_upsert_video(meta: dict, video_bytes: bytes | None, thumb_bytes: bytes |
                     external_url = EXCLUDED.external_url,
                     external_thumb_url = EXCLUDED.external_thumb_url,
                     video_data = COALESCE(EXCLUDED.video_data, published_videos.video_data),
-                    thumb_data = COALESCE(EXCLUDED.thumb_data, published_videos.thumb_data)
+                    thumb_data = COALESCE(EXCLUDED.thumb_data, published_videos.thumb_data),
+                    s3_key = COALESCE(EXCLUDED.s3_key, published_videos.s3_key),
+                    s3_url = COALESCE(EXCLUDED.s3_url, published_videos.s3_url),
+                    s3_thumb_key = COALESCE(EXCLUDED.s3_thumb_key, published_videos.s3_thumb_key),
+                    s3_thumb_url = COALESCE(EXCLUDED.s3_thumb_url, published_videos.s3_thumb_url)
                 """,
                 (
                     meta.get("video_id"),
@@ -195,6 +216,10 @@ def _db_upsert_video(meta: dict, video_bytes: bytes | None, thumb_bytes: bytes |
                     psycopg2.Binary(video_bytes) if video_bytes else None,
                     psycopg2.Binary(thumb_bytes) if thumb_bytes else None,
                     time.time(),
+                    meta.get("s3_key") or None,
+                    meta.get("s3_url") or None,
+                    meta.get("s3_thumb_key") or None,
+                    meta.get("s3_thumb_url") or None,
                 ),
             )
             conn.commit()
@@ -212,7 +237,13 @@ def _db_upsert_video(meta: dict, video_bytes: bytes | None, thumb_bytes: bytes |
 
 
 def _db_load_video_row(video_id: str, include_bytes: bool):
-    """Fetch a single video row. include_bytes controls whether BYTEA is read."""
+    """Fetch a single video row. include_bytes controls whether BYTEA is read.
+
+    Always trails the SELECT with the optional S3 columns so callers can
+    read them positionally; ``_meta_from_row`` ignores anything past the
+    base columns, but ``_hydrate_video_to_disk`` and the backfill walker
+    pull them out by name via ``_db_load_video_meta_with_s3``.
+    """
     conn = _videos_db_conn()
     if conn is None:
         return None
@@ -223,6 +254,11 @@ def _db_load_video_row(video_id: str, include_bytes: bool):
                 "is_url, external_url, external_thumb_url")
         if include_bytes:
             cols += ", video_data, thumb_data"
+        else:
+            # Fill the BYTEA slots with NULL so positional indices stay
+            # the same whether or not bytes were requested.
+            cols += ", NULL, NULL"
+        cols += ", s3_key, s3_url, s3_thumb_key, s3_thumb_url"
         with conn.cursor() as cur:
             cur.execute(f"SELECT {cols} FROM published_videos WHERE video_id = %s", (video_id,))
             return cur.fetchone()
@@ -247,11 +283,20 @@ def _db_list_feature_videos(feature_id: str) -> list:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT video_id, feature_id, filename, ext, size, has_thumb, "
-                "is_url, external_url, external_thumb_url "
+                "is_url, external_url, external_thumb_url, "
+                "s3_key, s3_url, s3_thumb_key, s3_thumb_url "
                 "FROM published_videos WHERE feature_id = %s",
                 (feature_id,),
             )
-            return [_meta_from_row(r) for r in cur.fetchall()]
+            out = []
+            for r in cur.fetchall():
+                m = _meta_from_row(r)
+                m["s3_key"] = r[9] or ""
+                m["s3_url"] = r[10] or ""
+                m["s3_thumb_key"] = r[11] or ""
+                m["s3_thumb_url"] = r[12] or ""
+                out.append(m)
+            return out
     except Exception as e:
         logger.warning(f"[publish_store] DB list videos for {feature_id} failed: {e}")
         return []
@@ -342,6 +387,12 @@ def _hydrate_video_to_disk(video_id: str, want_video: bool, want_thumb: bool) ->
     if not row:
         return None
     meta = _meta_from_row(row)
+    # S3 columns are at the tail of the SELECT; pull them in too so
+    # downstream serve routes can redirect even after a container recycle.
+    meta["s3_key"] = (row[11] if len(row) > 11 else None) or ""
+    meta["s3_url"] = (row[12] if len(row) > 12 else None) or ""
+    meta["s3_thumb_key"] = (row[13] if len(row) > 13 else None) or ""
+    meta["s3_thumb_url"] = (row[14] if len(row) > 14 else None) or ""
     vdir = _video_dir(video_id)
     try:
         os.makedirs(vdir, exist_ok=True)
@@ -528,11 +579,36 @@ def save_image(feature_id, channel, data_url, filename, file_size, is_gif=False)
     os.replace(tmp_img, img_path)
 
     meta = {"name": str(filename)[:200], "size": int(file_size) if file_size else 0, "is_gif": bool(is_gif)}
+
+    # Best-effort S3 upload via the shared attachment seam (Task #99).
+    # Disk write above is the durable fallback; failures here never raise.
+    try:
+        if isinstance(data_url, str) and data_url.startswith("data:image/") and "," in data_url:
+            head, b64 = data_url.split(",", 1)
+            m = re.match(r"data:image/(\w+);base64", head)
+            if m:
+                ext = m.group(1).lower()
+                raw = base64.b64decode(b64, validate=False)
+                from integrations import attachment_store as _astore
+                content_type = "image/gif" if (is_gif or ext == "gif") else f"image/{ext}"
+                result = _astore.put(
+                    kind="feature-images",
+                    key_hint=f"{feature_id}.{ext}",
+                    raw_bytes=raw,
+                    content_type=content_type,
+                )
+                if result.get("backend") == "s3" and result.get("key"):
+                    meta["s3_key"] = result["key"]
+                    meta["s3_url"] = result.get("url") or ""
+                    meta["s3_content_type"] = content_type
+    except Exception as e:
+        logger.warning(f"[attachments] kind=feature-images feature_id={feature_id} S3 upload skipped: {e}")
+
     with open(tmp_meta, "w") as f:
         json.dump(meta, f)
     os.replace(tmp_meta, meta_path)
 
-    logger.info(f"[publish_store] Saved feature-level image for {feature_id} ({filename}, dataUrl={len(data_url)} bytes, declared={file_size}, is_gif={bool(is_gif)})")
+    logger.info(f"[publish_store] Saved feature-level image for {feature_id} ({filename}, dataUrl={len(data_url)} bytes, declared={file_size}, is_gif={bool(is_gif)}, s3_key={meta.get('s3_key')!r})")
     return True
 
 
@@ -549,6 +625,9 @@ def _load_image_files(img_path, meta_path):
             "name": meta.get("name", "image.png"),
             "size": meta.get("size", 0),
             "is_gif": bool(meta.get("is_gif", False)),
+            "s3_key": meta.get("s3_key") or "",
+            "s3_url": meta.get("s3_url") or "",
+            "s3_content_type": meta.get("s3_content_type") or "",
         }
     except Exception as e:
         logger.error(f"[publish_store] Error loading image files: {e}")
@@ -580,6 +659,17 @@ def get_image(feature_id, channel=None):
 def remove_image(feature_id, channel=None):
     img_path = _image_path_feature(feature_id)
     meta_path = _meta_path_feature(feature_id)
+    # Best-effort delete from S3 if we recorded a key.
+    try:
+        if os.path.exists(meta_path):
+            with open(meta_path, "r") as _mf:
+                _meta = json.load(_mf)
+            _s3_key = (_meta or {}).get("s3_key") or ""
+            if _s3_key:
+                from integrations import attachment_store as _astore
+                _astore.delete(_s3_key)
+    except Exception as _e:
+        logger.warning(f"[attachments] feature-images delete S3 failed for {feature_id}: {_e}")
     for p in [img_path, meta_path]:
         if os.path.exists(p):
             os.remove(p)
@@ -857,8 +947,6 @@ def save_video(feature_id, data_url, filename):
         "size": stored_size,
         "has_thumb": thumb_ok,
     }
-    with open(os.path.join(vdir, "meta.json"), "w") as f:
-        json.dump(meta, f)
 
     # Mirror to Postgres so the video survives autoscale container recycles
     # and is visible from any instance. Best-effort: failures are logged but
@@ -867,8 +955,86 @@ def save_video(feature_id, data_url, filename):
     thumb_bytes = _read_file_bytes(thumb_path) if thumb_ok else None
     _db_upsert_video(meta, video_bytes=video_bytes, thumb_bytes=thumb_bytes)
 
+    # Best-effort S3 upload via the shared attachment seam (Task #99). The
+    # disk + Postgres copies above are the durable fallback.
+    try:
+        from integrations import attachment_store as _astore
+        if video_bytes:
+            video_ctype = {
+                ".mp4": "video/mp4", ".mov": "video/quicktime",
+                ".webm": "video/webm", ".avi": "video/x-msvideo",
+                ".mkv": "video/x-matroska",
+            }.get(ext, "video/mp4")
+            video_key = f"videos/{video_id}/video{ext}"
+            v_res = _astore.put(
+                kind="videos",
+                key_hint=video_key,
+                raw_bytes=video_bytes,
+                content_type=video_ctype,
+            )
+            if v_res.get("backend") == "s3" and v_res.get("key"):
+                meta["s3_key"] = v_res["key"]
+                meta["s3_url"] = v_res.get("url") or ""
+                meta["s3_content_type"] = video_ctype
+        if thumb_ok and thumb_bytes:
+            thumb_key = f"videos/{video_id}/thumb.jpg"
+            t_res = _astore.put(
+                kind="video-thumbs",
+                key_hint=thumb_key,
+                raw_bytes=thumb_bytes,
+                content_type="image/jpeg",
+            )
+            if t_res.get("backend") == "s3" and t_res.get("key"):
+                meta["s3_thumb_key"] = t_res["key"]
+                meta["s3_thumb_url"] = t_res.get("url") or ""
+    except Exception as e:
+        logger.warning(f"[attachments] kind=videos video_id={video_id} S3 upload skipped: {e}")
+
+    with open(os.path.join(vdir, "meta.json"), "w") as f:
+        json.dump(meta, f)
+    # Re-upsert with the S3 keys persisted in meta so DB and disk stay in sync.
+    _db_upsert_video(meta, video_bytes=None, thumb_bytes=None)
+
     logger.info(f"[publish_store] Saved video {video_id} for feature {feature_id} ({filename}, {len(raw)} bytes, thumb={thumb_ok})")
     return video_id
+
+
+def get_video_meta(video_id):
+    """Return the meta dict for a video without reading the bytes off disk.
+
+    Used by serve endpoints to detect an S3-stored video and 302 redirect
+    to the bucket without first hydrating the BYTEA payload to disk.
+    Returns ``None`` when the video is unknown to both disk and DB.
+    """
+    try:
+        vdir = _video_dir(video_id)
+    except ValueError:
+        return None
+    meta_path = os.path.join(vdir, "meta.json")
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path) as f:
+                m = json.load(f)
+            # Disk meta may pre-date the S3 columns; backfill from DB.
+            if not m.get("s3_key") and not m.get("s3_thumb_key"):
+                row = _db_load_video_row(video_id, include_bytes=False)
+                if row:
+                    m["s3_key"] = (row[11] if len(row) > 11 else None) or m.get("s3_key", "") or ""
+                    m["s3_url"] = (row[12] if len(row) > 12 else None) or m.get("s3_url", "") or ""
+                    m["s3_thumb_key"] = (row[13] if len(row) > 13 else None) or m.get("s3_thumb_key", "") or ""
+                    m["s3_thumb_url"] = (row[14] if len(row) > 14 else None) or m.get("s3_thumb_url", "") or ""
+            return m
+        except Exception:
+            pass
+    row = _db_load_video_row(video_id, include_bytes=False)
+    if not row:
+        return None
+    m = _meta_from_row(row)
+    m["s3_key"] = (row[11] if len(row) > 11 else None) or ""
+    m["s3_url"] = (row[12] if len(row) > 12 else None) or ""
+    m["s3_thumb_key"] = (row[13] if len(row) > 13 else None) or ""
+    m["s3_thumb_url"] = (row[14] if len(row) > 14 else None) or ""
+    return m
 
 
 def get_video_path(video_id):
@@ -940,6 +1106,17 @@ def delete_video(feature_id, video_id):
     # the "deleted" video back onto disk from the surviving DB row.
     if not _db_delete_video(video_id):
         raise RuntimeError("Could not delete video from durable store; please retry")
+    # Best-effort S3 cleanup once the durable row is gone.
+    try:
+        from integrations import attachment_store as _astore
+        _vk = (meta or {}).get("s3_key") or ""
+        _tk = (meta or {}).get("s3_thumb_key") or ""
+        if _vk:
+            _astore.delete(_vk)
+        if _tk:
+            _astore.delete(_tk)
+    except Exception as _e:
+        logger.warning(f"[attachments] kind=videos S3 cleanup failed for {video_id}: {_e}")
     if os.path.isdir(vdir):
         try:
             shutil.rmtree(vdir)

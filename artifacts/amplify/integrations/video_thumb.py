@@ -65,10 +65,16 @@ def _cache_key(url: str) -> str:
     return hashlib.sha256(url.encode("utf-8")).hexdigest()[:32]
 
 
+def _s3_external_thumb_key(key: str) -> str:
+    return f"external-thumbs/{key}.jpg"
+
+
 def get_cached_external_thumb(url: str) -> str:
     """Fetch external thumbnail URL, composite play button, cache locally.
 
     Returns the cache key (filename stem) on success, or empty string on failure.
+    Also uploads the composited JPEG to S3 (kind=external-thumbs) when the
+    durable backend is enabled so the serve route can 302-redirect later.
     """
     _ensure_cache_dir()
     key = _cache_key(url)
@@ -90,6 +96,17 @@ def get_cached_external_thumb(url: str) -> str:
         out = composite_play_button(raw)
         with open(path, "wb") as f:
             f.write(out)
+        # Best-effort S3 upload; serving falls back to local on failure.
+        try:
+            from integrations import attachment_store as _astore
+            _astore.put(
+                kind="external-thumbs",
+                key_hint=_s3_external_thumb_key(key),
+                raw_bytes=out,
+                content_type="image/jpeg",
+            )
+        except Exception as _e:
+            logger.warning(f"[attachments] kind=external-thumbs S3 upload skipped: {_e}")
         return key
     except Exception as e:
         logger.warning(f"[video_thumb] external thumb fetch/composite failed for {url}: {e}")
@@ -103,3 +120,16 @@ def get_cached_external_thumb_path(key: str) -> str:
     if os.path.exists(path) and os.path.getsize(path) > 0:
         return path
     return ""
+
+
+def get_external_thumb_s3_url(key: str) -> str:
+    """Return a public S3 URL for a previously-cached external thumb, or ''."""
+    if not key or not re.match(r"^[a-f0-9]{1,64}$", key):
+        return ""
+    try:
+        from integrations import attachment_store as _astore
+        if not _astore.s3_enabled():
+            return ""
+        return _astore.s3_public_url(_s3_external_thumb_key(key)) or ""
+    except Exception:
+        return ""

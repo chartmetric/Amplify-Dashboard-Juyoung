@@ -1860,6 +1860,594 @@ def cleanup_orphan_videos_endpoint():
     return jsonify(report)
 
 
+# ---------------------------------------------------------------------------
+# Attachment storage admin (Task #99)
+# ---------------------------------------------------------------------------
+
+def _attachments_pending_counts() -> dict:
+    """Best-effort count of items not yet on S3 by kind.
+
+    Used by the status panel and backfill endpoint to show how much work
+    remains. All counters are clamped to small reads — this is an
+    operator panel, not an analytics warehouse.
+    """
+    out = {
+        "feature-images": 0,
+        "videos": 0,
+        "video-thumbs": 0,
+        "external-thumbs": 0,
+        "hosted-emails": 0,
+        "announcements": 0,
+    }
+    # Feature images on disk: flat ``<feature_id>.meta.json`` files in
+    # IMAGES_DIR. ``_hosted_<id>`` subdirs are counted under hosted-emails
+    # below, not here.
+    try:
+        from ai.publish_store import IMAGES_DIR as _IMG_DIR
+        if os.path.isdir(_IMG_DIR):
+            n = 0
+            for fn in os.listdir(_IMG_DIR):
+                if not fn.endswith(".meta.json"):
+                    continue
+                full = os.path.join(_IMG_DIR, fn)
+                if not os.path.isfile(full):
+                    continue
+                try:
+                    with open(full) as f:
+                        m = json.load(f)
+                    if not m.get("s3_key"):
+                        n += 1
+                except Exception:
+                    continue
+            out["feature-images"] = n
+    except Exception:
+        pass
+    # Videos & thumbs on disk
+    try:
+        from ai.publish_store import VIDEOS_DIR as _V_DIR
+        if os.path.isdir(_V_DIR):
+            nv = 0
+            nt = 0
+            for fn in os.listdir(_V_DIR):
+                vdir = os.path.join(_V_DIR, fn)
+                if not os.path.isdir(vdir) or fn.startswith("_"):
+                    continue
+                meta_path = os.path.join(vdir, "meta.json")
+                try:
+                    if os.path.exists(meta_path):
+                        with open(meta_path) as f:
+                            m = json.load(f)
+                        if not m.get("s3_key"):
+                            nv += 1
+                        if not m.get("s3_thumb_key"):
+                            nt += 1
+                except Exception:
+                    continue
+            out["videos"] = nv
+            out["video-thumbs"] = nt
+    except Exception:
+        pass
+    # Hosted email images: rows missing s3_key (DB) + _hosted_* disk
+    # fallback subdirs that haven't been mirrored yet (rare path).
+    try:
+        n = 0
+        conn = _drafts_db_conn()
+        if conn is not None:
+            try:
+                if _ensure_hosted_images_table(conn):
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT COUNT(1) FROM email_hosted_images WHERE s3_key IS NULL OR s3_key = ''"
+                        )
+                        row = cur.fetchone()
+                        n += int(row[0]) if row else 0
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        try:
+            from ai.publish_store import IMAGES_DIR as _IMG_DIR
+            if os.path.isdir(_IMG_DIR):
+                for fn in os.listdir(_IMG_DIR):
+                    if not fn.startswith("_hosted_"):
+                        continue
+                    fdir = os.path.join(_IMG_DIR, fn)
+                    if os.path.isdir(fdir) and not os.path.isfile(os.path.join(fdir, ".s3")):
+                        n += 1
+        except Exception:
+            pass
+        out["hosted-emails"] = n
+    except Exception:
+        pass
+    # Announcement uploads: files without sidecar
+    try:
+        from announcements_routes import UPLOAD_DIR as _ANN_DIR
+        if os.path.isdir(_ANN_DIR):
+            n = 0
+            for fn in os.listdir(_ANN_DIR):
+                if fn.endswith(".s3"):
+                    continue
+                full = os.path.join(_ANN_DIR, fn)
+                if not os.path.isfile(full):
+                    continue
+                if not os.path.isfile(full + ".s3"):
+                    n += 1
+            out["announcements"] = n
+    except Exception:
+        pass
+    # External thumbs cache: count cached files (we can't cheaply tell
+    # which are already mirrored to S3 without HEADing each one, so the
+    # status panel just shows "cached" count as a proxy).
+    try:
+        from integrations.video_thumb import _CACHE_DIR as _XT_DIR  # type: ignore
+        if os.path.isdir(_XT_DIR):
+            n = 0
+            for fn in os.listdir(_XT_DIR):
+                if fn.endswith(".jpg"):
+                    n += 1
+            out["external-thumbs"] = n
+    except Exception:
+        pass
+    return out
+
+
+@app.route("/api/admin/attachments/status", methods=["GET"])
+def attachments_status_endpoint():
+    """Return the current attachment-storage configuration + per-kind pending counts.
+
+    Category: Admin (gated by AMPLIFY_ADMIN_TOKEN)
+
+    Response shape::
+
+        {
+            "backend": "s3"|"local",
+            "s3_enabled": bool,
+            "secrets_present": {S3_Bucket_name: bool, ...},
+            "pending": {feature-images: N, videos: N, ...},
+            "recent": [{ts, backend, kind, key, bytes, ok, error}, ...]
+        }
+    """
+    auth_err = _check_admin_auth()
+    if auth_err is not None:
+        return auth_err
+    from integrations import attachment_store as _astore
+    return jsonify({
+        "success": True,
+        "backend": _astore.get_backend_name(),
+        "s3_enabled": _astore.s3_enabled(),
+        "secrets_present": _astore.secrets_present(),
+        "pending": _attachments_pending_counts(),
+        "recent": _astore.recent_uploads(limit=25),
+    })
+
+
+def _backfill_feature_images(limit: int) -> dict:
+    """Upload local feature image bytes to S3 for rows missing s3_key.
+
+    Feature images live as flat ``<feature_id>.img`` (data URL) +
+    ``<feature_id>.meta.json`` pairs in IMAGES_DIR. We decode the data
+    URL, push the raw bytes via the attachment seam, and persist the
+    resulting S3 key back into the meta JSON so the serve endpoint can
+    302-redirect on subsequent reads.
+    """
+    import base64 as _b64
+    import re as _re
+    from ai.publish_store import IMAGES_DIR as _IMG_DIR
+    from integrations import attachment_store as _astore
+    scanned = uploaded = errors = 0
+    if not os.path.isdir(_IMG_DIR):
+        return {"scanned": 0, "uploaded": 0, "errors": 0}
+    for fn in sorted(os.listdir(_IMG_DIR)):
+        if uploaded >= limit:
+            break
+        if not fn.endswith(".meta.json"):
+            continue
+        meta_path = os.path.join(_IMG_DIR, fn)
+        if not os.path.isfile(meta_path):
+            continue
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except Exception:
+            continue
+        scanned += 1
+        if meta.get("s3_key"):
+            continue
+        feature_id = fn[: -len(".meta.json")]
+        img_path = os.path.join(_IMG_DIR, feature_id + ".img")
+        if not os.path.exists(img_path):
+            continue
+        try:
+            with open(img_path) as f:
+                data_url = f.read()
+            m = _re.match(r"data:image/(\w+);base64,(.+)", data_url, _re.DOTALL)
+            if not m:
+                logger.warning(f"[backfill] feature-images {feature_id} not a data URL")
+                errors += 1
+                continue
+            ext = m.group(1).lower()
+            raw = _b64.b64decode(m.group(2), validate=False)
+            ctype = "image/gif" if (meta.get("is_gif") or ext == "gif") else f"image/{ext}"
+            res = _astore.put(
+                kind="feature-images",
+                key_hint=f"{feature_id}.{ext}",
+                raw_bytes=raw,
+                content_type=ctype,
+            )
+            if res.get("backend") == "s3" and res.get("key"):
+                meta["s3_key"] = res["key"]
+                meta["s3_url"] = res.get("url") or ""
+                meta["s3_content_type"] = ctype
+                tmp = meta_path + ".tmp"
+                with open(tmp, "w") as f:
+                    json.dump(meta, f)
+                os.replace(tmp, meta_path)
+                uploaded += 1
+            else:
+                errors += 1
+        except Exception as e:
+            logger.warning(f"[backfill] feature-images {feature_id} failed: {e}")
+            errors += 1
+    return {"scanned": scanned, "uploaded": uploaded, "errors": errors}
+
+
+def _backfill_videos(limit: int, want_thumbs: bool = True) -> dict:
+    from ai.publish_store import VIDEOS_DIR as _V_DIR
+    from integrations import attachment_store as _astore
+    scanned = uploaded = thumbs_uploaded = errors = 0
+    if not os.path.isdir(_V_DIR):
+        return {"scanned": 0, "uploaded": 0, "thumbs_uploaded": 0, "errors": 0}
+    for fn in os.listdir(_V_DIR):
+        if uploaded + thumbs_uploaded >= limit:
+            break
+        vdir = os.path.join(_V_DIR, fn)
+        if not os.path.isdir(vdir) or fn.startswith("_"):
+            continue
+        meta_path = os.path.join(vdir, "meta.json")
+        if not os.path.exists(meta_path):
+            continue
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except Exception:
+            continue
+        scanned += 1
+        meta_changed = False
+        # Video bytes
+        if not meta.get("s3_key"):
+            ext = meta.get("ext") or ".mp4"
+            video_path = os.path.join(vdir, "video" + ext)
+            if os.path.exists(video_path):
+                try:
+                    with open(video_path, "rb") as f:
+                        raw = f.read()
+                    ext_clean = ext.lstrip(".").lower() or "mp4"
+                    ctype = {"mp4": "video/mp4", "mov": "video/quicktime",
+                             "webm": "video/webm", "avi": "video/x-msvideo",
+                             "mkv": "video/x-matroska"}.get(ext_clean, "video/mp4")
+                    res = _astore.put(
+                        kind="videos",
+                        key_hint=f"videos/{fn}/video{ext}",
+                        raw_bytes=raw,
+                        content_type=ctype,
+                    )
+                    if res.get("backend") == "s3" and res.get("key"):
+                        meta["s3_key"] = res["key"]
+                        meta["s3_url"] = res.get("url") or ""
+                        meta["s3_content_type"] = ctype
+                        meta_changed = True
+                        uploaded += 1
+                    else:
+                        errors += 1
+                except Exception as e:
+                    logger.warning(f"[backfill] videos {fn} failed: {e}")
+                    errors += 1
+        # Thumb
+        if want_thumbs and not meta.get("s3_thumb_key"):
+            thumb_path = os.path.join(vdir, "thumb.jpg")
+            if os.path.exists(thumb_path):
+                try:
+                    with open(thumb_path, "rb") as f:
+                        raw = f.read()
+                    res = _astore.put(
+                        kind="video-thumbs",
+                        key_hint=f"videos/{fn}/thumb.jpg",
+                        raw_bytes=raw,
+                        content_type="image/jpeg",
+                    )
+                    if res.get("backend") == "s3" and res.get("key"):
+                        meta["s3_thumb_key"] = res["key"]
+                        meta["s3_thumb_url"] = res.get("url") or ""
+                        meta_changed = True
+                        thumbs_uploaded += 1
+                    else:
+                        errors += 1
+                except Exception as e:
+                    logger.warning(f"[backfill] video-thumbs {fn} failed: {e}")
+                    errors += 1
+        if meta_changed:
+            try:
+                tmp = meta_path + ".tmp"
+                with open(tmp, "w") as f:
+                    json.dump(meta, f)
+                os.replace(tmp, meta_path)
+                # Re-upsert to DB so the S3 cols persist there too.
+                try:
+                    from ai.publish_store import _db_upsert_video as _upsert_v  # type: ignore
+                    _upsert_v(meta, video_bytes=None, thumb_bytes=None)
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning(f"[backfill] meta write failed for {fn}: {e}")
+    return {"scanned": scanned, "uploaded": uploaded,
+            "thumbs_uploaded": thumbs_uploaded, "errors": errors}
+
+
+def _backfill_hosted_emails(limit: int) -> dict:
+    """Mirror hosted-email images from Postgres + ``_hosted_*`` disk fallback to S3."""
+    import base64 as _b64
+    import re as _re
+    from integrations import attachment_store as _astore
+    scanned = uploaded = errors = 0
+    # 1) DB rows missing s3_key.
+    conn = _drafts_db_conn()
+    if conn is not None:
+        try:
+            if _ensure_hosted_images_table(conn):
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """SELECT id, ext, name, data FROM email_hosted_images
+                           WHERE s3_key IS NULL OR s3_key = ''
+                           ORDER BY created_at DESC LIMIT %s""",
+                        (int(limit),),
+                    )
+                    rows = cur.fetchall() or []
+                for row in rows:
+                    if uploaded >= limit:
+                        break
+                    scanned += 1
+                    img_id, ext, name, data = row[0], row[1], row[2], row[3]
+                    if hasattr(data, "tobytes"):
+                        data = data.tobytes()
+                    ext_clean = (ext or "png").lstrip(".").lower() or "png"
+                    ctype = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                             "gif": "image/gif", "webp": "image/webp"}.get(ext_clean, "image/png")
+                    try:
+                        res = _astore.put(
+                            kind="hosted-emails",
+                            key_hint=f"hosted-emails/{img_id}.{ext_clean}",
+                            raw_bytes=bytes(data),
+                            content_type=ctype,
+                        )
+                        if res.get("backend") == "s3" and res.get("key"):
+                            if _set_hosted_image_s3(str(img_id), res["key"], res.get("url") or ""):
+                                uploaded += 1
+                            else:
+                                errors += 1
+                        else:
+                            errors += 1
+                    except Exception as e:
+                        logger.warning(f"[backfill] hosted-emails db {img_id} failed: {e}")
+                        errors += 1
+        except Exception as e:
+            logger.warning(f"[backfill] hosted-emails query failed: {e}")
+            errors += 1
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    # 2) ``_hosted_<id>`` disk-fallback subdirs (rare path, used when DB is
+    # unavailable). Sidecar marker ``.s3`` records that we mirrored already.
+    try:
+        from ai.publish_store import IMAGES_DIR as _IMG_DIR
+        if os.path.isdir(_IMG_DIR):
+            for fn in sorted(os.listdir(_IMG_DIR)):
+                if uploaded >= limit:
+                    break
+                if not fn.startswith("_hosted_"):
+                    continue
+                fdir = os.path.join(_IMG_DIR, fn)
+                if not os.path.isdir(fdir):
+                    continue
+                marker = os.path.join(fdir, ".s3")
+                if os.path.isfile(marker):
+                    continue
+                meta_path = os.path.join(fdir, "meta.json")
+                data_path = os.path.join(fdir, "image.dat")
+                if not (os.path.exists(meta_path) and os.path.exists(data_path)):
+                    continue
+                scanned += 1
+                try:
+                    with open(meta_path) as f:
+                        meta = json.load(f)
+                    with open(data_path) as f:
+                        data_url = f.read()
+                    m = _re.match(r"data:image/(\w+);base64,(.+)", data_url, _re.DOTALL)
+                    if not m:
+                        errors += 1
+                        continue
+                    ext = m.group(1).lower()
+                    raw = _b64.b64decode(m.group(2), validate=False)
+                    ctype = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                             "gif": "image/gif", "webp": "image/webp"}.get(ext, f"image/{ext}")
+                    img_id = (meta.get("id") or fn[len("_hosted_"):])
+                    res = _astore.put(
+                        kind="hosted-emails",
+                        key_hint=f"hosted-emails/{img_id}.{ext}",
+                        raw_bytes=raw,
+                        content_type=ctype,
+                    )
+                    if res.get("backend") == "s3" and res.get("key"):
+                        # Update DB row if present so serve route redirects.
+                        _set_hosted_image_s3(str(img_id), res["key"], res.get("url") or "")
+                        try:
+                            with open(marker, "w") as f:
+                                f.write(f"{res['key']}\n{res.get('url') or ''}\n")
+                        except Exception:
+                            pass
+                        uploaded += 1
+                    else:
+                        errors += 1
+                except Exception as e:
+                    logger.warning(f"[backfill] hosted-emails disk {fn} failed: {e}")
+                    errors += 1
+    except Exception:
+        pass
+    return {"scanned": scanned, "uploaded": uploaded, "errors": errors}
+
+
+def _backfill_announcements(limit: int) -> dict:
+    from announcements_routes import UPLOAD_DIR as _ANN_DIR
+    from integrations import attachment_store as _astore
+    scanned = uploaded = errors = 0
+    if not os.path.isdir(_ANN_DIR):
+        return {"scanned": 0, "uploaded": 0, "errors": 0}
+    for fn in sorted(os.listdir(_ANN_DIR)):
+        if uploaded >= limit:
+            break
+        if fn.endswith(".s3"):
+            continue
+        full = os.path.join(_ANN_DIR, fn)
+        if not os.path.isfile(full):
+            continue
+        if os.path.isfile(full + ".s3"):
+            continue
+        scanned += 1
+        try:
+            with open(full, "rb") as f:
+                raw = f.read()
+            import mimetypes as _m
+            ctype = _m.guess_type(fn)[0] or "application/octet-stream"
+            res = _astore.put(
+                kind="announcements",
+                key_hint=f"announcements/{fn}",
+                raw_bytes=raw,
+                content_type=ctype,
+            )
+            if res.get("backend") == "s3" and res.get("key"):
+                try:
+                    with open(full + ".s3", "w") as sc:
+                        sc.write(f"{res['key']}\n{res.get('url') or ''}\n")
+                    uploaded += 1
+                except Exception as e:
+                    logger.warning(f"[backfill] announcements sidecar write {fn} failed: {e}")
+                    errors += 1
+            else:
+                errors += 1
+        except Exception as e:
+            logger.warning(f"[backfill] announcements {fn} failed: {e}")
+            errors += 1
+    return {"scanned": scanned, "uploaded": uploaded, "errors": errors}
+
+
+def _backfill_external_thumbs(limit: int) -> dict:
+    from integrations.video_thumb import _CACHE_DIR as _XT_DIR  # type: ignore
+    from integrations import attachment_store as _astore
+    scanned = uploaded = errors = 0
+    if not os.path.isdir(_XT_DIR):
+        return {"scanned": 0, "uploaded": 0, "errors": 0}
+    for fn in sorted(os.listdir(_XT_DIR)):
+        if uploaded >= limit:
+            break
+        if not fn.endswith(".jpg"):
+            continue
+        full = os.path.join(_XT_DIR, fn)
+        if not os.path.isfile(full):
+            continue
+        scanned += 1
+        try:
+            with open(full, "rb") as f:
+                raw = f.read()
+            res = _astore.put(
+                kind="external-thumbs",
+                key_hint=f"external-thumbs/{fn}",
+                raw_bytes=raw,
+                content_type="image/jpeg",
+            )
+            if res.get("backend") == "s3" and res.get("key"):
+                uploaded += 1
+            else:
+                errors += 1
+        except Exception as e:
+            logger.warning(f"[backfill] external-thumbs {fn} failed: {e}")
+            errors += 1
+    return {"scanned": scanned, "uploaded": uploaded, "errors": errors}
+
+
+@app.route("/api/admin/attachments/backfill", methods=["POST"])
+def attachments_backfill_endpoint():
+    """Walk a single attachment kind and upload everything still on local disk
+    to S3, recording the S3 key alongside the row.
+
+    Category: Admin (gated by AMPLIFY_ADMIN_TOKEN)
+
+    Query/body params:
+    - kind (required): one of feature-images, videos, video-thumbs,
+      external-thumbs, hosted-emails, announcements, all.
+    - limit (int, default 50): max items per call. Re-run until pending=0.
+    - admin_token: passed via header X-Admin-Token, query, or body.
+
+    Response (per-kind report)::
+
+        {"success": true, "kind": "feature-images",
+         "scanned": N, "uploaded": N, "errors": N}
+    """
+    auth_err = _check_admin_auth()
+    if auth_err is not None:
+        return auth_err
+    body = request.get_json(silent=True) or {}
+    kind = (body.get("kind") or request.args.get("kind") or "").strip().lower()
+    try:
+        limit = int(body.get("limit") or request.args.get("limit") or 50)
+    except Exception:
+        limit = 50
+    limit = max(1, min(limit, 500))
+
+    from integrations import attachment_store as _astore
+    if not _astore.s3_enabled():
+        return jsonify({
+            "success": False,
+            "error": "s3_disabled",
+            "message": "Set AMPLIFY_IMAGE_STORAGE_BACKEND=s3 and the four S3_* secrets first.",
+            "secrets_present": _astore.secrets_present(),
+        }), 503
+
+    runners = {
+        "feature-images": _backfill_feature_images,
+        "videos": lambda n: _backfill_videos(n, want_thumbs=False),
+        "video-thumbs": lambda n: _backfill_videos(n, want_thumbs=True),
+        "external-thumbs": _backfill_external_thumbs,
+        "hosted-emails": _backfill_hosted_emails,
+        "announcements": _backfill_announcements,
+    }
+    if kind == "all":
+        report = {}
+        for k, fn in runners.items():
+            try:
+                report[k] = fn(limit)
+            except Exception as e:
+                logger.exception(f"[backfill] kind={k} crashed")
+                report[k] = {"error": str(e)}
+        return jsonify({"success": True, "kind": "all", "report": report})
+
+    runner = runners.get(kind)
+    if runner is None:
+        return jsonify({
+            "success": False,
+            "error": "unknown_kind",
+            "kind": kind,
+            "valid": list(runners.keys()) + ["all"],
+        }), 400
+    try:
+        report = runner(limit)
+    except Exception as e:
+        logger.exception(f"[backfill] kind={kind} crashed")
+        return jsonify({"success": False, "kind": kind, "error": str(e)}), 500
+    return jsonify({"success": True, "kind": kind, **report})
+
+
 @app.route("/api/classifications/cache")
 def classifications_cache():
     """Return full classification cache.
@@ -3261,6 +3849,10 @@ def _ensure_hosted_images_table(conn) -> bool:
                 )
                 """
             )
+            # S3 columns added by Task #99 so the serve route can 302 to
+            # the bucket and the backfill can mark which rows it migrated.
+            cur.execute("ALTER TABLE email_hosted_images ADD COLUMN IF NOT EXISTS s3_key TEXT")
+            cur.execute("ALTER TABLE email_hosted_images ADD COLUMN IF NOT EXISTS s3_url TEXT")
             conn.commit()
         _hosted_images_db_initialized = True
         return True
@@ -3348,11 +3940,70 @@ def _load_hosted_image_db(img_id: str):
             pass
 
 
+def _load_hosted_image_s3_meta(img_id: str):
+    """Return ``(s3_key, s3_url, ext)`` for a stored image, or None.
+
+    Used by ``serve_hosted_image`` to 302 to the bucket when the row was
+    backfilled to S3.
+    """
+    conn = _drafts_db_conn()
+    if conn is None:
+        return None
+    try:
+        if not _ensure_hosted_images_table(conn):
+            return None
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT s3_key, s3_url, ext FROM email_hosted_images WHERE id = %s",
+                (str(img_id),),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        return (row[0] or "", row[1] or "", row[2] or "png")
+    except Exception:
+        return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _set_hosted_image_s3(img_id: str, s3_key: str, s3_url: str) -> bool:
+    """Record an S3 key/url against an existing email_hosted_images row."""
+    conn = _drafts_db_conn()
+    if conn is None:
+        return False
+    try:
+        if not _ensure_hosted_images_table(conn):
+            return False
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE email_hosted_images SET s3_key = %s, s3_url = %s WHERE id = %s",
+                (s3_key or None, s3_url or None, str(img_id)),
+            )
+            conn.commit()
+        return True
+    except Exception as e:
+        logger.warning(f"[hosted-images] DB update s3 failed for {img_id}: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 @app.route("/api/publish/image/hosted/<img_id>")
 def serve_hosted_image(img_id):
     import base64 as _b64
     import re as _re
-    from flask import send_file
+    from flask import send_file, redirect
     from io import BytesIO
     from ai.publish_store import IMAGES_DIR
     ua = request.headers.get("User-Agent", "")[:120]
@@ -3366,6 +4017,19 @@ def serve_hosted_image(img_id):
     if safe_id != img_id:
         logger.info(f"[hosted-images] serve sanitized img_id {img_id!r} -> {safe_id!r}")
     mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
+    # If the row was backfilled to S3, redirect there first (Task #99).
+    s3_meta = _load_hosted_image_s3_meta(safe_id)
+    if s3_meta:
+        s3_key, s3_url, _ext = s3_meta
+        if s3_url or s3_key:
+            try:
+                from integrations import attachment_store as _astore
+                target = s3_url or _astore.s3_public_url(s3_key)
+                if target:
+                    logger.info(f"[hosted-images] serve REDIRECT(s3) id={safe_id} -> {target}")
+                    return redirect(target, code=302)
+            except Exception:
+                pass
     # Try Postgres first — durable across deploys.
     db_hit = _load_hosted_image_db(safe_id)
     if db_hit is not None:
@@ -3422,10 +4086,24 @@ def publish_image_meta(feature_id):
 def serve_feature_image(feature_id):
     import base64 as _b64
     import re as _re
-    from flask import send_file
+    from flask import send_file, redirect
     from io import BytesIO
     img_data = get_publish_image(feature_id)
-    if not img_data or not img_data.get("dataUrl"):
+    if not img_data:
+        return "Not found", 404
+    # Prefer S3 when we recorded a key (Task #99). 302 keeps the URL the
+    # frontend uses unchanged but offloads bandwidth to the bucket.
+    s3_url = img_data.get("s3_url") or ""
+    s3_key = img_data.get("s3_key") or ""
+    if s3_url or s3_key:
+        try:
+            from integrations import attachment_store as _astore
+            target = s3_url or _astore.s3_public_url(s3_key)
+            if target:
+                return redirect(target, code=302)
+        except Exception:
+            pass
+    if not img_data.get("dataUrl"):
         return "Not found", 404
     data_url = img_data["dataUrl"]
     m = _re.match(r"data:image/(\w+);base64,(.+)", data_url)
@@ -3651,7 +4329,24 @@ def _placeholder_thumb_url(absolute: bool = False) -> str:
 
 @app.route("/api/videos/<video_id>")
 def serve_video(video_id):
-    from flask import send_file
+    from flask import send_file, redirect
+    # S3 redirect when we recorded a key (Task #99).
+    try:
+        from ai.publish_store import get_video_meta
+        meta_only = get_video_meta(video_id)
+    except Exception:
+        meta_only = None
+    if meta_only:
+        s3_url = meta_only.get("s3_url") or ""
+        s3_key = meta_only.get("s3_key") or ""
+        if s3_url or s3_key:
+            try:
+                from integrations import attachment_store as _astore
+                target = s3_url or _astore.s3_public_url(s3_key)
+                if target:
+                    return redirect(target, code=302)
+            except Exception:
+                pass
     try:
         video_path, meta = get_video_path(video_id)
     except ValueError:
@@ -3665,7 +4360,24 @@ def serve_video(video_id):
 
 @app.route("/api/videos/<video_id>/thumb")
 def serve_video_thumb(video_id):
-    from flask import send_file
+    from flask import send_file, redirect
+    # S3 redirect for the thumbnail when we have one (Task #99).
+    try:
+        from ai.publish_store import get_video_meta
+        meta_only = get_video_meta(video_id)
+    except Exception:
+        meta_only = None
+    if meta_only:
+        s3_url = meta_only.get("s3_thumb_url") or ""
+        s3_key = meta_only.get("s3_thumb_key") or ""
+        if s3_url or s3_key:
+            try:
+                from integrations import attachment_store as _astore
+                target = s3_url or _astore.s3_public_url(s3_key)
+                if target:
+                    return redirect(target, code=302)
+            except Exception:
+                pass
     try:
         thumb_path = get_video_thumb_path(video_id)
     except ValueError:
@@ -3682,7 +4394,12 @@ def serve_video_thumb(video_id):
 @app.route("/api/videos/external-thumb/<key>")
 def serve_external_video_thumb(key):
     from flask import send_file
-    from integrations.video_thumb import get_cached_external_thumb_path
+    from integrations.video_thumb import get_cached_external_thumb_path, get_external_thumb_s3_url
+    from flask import redirect
+    # Prefer S3 when enabled (Task #99) — independent of local cache state.
+    s3_url = get_external_thumb_s3_url(key)
+    if s3_url:
+        return redirect(s3_url, code=302)
     path = get_cached_external_thumb_path(key)
     if not path:
         return (
