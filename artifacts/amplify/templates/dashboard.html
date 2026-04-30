@@ -11041,7 +11041,15 @@ function renderDraftsBar(containerId) {
         // we don't repaint a now-inactive container.
         if (myToken !== _draftsBarRenderToken) return;
         if (containerId !== _draftsBarActiveContainer) return;
-        var drafts = (data && data.drafts) || [];
+        // Only show actual unsent drafts. The /api/email-drafts endpoint
+        // returns every saved row regardless of status, but published
+        // (already-sent) artifacts belong under "My Content -> Artifacts",
+        // not the resume-a-draft bar. Without this filter the bar count
+        // (e.g. "Saved drafts (10)") wouldn't match what marketers see in
+        // the My Content -> Drafts tab.
+        var drafts = ((data && data.drafts) || []).filter(function(d) {
+            return (d.status || 'draft') === 'draft';
+        });
         window._savedDrafts = drafts;
         if (!drafts.length) { bar.innerHTML = ''; _draftsBarSelectedIds = {}; return; }
         // Preserve selection only for ids still present.
