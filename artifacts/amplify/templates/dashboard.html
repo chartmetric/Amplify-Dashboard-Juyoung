@@ -1487,6 +1487,12 @@
         }
         .batch-item.approved { border-left: 3px solid var(--accent); }
         .batch-item:hover { transform: translateY(-1px); }
+        .batch-item.is-dragging-collapsed > .batch-item-body,
+        .batch-item.is-dragging-collapsed > .img-preview-wrap,
+        .batch-item.is-dragging-collapsed > .batch-item-loading,
+        .batch-item.is-dragging-collapsed > .batch-item-feature-url,
+        .batch-item.is-dragging-collapsed > .batch-item-actions { display: none !important; }
+        .batch-item.is-dragging-collapsed > .batch-item-header { border-bottom: 0; }
         .batch-item-header {
             display: flex; align-items: center; gap: 10px; padding: 12px 16px;
             background: var(--bg-panel); border-bottom: 1px solid var(--border); cursor: grab;
@@ -12824,10 +12830,22 @@ function initBatchDragDrop() {
         if (!item) return;
         prepDragItem = item;
         item.style.opacity = '0.5';
+        item.classList.add('is-dragging-collapsed');
         e.dataTransfer.effectAllowed = 'move';
     });
     list.addEventListener('dragend', function(e) {
-        if (prepDragItem) { prepDragItem.style.opacity = '1'; prepDragItem = null; }
+        if (prepDragItem) {
+            prepDragItem.style.opacity = '1';
+            prepDragItem.classList.remove('is-dragging-collapsed');
+            prepDragItem = null;
+        }
+        // Defensive cleanup: ensure no card is left collapsed if dragend fires
+        // for an item we lost track of (e.g. drop outside the list).
+        var stuck = list.querySelectorAll('.batch-item.is-dragging-collapsed');
+        for (var i = 0; i < stuck.length; i++) {
+            stuck[i].classList.remove('is-dragging-collapsed');
+            stuck[i].style.opacity = '1';
+        }
     });
     list.addEventListener('dragover', function(e) {
         e.preventDefault();
