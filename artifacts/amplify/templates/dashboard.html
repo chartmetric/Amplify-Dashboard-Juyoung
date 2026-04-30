@@ -2211,6 +2211,7 @@
                 <button class="btn-back" onclick="prepGoToStep(1)">&larr; Back to use cases</button>
                 <h2 class="prep-title" id="step2-title"></h2>
             </div>
+            <div id="drafts-bar-step2" style="margin:0 0 14px 0;"></div>
             <div class="picker-controls">
                 <div class="picker-quick-btns">
                     <button class="btn-quick" onclick="pickerSelectAll()">Select All</button>
@@ -10993,8 +10994,39 @@ function _onDraftsBarCheckboxToggle(cb, id) {
     _updateMergeDraftsButton();
 }
 
-function renderDraftsBar() {
-    var bar = document.getElementById('drafts-bar-step1');
+// IDs of every container the saved-drafts bar can render into. The bar
+// uses inline IDs (drafts-bar-rows, drafts-bar-search, etc.) and only one
+// instance can exist in the DOM at a time. When we render into one
+// container we wipe the others so getElementById always resolves to the
+// active bar regardless of which prep step the marketer is on.
+var _DRAFTS_BAR_CONTAINERS = ['drafts-bar-step1', 'drafts-bar-step2'];
+// Tracks which container the bar was last rendered into, so refreshes
+// triggered by deletes / merges (which call renderDraftsBar() with no
+// argument) re-render into the marketer's currently-visible bar instead
+// of always defaulting to step 1.
+var _draftsBarActiveContainer = 'drafts-bar-step1';
+// Monotonic render token. Each renderDraftsBar() call increments this; the
+// fetch's success callback bails out if its token is no longer the latest
+// or if the active container has changed underneath it. Without this, a
+// step1 fetch resolving after the user has already jumped to step2 would
+// repaint the (hidden) step1 container and re-introduce the duplicate
+// inline IDs (drafts-bar-rows, etc.) we just wiped.
+var _draftsBarRenderToken = 0;
+
+function renderDraftsBar(containerId) {
+    containerId = containerId || _draftsBarActiveContainer || 'drafts-bar-step1';
+    _draftsBarActiveContainer = containerId;
+    var myToken = ++_draftsBarRenderToken;
+    // Wipe any other bar so the inline IDs (drafts-bar-rows, etc.) only
+    // exist in the active container. Without this, jumping from step 1
+    // to step 2 leaves the step-1 bar in the (hidden) DOM and
+    // getElementById would resolve to it instead of the visible one.
+    _DRAFTS_BAR_CONTAINERS.forEach(function(cid) {
+        if (cid === containerId) return;
+        var other = document.getElementById(cid);
+        if (other) other.innerHTML = '';
+    });
+    var bar = document.getElementById(containerId);
     if (!bar) return;
     // Preserve the active search query across refetches (e.g. after a delete)
     // so marketers don't lose their filter when the list refreshes.
@@ -11004,6 +11036,11 @@ function renderDraftsBar() {
     fetch('/api/email-drafts')
     .then(function(r) { return r.json(); })
     .then(function(data) {
+        // Stale-render guard: if the user already triggered a newer render
+        // (e.g. by jumping to a different prep step), drop this response so
+        // we don't repaint a now-inactive container.
+        if (myToken !== _draftsBarRenderToken) return;
+        if (containerId !== _draftsBarActiveContainer) return;
         var drafts = (data && data.drafts) || [];
         window._savedDrafts = drafts;
         if (!drafts.length) { bar.innerHTML = ''; _draftsBarSelectedIds = {}; return; }
@@ -11031,7 +11068,13 @@ function renderDraftsBar() {
         filterDraftsBar(preservedQuery);
         _updateMergeDraftsButton();
     })
-    .catch(function() { bar.innerHTML = ''; });
+    .catch(function() {
+        // Same stale-render guard as the success path: don't blank a bar
+        // that has since been replaced by a newer render.
+        if (myToken !== _draftsBarRenderToken) return;
+        if (containerId !== _draftsBarActiveContainer) return;
+        bar.innerHTML = '';
+    });
 }
 
 function filterDraftsBar(query) {
@@ -11578,8 +11621,8 @@ function prepGoToStep(step) {
     });
     document.getElementById('prep-step' + step).style.display = 'block';
 
-    if (step === 1) { renderUseCaseGrid(); renderDraftsBar(); }
-    if (step === 2) renderFeaturePicker();
+    if (step === 1) { renderUseCaseGrid(); renderDraftsBar('drafts-bar-step1'); }
+    if (step === 2) { renderFeaturePicker(); renderDraftsBar('drafts-bar-step2'); }
     if (step === 3) {
         if (prepBatchResults.length === 0) {
             // Only auto-trigger generation when there's something to
