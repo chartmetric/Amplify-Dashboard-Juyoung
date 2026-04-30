@@ -393,18 +393,45 @@ class MediaResolutionError(Exception):
         super().__init__(msg)
 
 
-def _build_hosted_image_map(images: dict) -> dict:
-    """Persist inline data: images so the email can reference a stable URL.
+# ---------------------------------------------------------------------------
+# Image storage seam
+# ---------------------------------------------------------------------------
+# Everything below the line "store these decoded image bytes and give me back
+# a public URL" funnels through ``_store_image_and_get_url``. Both the send
+# path (``send_email`` -> ``_build_hosted_image_map``) and the preview path
+# (``/api/publish/email/preview``) call into the same seam so the rendered
+# HTML never embeds base64 blobs.
+#
+# The active backend is selected by the ``AMPLIFY_IMAGE_STORAGE_BACKEND``
+# environment variable. Today only ``local`` is implemented (Postgres with
+# an on-disk fallback, both fronted by ``/api/publish/image/hosted/<id>``).
+# Adding S3 (or any other object store) later means: implement a new
+# ``_store_image_<backend>`` function, dispatch to it from
+# ``_store_image_and_get_url``, and flip the env var. Callers do not change.
+# ---------------------------------------------------------------------------
 
-    Tries Postgres first (durable across deploys); falls back to the on-disk
-    cache used by the legacy ``/api/publish/image/hosted/<id>`` route. The
-    legacy disk cache gets wiped on every Replit redeploy, which silently
-    broke images in already-sent emails — Postgres avoids that.
+
+def _get_image_storage_backend() -> str:
+    """Return the active image-storage backend name.
+
+    Today only ``"local"`` is supported. The env var exists so we can swap
+    backends (for example, ``"s3"``) without editing every caller.
     """
-    if not images:
-        logger.info("[hosted-images] _build_hosted_image_map called with no images")
-        return {}
-    import re as _re
+    return (os.environ.get("AMPLIFY_IMAGE_STORAGE_BACKEND") or "local").strip().lower()
+
+
+def _store_image_local(raw: bytes, ext: str, name: str) -> str | None:
+    """Persist an image via the local backend (Postgres -> disk fallback).
+
+    Returns the public URL (``/api/publish/image/hosted/<id>``) on success,
+    or ``None`` if every store failed. The id format must stay hex-only so
+    the serving route's path-sanitizer continues to accept it.
+    """
+    import uuid as _uuid
+    import base64 as _b64
+    import json as _json
+
+    img_id = _uuid.uuid4().hex[:12]
     base_url = _get_base_url()
 
     try:
@@ -413,22 +440,99 @@ def _build_hosted_image_map(images: dict) -> dict:
         logger.warning(f"[hosted-images] Could not import save_hosted_image_db: {_e}")
         _save_db = None
 
+    stored_in_db = False
+    db_err = None
+    if _save_db is not None:
+        try:
+            stored_in_db = bool(_save_db(img_id, ext, str(name)[:200], raw))
+        except Exception as e:
+            db_err = repr(e)
+            logger.warning(f"[hosted-images] DB save failed for '{name!r}': {db_err}")
+
+    if stored_in_db:
+        logger.info(
+            f"[hosted-images] '{name!r}' -> DB OK (img_id={img_id}, "
+            f"size={len(raw)} bytes, ext={ext})"
+        )
+        return f"{base_url}/api/publish/image/hosted/{img_id}"
+
+    # Disk fallback (legacy / local dev / DB unavailable). The serving
+    # route reads back a data URL from image.dat, so reconstruct one
+    # here from the decoded bytes.
+    try:
+        from ai.publish_store import IMAGES_DIR
+        img_dir = os.path.join(IMAGES_DIR, f"_hosted_{img_id}")
+        os.makedirs(img_dir, exist_ok=True)
+        data_url = f"data:image/{ext};base64,{_b64.b64encode(raw).decode('ascii')}"
+        with open(os.path.join(img_dir, "image.dat"), "w") as f:
+            f.write(data_url)
+        with open(os.path.join(img_dir, "meta.json"), "w") as f:
+            _json.dump({"name": str(name)[:200], "ext": ext, "id": img_id}, f)
+        logger.warning(
+            f"[hosted-images] '{name!r}' -> DISK ONLY (img_id={img_id}, "
+            f"size={len(raw)} bytes, ext={ext}, db_err={db_err}). "
+            "This will break on next redeploy."
+        )
+        return f"{base_url}/api/publish/image/hosted/{img_id}"
+    except Exception as e:
+        logger.error(
+            f"[hosted-images] Disk fallback failed for '{name!r}' (img_id={img_id}): {e}"
+        )
+        return None
+
+
+def _store_image_and_get_url(raw: bytes, ext: str, name: str) -> str | None:
+    """Storage seam: persist a decoded image and return its public URL.
+
+    Dispatches to the backend named by ``AMPLIFY_IMAGE_STORAGE_BACKEND``.
+    Returns ``None`` if the backend could not persist the image; callers
+    must treat that as a hard failure (skip the image rather than ship a
+    base64 blob).
+    """
+    backend = _get_image_storage_backend()
+    if backend == "local":
+        return _store_image_local(raw, ext, name)
+    logger.error(
+        f"[hosted-images] Unknown AMPLIFY_IMAGE_STORAGE_BACKEND={backend!r}; "
+        "falling back to local"
+    )
+    return _store_image_local(raw, ext, name)
+
+
+def _build_hosted_image_map(images: dict) -> dict:
+    """Convert an ``{name: data_url}`` map to ``{name: public_url}``.
+
+    Each ``data:image/...;base64,...`` value is decoded once and handed to
+    the storage seam (:func:`_store_image_and_get_url`) which returns a
+    stable URL. ``http(s)://`` values pass through untouched. Anything we
+    cannot convert is dropped from the result so the renderer reports the
+    image as missing instead of inlining base64 into the email.
+    """
+    if not images:
+        logger.info("[hosted-images] _build_hosted_image_map called with no images")
+        return {}
+    import re as _re
+    import base64 as _b64
+
+    backend = _get_image_storage_backend()
     logger.info(
         f"[hosted-images] _build_hosted_image_map start: count={len(images)} "
-        f"base_url={base_url!r} db_save_available={_save_db is not None} "
-        f"keys={[repr(k) for k in list(images.keys())[:5]]}"
+        f"backend={backend!r} keys={[repr(k) for k in list(images.keys())[:5]]}"
     )
 
-    hosted = {}
+    hosted: dict = {}
     for img_name, data_url in images.items():
         if not data_url:
             logger.warning(f"[hosted-images] Skipping '{img_name!r}': empty data_url")
             continue
         if data_url.startswith("http"):
-            logger.info(f"[hosted-images] Pass-through http URL for '{img_name!r}': {data_url[:120]}")
+            logger.info(
+                f"[hosted-images] Pass-through http URL for '{img_name!r}': "
+                f"{data_url[:120]}"
+            )
             hosted[img_name] = data_url
-        elif data_url.startswith("data:image/"):
-            import uuid as _uuid, base64 as _b64, json as _json
+            continue
+        if data_url.startswith("data:image/"):
             m = _re.match(r"data:image/(\w+);base64,(.+)", data_url)
             if not m:
                 logger.warning(
@@ -437,45 +541,27 @@ def _build_hosted_image_map(images: dict) -> dict:
                 )
                 continue
             ext = m.group(1)
-            img_id = _uuid.uuid4().hex[:12]
             try:
                 raw = _b64.b64decode(m.group(2))
             except Exception:
-                logger.warning(f"[hosted-images] Skipping '{img_name!r}': invalid base64 data")
-                continue
-            stored_in_db = False
-            db_err = None
-            if _save_db is not None:
-                try:
-                    stored_in_db = bool(_save_db(img_id, ext, str(img_name)[:200], raw))
-                except Exception as e:
-                    db_err = repr(e)
-                    logger.warning(f"[hosted-images] DB save failed for '{img_name!r}': {db_err}")
-            if not stored_in_db:
-                # Fall back to disk so local dev / unconfigured envs still work.
-                from ai.publish_store import IMAGES_DIR
-                img_dir = os.path.join(IMAGES_DIR, f"_hosted_{img_id}")
-                os.makedirs(img_dir, exist_ok=True)
-                with open(os.path.join(img_dir, "image.dat"), "w") as f:
-                    f.write(data_url)
-                with open(os.path.join(img_dir, "meta.json"), "w") as f:
-                    _json.dump({"name": str(img_name)[:200], "ext": ext, "id": img_id}, f)
                 logger.warning(
-                    f"[hosted-images] '{img_name!r}' -> DISK ONLY (img_id={img_id}, "
-                    f"size={len(raw)} bytes, ext={ext}, db_err={db_err}). This will break on next redeploy."
+                    f"[hosted-images] Skipping '{img_name!r}': invalid base64 data"
                 )
+                continue
+            url = _store_image_and_get_url(raw, ext, str(img_name))
+            if url:
+                hosted[img_name] = url
             else:
-                logger.info(
-                    f"[hosted-images] '{img_name!r}' -> DB OK (img_id={img_id}, "
-                    f"size={len(raw)} bytes, ext={ext})"
+                logger.error(
+                    f"[hosted-images] Storage seam returned None for '{img_name!r}'; "
+                    "dropping rather than inlining base64"
                 )
-            hosted[img_name] = f"{base_url}/api/publish/image/hosted/{img_id}"
-        else:
-            logger.warning(
-                f"[hosted-images] Unknown data_url scheme for '{img_name!r}' "
-                f"(head={data_url[:60]!r}); passing through as-is"
-            )
-            hosted[img_name] = data_url
+            continue
+        logger.warning(
+            f"[hosted-images] Unknown data_url scheme for '{img_name!r}' "
+            f"(head={data_url[:60]!r}); passing through as-is"
+        )
+        hosted[img_name] = data_url
 
     logger.info(
         f"[hosted-images] _build_hosted_image_map done: "

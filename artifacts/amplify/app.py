@@ -2562,7 +2562,7 @@ def publish_email():
 
 @app.route("/api/publish/email/preview", methods=["GET", "POST"])
 def preview_email():
-    from integrations.sendgrid_client import render_email_html
+    from integrations.sendgrid_client import render_email_html, _build_hosted_image_map
 
     if request.method == "POST":
         data = request.get_json() or {}
@@ -2604,6 +2604,14 @@ def preview_email():
     from integrations.sendgrid_client import _save_hosted_email, _build_view_in_browser_url
     view_token = _secrets.token_urlsafe(16)
     view_url = _build_view_in_browser_url(view_token)
+    # Convert inline data: image payloads to hosted URLs via the same
+    # storage seam the send path uses. Without this step the rendered
+    # preview HTML (and the "View in browser" snapshot we save below)
+    # would embed every image as base64, blowing past the 1 MB limit
+    # that downstream tools (Resend, Litmus, manual copy-paste) impose
+    # on email HTML.
+    hosted_images = _build_hosted_image_map(images) if images else None
+
     # Show the "Unsubscribe" link in the preview footer so the marketer
     # can verify it's there before sending. Real sends substitute a
     # signed per-recipient URL into UNSUBSCRIBE_PLACEHOLDER; for preview
@@ -2612,7 +2620,7 @@ def preview_email():
     html = render_email_html(
         subject,
         content,
-        images=images,
+        images=hosted_images,
         from_name=from_name,
         videos=videos,
         view_url=view_url,
