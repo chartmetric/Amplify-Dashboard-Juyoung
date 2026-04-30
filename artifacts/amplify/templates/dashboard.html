@@ -10902,8 +10902,7 @@ function renderDraftsBar() {
         var drafts = (data && data.drafts) || [];
         if (!drafts.length) { bar.innerHTML = ''; return; }
         var rows = '';
-        var max = Math.min(drafts.length, 8);
-        for (var i = 0; i < max; i++) {
+        for (var i = 0; i < drafts.length; i++) {
             var d = drafts[i];
             var when = new Date((d.ts || 0) * 1000).toLocaleString();
             var meta = (d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's');
@@ -10921,14 +10920,12 @@ function renderDraftsBar() {
                 + '<button onclick="deleteEmailDraft(\'' + d.id + '\')" title="Delete draft" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">\u2715</button>'
                 + '</div>';
         }
-        var more = drafts.length > max ? '<div style="color:var(--text-muted);font-size:11px;margin-top:6px;">+ ' + (drafts.length - max) + ' older drafts not shown</div>' : '';
         bar.innerHTML = '<div style="background:var(--bg-elev,rgba(167,139,250,0.04));border:1px solid rgba(167,139,250,0.25);border-radius:8px;padding:12px 14px;">'
             + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
             + '<div style="font-weight:600;color:var(--text-body);font-size:14px;">\uD83D\uDCBE Saved drafts (' + drafts.length + ')</div>'
             + '<div style="font-size:11px;color:var(--text-muted);">Click "Resume" to reopen</div>'
             + '</div>'
-            + '<div style="display:flex;flex-direction:column;gap:6px;">' + rows + '</div>'
-            + more
+            + '<div style="max-height:200px;overflow-y:auto;padding-right:4px;"><div style="display:flex;flex-direction:column;gap:6px;">' + rows + '</div></div>'
             + '</div>';
     })
     .catch(function() { bar.innerHTML = ''; });
