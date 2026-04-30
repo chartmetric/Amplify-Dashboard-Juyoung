@@ -214,6 +214,14 @@ def _build_view_in_browser_url(token: str) -> str:
 # HTML once per send batch.
 UNSUBSCRIBE_PLACEHOLDER = "{{AMPLIFY_UNSUBSCRIBE_URL}}"
 
+# CAN-SPAM-friendly fallback used when an email is sent outside an audience
+# (custom typed-in recipient lists, test sends to ourselves) so there is no
+# topic-subscription row to flip. Recipients can still opt out by replying
+# to this address; the inbox is monitored manually. Also used as the
+# List-Unsubscribe header value for those sends so Gmail/Outlook surface a
+# native unsubscribe button.
+GENERIC_UNSUBSCRIBE_MAILTO = "mailto:unsubscribe@chartmetric.com"
+
 
 _UNSAFE_SESSION_SECRETS = {"", "amplify-dev-secret", "change-me", "dev", "secret"}
 
@@ -340,10 +348,11 @@ def _render_footer_links_html(view_url: str = None, unsubscribe_placeholder: str
 
     When ``unsubscribe_placeholder`` is provided (typically
     :data:`UNSUBSCRIBE_PLACEHOLDER`), an "Unsubscribe" link is appended
-    pointing at that placeholder string. The send loop substitutes a
-    personal, signed unsubscribe URL per recipient before delivery. When
-    no placeholder is given (test sends, custom one-off recipients with
-    no audience), the link is omitted so we never ship a dead URL.
+    pointing at that placeholder string. The send loop substitutes either
+    a personal, signed audience unsubscribe URL (audience sends) or
+    :data:`GENERIC_UNSUBSCRIBE_MAILTO` (custom typed-in recipients and
+    test sends) before delivery, so every email ships with a working
+    unsubscribe link.
     """
     safe_view = _esc(view_url) if view_url else "https://chartmetric.com"
     unsub_html = ""
@@ -1128,7 +1137,7 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
     sender = f"{display_name} <{from_email}>"
     aud_id_clean = (audience_id or "").strip()
     topic_id_clean = (topic_id or "").strip()
-    has_placeholder = bool(aud_id_clean) and (UNSUBSCRIBE_PLACEHOLDER in (html_content or ""))
+    has_placeholder = UNSUBSCRIBE_PLACEHOLDER in (html_content or "")
     email_list = []
     for addr in to_emails:
         params = {
@@ -1137,15 +1146,16 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
             "subject": subject,
         }
         per_recipient_html = html_content
-        # Personal, signed unsubscribe URL per recipient. Only applies when
-        # the send was initiated against a Resend audience — for test sends
-        # and custom one-off addresses we pass no audience_id, the footer
-        # has no placeholder, and we skip the List-Unsubscribe header so
-        # mail clients don't show a non-functional opt-out button.
-        # When topic_id is set, the link/header opt the recipient out of
-        # this topic only (workspace-wide, across audiences). Without a
-        # topic_id, the link falls back to audience-wide unsubscribe so
-        # legacy callers still work.
+        # Unsubscribe handling has two modes:
+        #   * Audience send: per-recipient signed URL that flips the
+        #     contact's topic subscription (or the audience-wide flag
+        #     when there's no topic_id). Personal token => one TO per
+        #     params object, never co-mingled with BCC.
+        #   * Custom typed-in recipients / test sends: no audience to
+        #     flip, so we substitute the generic
+        #     :data:`GENERIC_UNSUBSCRIBE_MAILTO` and surface it via the
+        #     List-Unsubscribe header. This keeps the email CAN-SPAM
+        #     compliant even when nobody picked an audience in the UI.
         if aud_id_clean:
             unsub_url = build_unsubscribe_url(aud_id_clean, addr, topic_id=topic_id_clean)
             if unsub_url:
@@ -1158,11 +1168,14 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
                     "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
                 }
             else:
-                # SESSION_SECRET missing/insecure: don't ship a link we can't
-                # verify later. Strip the placeholder so recipients don't see
-                # a literal token in the footer.
+                # SESSION_SECRET missing/insecure: we can't mint a signed
+                # audience link, but the recipient still deserves a way
+                # to opt out, so fall back to the generic mailto.
                 if has_placeholder and per_recipient_html:
-                    per_recipient_html = per_recipient_html.replace(UNSUBSCRIBE_PLACEHOLDER, "https://chartmetric.com")
+                    per_recipient_html = per_recipient_html.replace(UNSUBSCRIBE_PLACEHOLDER, GENERIC_UNSUBSCRIBE_MAILTO)
+                params["headers"] = {
+                    "List-Unsubscribe": f"<{GENERIC_UNSUBSCRIBE_MAILTO}>",
+                }
             # NOTE: do NOT attach BCC to per-recipient audience sends.
             # If we did, every BCC inbox would receive N copies (one per
             # TO recipient), each carrying a different recipient's signed
@@ -1170,8 +1183,19 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
             # A BCC viewer clicking that link would unsubscribe the wrong
             # contact (token confusion). BCC for audience sends is handled
             # below as a single archival copy.
-        elif bcc_emails:
-            params["bcc"] = bcc_emails
+        else:
+            # Custom typed-in recipients or test sends: ship the generic
+            # mailto: opt-out so the email isn't dead-ended. RFC 2369
+            # allows a mailto: scheme in List-Unsubscribe; we omit
+            # List-Unsubscribe-Post because that header is HTTPS-only
+            # per RFC 8058.
+            if has_placeholder and per_recipient_html:
+                per_recipient_html = per_recipient_html.replace(UNSUBSCRIBE_PLACEHOLDER, GENERIC_UNSUBSCRIBE_MAILTO)
+            params["headers"] = {
+                "List-Unsubscribe": f"<{GENERIC_UNSUBSCRIBE_MAILTO}>",
+            }
+            if bcc_emails:
+                params["bcc"] = bcc_emails
         if template_id:
             params["template"] = {"id": template_id}
         else:
@@ -1185,8 +1209,11 @@ def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: 
     # the original HTML with the unsubscribe placeholder swapped to the
     # static fallback URL so we never ship a literal placeholder.
     if aud_id_clean and bcc_emails:
+        # Archival copy is a single shared message — we can't embed any one
+        # recipient's signed unsubscribe URL, so fall back to the generic
+        # mailto so the placeholder never ships as literal text.
         archival_html = (html_content or "").replace(
-            UNSUBSCRIBE_PLACEHOLDER, "https://chartmetric.com"
+            UNSUBSCRIBE_PLACEHOLDER, GENERIC_UNSUBSCRIBE_MAILTO
         )
         archival_params = {
             "from": sender,
@@ -1320,10 +1347,10 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
 
     aud_id_clean = (audience_id or "").strip()
     topic_id_clean = (topic_id or "").strip()
-    # Only emit the unsubscribe footer link when we have an audience to
-    # flip a topic subscription on. Test sends and custom typed-in
-    # recipient lists render without the link so we never ship a dead URL.
-    unsub_placeholder = UNSUBSCRIBE_PLACEHOLDER if aud_id_clean else None
+    # Always render an unsubscribe link in the footer (CAN-SPAM friendly).
+    # _send_via_resend substitutes a personal signed URL when the send is
+    # tied to an audience, or a generic mailto: opt-out address otherwise.
+    unsub_placeholder = UNSUBSCRIBE_PLACEHOLDER
 
     # Per-topic opt-out filter (Task #77): drop recipients who have
     # opted out of this topic before we render or send. Topic state is
@@ -1413,10 +1440,11 @@ def send_email(subject: str, body: str, to_email: str = None, is_test: bool = Tr
         if result.get("success"):
             # The hosted "View in browser" page is shared (one URL per send,
             # not per recipient), so we cannot embed a personal unsubscribe
-            # token here. Strip the placeholder to a static fallback URL so
-            # the saved snapshot never ships a literal "{{AMPLIFY_UNSUBSCRIBE_URL}}".
+            # token here. Substitute the generic mailto so the saved snapshot
+            # never ships a literal "{{AMPLIFY_UNSUBSCRIBE_URL}}" and the
+            # link still works for someone reading the page on the web.
             hosted_html = (html_content or "").replace(
-                UNSUBSCRIBE_PLACEHOLDER, "https://chartmetric.com"
+                UNSUBSCRIBE_PLACEHOLDER, GENERIC_UNSUBSCRIBE_MAILTO
             )
             _save_hosted_email(view_token, hosted_html)
             result["view_url"] = view_url

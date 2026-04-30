@@ -129,12 +129,26 @@ def get_external_thumb_s3_key(key: str) -> str:
     to get a working serve URL. We deliberately do not return a URL
     here — the bucket is private, so a public-form URL would 403 and
     break thumbs in the email.
+
+    Existence check: we gate on the local cache file existing (a cheap
+    stat) as a proxy for "we successfully cached this thumb". The S3
+    upload at :func:`fetch_and_cache_external_thumb` is best-effort and
+    runs immediately after the local write, so a present local file is
+    very strong evidence that S3 has the object too. When the local
+    cache is missing, we return '' so the caller can fall through to
+    the placeholder image instead of redirecting recipients to a 404 on
+    S3. (We still don't HEAD S3 here — that round-trip would slow every
+    email preview that contains multiple video thumbs.)
     """
     if not key or not re.match(r"^[a-f0-9]{1,64}$", key):
         return ""
     try:
         from integrations import attachment_store as _astore
         if not _astore.s3_enabled():
+            return ""
+        # Only advertise the S3 key when we have local evidence that
+        # the object was successfully uploaded. See docstring above.
+        if not get_cached_external_thumb_path(key):
             return ""
         return _s3_external_thumb_key(key) or ""
     except Exception:
