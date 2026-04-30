@@ -2219,11 +2219,11 @@
             <div id="drafts-bar-step2" style="margin:0 0 14px 0;"></div>
             <div class="picker-controls">
                 <div class="picker-quick-btns">
-                    <button class="btn-quick" onclick="pickerSelectAll()">Select All</button>
-                    <button class="btn-quick" onclick="pickerDeselectAll()">Deselect All</button>
-                    <button class="btn-quick" onclick="pickerSelectTop(5)">Top 5</button>
-                    <button class="btn-quick" onclick="pickerSelectTop(10)">Top 10</button>
-                    <button class="btn-quick" onclick="pickerSelectByScore(4)">Score 4+</button>
+                    <button class="btn-quick" title="Click to apply, double-click to undo" onclick="_pickerWithUndo(pickerSelectAll)" ondblclick="_pickerUndoLastQuickAction()">Select All</button>
+                    <button class="btn-quick" title="Click to apply, double-click to undo" onclick="_pickerWithUndo(pickerDeselectAll)" ondblclick="_pickerUndoLastQuickAction()">Deselect All</button>
+                    <button class="btn-quick" title="Click to apply, double-click to undo" onclick="_pickerWithUndo(function(){pickerSelectTop(5);})" ondblclick="_pickerUndoLastQuickAction()">Top 5</button>
+                    <button class="btn-quick" title="Click to apply, double-click to undo" onclick="_pickerWithUndo(function(){pickerSelectTop(10);})" ondblclick="_pickerUndoLastQuickAction()">Top 10</button>
+                    <button class="btn-quick" title="Click to apply, double-click to undo" onclick="_pickerWithUndo(function(){pickerSelectByScore(4);})" ondblclick="_pickerUndoLastQuickAction()">Score 4+</button>
                 </div>
                 <input type="text" class="picker-search" id="picker-search" placeholder="Search features..." oninput="renderFeaturePicker()">
                 <span class="picker-count" id="picker-count">0 features selected</span>
@@ -2242,7 +2242,7 @@
             <div class="picker-list" id="picker-list"></div>
             <div class="picker-bottom-bar">
                 <span class="picker-count" id="picker-count-bottom">0 features selected</span>
-                <button class="btn-quick" id="btn-deselect-all-bottom" onclick="pickerDeselectAll()" style="font-size:12px;" disabled>Deselect All</button>
+                <button class="btn-quick" id="btn-deselect-all-bottom" title="Click to apply, double-click to undo" onclick="_pickerWithUndo(pickerDeselectAll)" ondblclick="_pickerUndoLastQuickAction()" style="font-size:12px;" disabled>Deselect All</button>
                 <button class="btn-quick" id="btn-save-set" onclick="showSaveSetInput()" style="font-size:12px;">Save Set</button>
                 <button class="btn-generate-batch" id="btn-generate-batch" disabled onclick="prepGoToStep(3)">Generate for 0 features &rarr;</button>
             </div>
@@ -11928,6 +11928,46 @@ function pickerSelectByScore(minScore) {
         if ((f.classification || {}).importance_score >= minScore) prepSelectedIds[f.id] = true;
     });
     renderFeaturePicker();
+}
+
+// ---------------------------------------------------------------------------
+// Picker quick-button undo: a double-click on Select All / Deselect All /
+// Top N / Score N+ restores the selection that was in place before the
+// most recent click on any of these buttons. We snapshot the selection on
+// the *first* click of a sequence and ignore subsequent clicks within a
+// short window so the second click of a dblclick doesn't overwrite the
+// snapshot. Each picker action is idempotent (running it twice gives the
+// same result as running it once), so applying the action on both clicks
+// of the dblclick is safe — only the dblclick itself restores.
+// ---------------------------------------------------------------------------
+var _pickerUndoSnapshot = null;
+var _pickerInClickSequence = false;
+var _pickerClickSequenceTimer = null;
+
+function _pickerWithUndo(actionFn) {
+    if (!_pickerInClickSequence) {
+        _pickerUndoSnapshot = Object.assign({}, prepSelectedIds);
+        _pickerInClickSequence = true;
+        if (_pickerClickSequenceTimer) clearTimeout(_pickerClickSequenceTimer);
+        _pickerClickSequenceTimer = setTimeout(function() {
+            _pickerInClickSequence = false;
+            _pickerClickSequenceTimer = null;
+        }, 450);
+    }
+    actionFn();
+}
+
+function _pickerUndoLastQuickAction() {
+    if (_pickerUndoSnapshot === null) return;
+    prepSelectedIds = _pickerUndoSnapshot;
+    _pickerUndoSnapshot = null;
+    _pickerInClickSequence = false;
+    if (_pickerClickSequenceTimer) {
+        clearTimeout(_pickerClickSequenceTimer);
+        _pickerClickSequenceTimer = null;
+    }
+    renderFeaturePicker();
+    showToast('Selection restored');
 }
 
 var savedFeatureSets = [];
