@@ -12859,7 +12859,7 @@ function renderCombinedPreview() {
     var emailHtmlDropdown = document.getElementById('email-html-dropdown');
     var isPublishable = !!PUBLISHABLE_CHANNELS[prepChannel];
     if (publishBtn) publishBtn.style.display = (isPublishable && !isEmailCh) ? '' : 'none';
-    if (previewBtn) previewBtn.style.display = (isPublishable && !isEmailCh) ? '' : 'none';
+    if (previewBtn) previewBtn.style.display = (prepChannel === 'twitter') ? '' : 'none';
     if (emailPubBtn) emailPubBtn.style.display = isSendableEmail ? '' : 'none';
     if (emailHtmlDropdown) emailHtmlDropdown.style.display = isSendableEmail ? 'inline-block' : 'none';
 
