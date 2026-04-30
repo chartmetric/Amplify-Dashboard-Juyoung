@@ -11630,7 +11630,23 @@ function prepGoToStep(step) {
     document.getElementById('prep-step' + step).style.display = 'block';
 
     if (step === 1) { renderUseCaseGrid(); renderDraftsBar('drafts-bar-step1'); }
-    if (step === 2) { renderFeaturePicker(); renderDraftsBar('drafts-bar-step2'); }
+    if (step === 2) {
+        renderFeaturePicker();
+        // Saved drafts are an email-only concept (the bar lets marketers
+        // resume / merge in-progress emails). For non-email use cases
+        // like Twitter, LinkedIn, In-App, etc., hide it on step 2 so the
+        // picker isn't cluttered with something that doesn't apply. The
+        // step-1 bar still shows for everyone since drafts can be
+        // resumed before a use case is picked.
+        var isEmailUseCase = typeof prepChannel === 'string'
+            && prepChannel.indexOf('email_') === 0;
+        if (isEmailUseCase) {
+            renderDraftsBar('drafts-bar-step2');
+        } else {
+            var step2Bar = document.getElementById('drafts-bar-step2');
+            if (step2Bar) step2Bar.innerHTML = '';
+        }
+    }
     if (step === 3) {
         if (prepBatchResults.length === 0) {
             // Only auto-trigger generation when there's something to
