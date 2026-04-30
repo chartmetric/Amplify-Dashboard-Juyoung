@@ -481,6 +481,109 @@ def _store_image_local(raw: bytes, ext: str, name: str) -> str | None:
         return None
 
 
+_MIME_BY_EXT = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "svg": "image/svg+xml",
+}
+
+
+def _store_image_s3(raw: bytes, ext: str, name: str) -> str | None:
+    """Persist an image to AWS S3 and return its public HTTPS URL.
+
+    Reads four required secrets:
+      - ``S3_Bucket_name``      target bucket (must already exist)
+      - ``S3_Region``           AWS region the bucket lives in
+      - ``S3_Access_Key``       IAM access key id with ``s3:PutObject``
+      - ``S3_Secret_Access_Key`` matching secret access key
+
+    Returns the virtual-hosted-style URL
+    ``https://<bucket>.s3.<region>.amazonaws.com/<key>`` on success,
+    or ``None`` on any failure (missing creds, missing boto3, upload
+    error). When ``None`` is returned, the caller drops the image
+    rather than inlining base64 (see ``_build_hosted_image_map``).
+
+    Note: this only uploads. The bucket itself must be configured to
+    allow public reads (via a bucket policy) for recipients to view
+    the images. We deliberately do not set a per-object ACL because
+    most modern buckets disable ACLs (Object Ownership = bucket-owner
+    enforced) and the upload would fail.
+    """
+    import uuid as _uuid
+
+    bucket = (os.environ.get("S3_Bucket_name") or "").strip()
+    region = (os.environ.get("S3_Region") or "").strip()
+    access_key = (os.environ.get("S3_Access_Key") or "").strip()
+    secret_key = (os.environ.get("S3_Secret_Access_Key") or "").strip()
+
+    missing = [
+        n for n, v in (
+            ("S3_Bucket_name", bucket),
+            ("S3_Region", region),
+            ("S3_Access_Key", access_key),
+            ("S3_Secret_Access_Key", secret_key),
+        ) if not v
+    ]
+    if missing:
+        logger.error(
+            f"[hosted-images] S3 backend missing secrets: {missing}. "
+            "Set them in the Replit Secrets tab."
+        )
+        return None
+
+    try:
+        import boto3  # type: ignore
+        from botocore.exceptions import BotoCoreError, ClientError  # type: ignore
+    except Exception as e:
+        logger.error(
+            f"[hosted-images] boto3 not available for S3 backend: {e}"
+        )
+        return None
+
+    safe_ext = (ext or "png").lower().lstrip(".")
+    if not safe_ext.isalnum():
+        safe_ext = "png"
+    key = f"email-images/{_uuid.uuid4().hex}.{safe_ext}"
+    content_type = _MIME_BY_EXT.get(safe_ext, f"image/{safe_ext}")
+
+    try:
+        s3 = boto3.client(
+            "s3",
+            region_name=region,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+        )
+        s3.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=raw,
+            ContentType=content_type,
+            CacheControl="public, max-age=31536000, immutable",
+        )
+    except (BotoCoreError, ClientError) as e:
+        logger.error(
+            f"[hosted-images] S3 upload failed for '{name!r}' "
+            f"(bucket={bucket!r}, region={region!r}, key={key!r}): {e}"
+        )
+        return None
+    except Exception as e:
+        logger.error(
+            f"[hosted-images] S3 upload unexpected error for '{name!r}' "
+            f"(bucket={bucket!r}, key={key!r}): {e}"
+        )
+        return None
+
+    url = f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
+    logger.info(
+        f"[hosted-images] '{name!r}' -> S3 OK (bucket={bucket}, key={key}, "
+        f"size={len(raw)} bytes, ext={safe_ext}, url={url})"
+    )
+    return url
+
+
 def _store_image_and_get_url(raw: bytes, ext: str, name: str) -> str | None:
     """Storage seam: persist a decoded image and return its public URL.
 
@@ -491,6 +594,15 @@ def _store_image_and_get_url(raw: bytes, ext: str, name: str) -> str | None:
     """
     backend = _get_image_storage_backend()
     if backend == "local":
+        return _store_image_local(raw, ext, name)
+    if backend == "s3":
+        url = _store_image_s3(raw, ext, name)
+        if url is not None:
+            return url
+        logger.warning(
+            "[hosted-images] S3 backend failed; falling back to local "
+            "for this image"
+        )
         return _store_image_local(raw, ext, name)
     logger.error(
         f"[hosted-images] Unknown AMPLIFY_IMAGE_STORAGE_BACKEND={backend!r}; "
