@@ -45,6 +45,15 @@ app = Flask(__name__, template_folder=os.path.join(_app_dir, "templates"), stati
 app.secret_key = config.SESSION_SECRET
 app.config["MAX_CONTENT_LENGTH"] = 75 * 1024 * 1024
 
+# In-app announcements admin (Task #91): registers /announcements page +
+# /api/admin/announcement* endpoints. Imported lazily to avoid disturbing the
+# rest of the import graph if the blueprint module fails to load.
+try:
+    from announcements_routes import register as _register_announcements_admin
+    _register_announcements_admin(app)
+except Exception as _e:  # pragma: no cover - defensive
+    print(f"[startup] announcements admin blueprint failed to register: {_e}")
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",

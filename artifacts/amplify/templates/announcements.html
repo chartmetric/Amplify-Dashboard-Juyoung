@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>In-App Announcements · Amplify Admin</title>
+<style>
+:root {
+  --bg-page: #0f1923;
+  --bg-card: #1a2332;
+  --bg-input: #14202d;
+  --border: #2a3a4a;
+  --border-strong: #3a4d63;
+  --text-body: #e8edf2;
+  --text-muted: #99aabb;
+  --text-dim: #6b7d8f;
+  --accent: #00C9A7;
+  --accent-hover: #00e6be;
+  --danger: #ef4444;
+  --warn: #f59e0b;
+  --info: #3b82f6;
+  --shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg-page); color: var(--text-body);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px; line-height: 1.5; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px; background: var(--bg-card); border-bottom: 1px solid var(--border);
+}
+.topbar .brand { font-weight: 700; font-size: 16px; display: flex; gap: 8px; align-items: center; }
+.topbar .brand .lightning { color: var(--accent); }
+.topbar .brand .sub { color: var(--text-muted); font-weight: 500; font-size: 13px; }
+.topbar .links { display: flex; gap: 14px; align-items: center; }
+.topbar .links a { color: var(--text-muted); }
+.topbar .links a.active { color: var(--text-body); }
+.layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 51px); }
+.sidebar { background: var(--bg-card); border-right: 1px solid var(--border); padding: 20px 14px; }
+.sidebar .tab {
+  display: block; width: 100%; text-align: left; background: transparent;
+  border: none; color: var(--text-muted); padding: 10px 12px; border-radius: 8px;
+  cursor: pointer; font-size: 14px; font-weight: 600; margin-bottom: 4px;
+}
+.sidebar .tab:hover { background: rgba(255,255,255,0.04); color: var(--text-body); }
+.sidebar .tab.active { background: rgba(0,201,167,0.12); color: var(--accent); }
+.main { padding: 24px 28px; overflow-y: auto; max-width: 1320px; }
+.banner {
+  background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3);
+  color: #fcd34d; padding: 10px 14px; border-radius: 8px; margin-bottom: 18px;
+  font-size: 13px;
+}
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.section-header h1 { font-size: 22px; margin: 0; font-weight: 700; }
+.btn { background: var(--accent); color: #0d1620; border: none; padding: 9px 16px;
+  border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
+.btn:hover { background: var(--accent-hover); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.secondary { background: var(--bg-card); color: var(--text-body); border: 1px solid var(--border-strong); }
+.btn.secondary:hover { background: rgba(255,255,255,0.04); }
+.btn.danger { background: var(--danger); color: #fff; }
+.btn.ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+.btn.small { padding: 6px 10px; font-size: 12px; }
+.filters { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.filters input, .filters select {
+  background: var(--bg-input); color: var(--text-body); border: 1px solid var(--border);
+  padding: 8px 10px; border-radius: 6px; font-size: 13px; outline: none; font-family: inherit;
+}
+.filters input:focus, .filters select:focus { border-color: var(--accent); }
+.list-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden; box-shadow: var(--shadow); }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+th { background: rgba(255,255,255,0.02); color: var(--text-muted); font-weight: 600; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 0.5px; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,0.02); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.badge.published { background: rgba(0,201,167,0.18); color: var(--accent); }
+.badge.draft { background: rgba(153,170,187,0.15); color: var(--text-muted); }
+.badge.scheduled { background: rgba(59,130,246,0.18); color: var(--info); }
+.badge.format { background: rgba(167,139,250,0.18); color: #c4b5fd; margin-right: 4px; }
+.cat-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+  font-weight: 600; margin-right: 4px; color: #0d1620; }
+.empty-state { padding: 60px 24px; text-align: center; color: var(--text-dim); }
+.row-actions { display: flex; gap: 6px; }
+/* Modal / drawer */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100;
+  display: none; align-items: center; justify-content: center; padding: 24px; }
+.overlay.show { display: flex; }
+.modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  width: 100%; max-width: 880px; max-height: calc(100vh - 48px); overflow-y: auto; padding: 24px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+.modal h2 { margin: 0 0 16px; font-size: 18px; }
+.modal .form-row { margin-bottom: 14px; }
+.modal label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.modal input[type=text], .modal input[type=datetime-local], .modal input[type=color],
+.modal select, .modal textarea {
+  width: 100%; background: var(--bg-input); color: var(--text-body); border: 1px solid var(--border);
+  padding: 10px 12px; border-radius: 8px; font-size: 14px; font-family: inherit; outline: none;
+}
+.modal input:focus, .modal select:focus, .modal textarea:focus { border-color: var(--accent); }
+.modal .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.modal .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+.modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px;
+  padding-top: 18px; border-top: 1px solid var(--border); }
+.toolbar { display: flex; gap: 4px; padding: 6px; background: var(--bg-input);
+  border: 1px solid var(--border); border-bottom: none; border-radius: 8px 8px 0 0; flex-wrap: wrap; }
+.toolbar button { background: transparent; border: none; color: var(--text-muted); padding: 6px 9px;
+  border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; }
+.toolbar button:hover { background: rgba(255,255,255,0.06); color: var(--text-body); }
+.toolbar .sep { width: 1px; background: var(--border); margin: 4px 2px; }
+.editor {
+  min-height: 220px; max-height: 480px; overflow-y: auto;
+  background: var(--bg-input); color: var(--text-body); border: 1px solid var(--border);
+  border-top: none; border-radius: 0 0 8px 8px; padding: 14px; font-size: 14px;
+  outline: none;
+}
+.editor:focus { border-color: var(--accent); }
+.editor p { margin: 0 0 8px; }
+.editor h1, .editor h2, .editor h3 { margin: 14px 0 6px; }
+.editor img, .editor video { max-width: 100%; border-radius: 6px; }
+.editor a { color: var(--accent); }
+.editor ul, .editor ol { margin: 0 0 10px; padding-left: 24px; }
+.editor hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+.lang-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+.lang-tab { background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+  padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
+.lang-tab.active { background: var(--accent); color: #0d1620; border-color: var(--accent); }
+.lang-tab.has-content { border-color: var(--accent); color: var(--accent); }
+.translation-pane { display: none; }
+.translation-pane.show { display: block; }
+.translation-pane textarea { min-height: 160px; resize: vertical; }
+.toggle-row { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+  font-size: 13px; color: var(--text-body); }
+.toggle input { margin: 0; }
+.upload-row { display: flex; align-items: center; gap: 8px; }
+.upload-row .preview { max-height: 80px; max-width: 160px; border-radius: 6px; border: 1px solid var(--border); }
+.cat-checkboxes { display: flex; gap: 8px; flex-wrap: wrap; }
+.cat-cb {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: 999px;
+  padding: 5px 10px; font-size: 12px;
+}
+.cat-cb input { margin: 0; }
+.cat-cb .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.toast { position: fixed; bottom: 22px; right: 22px; z-index: 200;
+  background: var(--bg-card); color: var(--text-body); padding: 12px 16px; border-radius: 8px;
+  border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,0.4); font-size: 13px;
+  display: none; max-width: 360px; }
+.toast.success { border-color: var(--accent); }
+.toast.error { border-color: var(--danger); }
+.toast.show { display: block; animation: tin 0.2s ease; }
+@keyframes tin { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.muted { color: var(--text-muted); }
+.dim { color: var(--text-dim); }
+.helper { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+.spinner { display: inline-block; width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.2); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: flex; gap: 4px; flex-wrap: wrap; padding: 10px; border-bottom: 1px solid var(--border); border-right: none; }
+  .sidebar .tab { width: auto; padding: 6px 12px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="lightning">&#9889;</span>
+    <span>Amplify</span>
+    <span class="sub">/ In-App Announcements</span>
+  </div>
+  <div class="links">
+    <a href="/">Dashboard</a>
+    <a href="/announcements" class="active">Announcements</a>
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <button class="tab active" data-tab="posts" onclick="switchTab('posts')">Posts</button>
+    <button class="tab" data-tab="categories" onclick="switchTab('categories')">Categories</button>
+    <button class="tab" data-tab="docs" onclick="switchTab('docs')">API Docs</button>
+  </aside>
+  <main class="main">
+    <div id="mode-banner" class="banner" style="display:none"></div>
+
+    <!-- Posts tab -->
+    <section id="tab-posts">
+      <div class="section-header">
+        <h1>Announcement Posts</h1>
+        <div style="display:flex;gap:8px;">
+          <button class="btn secondary" id="btn-prefill" onclick="openPrefill()">Pre-fill from Feature</button>
+          <button class="btn" onclick="openPostEditor(null)">+ New Post</button>
+        </div>
+      </div>
+      <div class="filters">
+        <input id="filter-search" placeholder="Search by title..." oninput="debouncedReload()" />
+        <select id="filter-status" onchange="reloadPosts()">
+          <option value="">All statuses</option>
+          <option value="draft">Drafts</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="published">Published</option>
+        </select>
+        <select id="filter-category" onchange="reloadPosts()">
+          <option value="">All categories</option>
+        </select>
+      </div>
+      <div class="list-card">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:30%">Title</th>
+              <th>Categories</th>
+              <th>Format</th>
+              <th>Status</th>
+              <th>Updated</th>
+              <th style="width:1%"></th>
+            </tr>
+          </thead>
+          <tbody id="posts-tbody">
+            <tr><td colspan="6" class="empty-state">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Categories tab -->
+    <section id="tab-categories" style="display:none">
+      <div class="section-header">
+        <h1>Categories</h1>
+        <button class="btn" onclick="openCategoryEditor(null)">+ New Category</button>
+      </div>
+      <div class="list-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Color</th>
+              <th>Translations</th>
+              <th>Posts</th>
+              <th style="width:1%"></th>
+            </tr>
+          </thead>
+          <tbody id="cats-tbody">
+            <tr><td colspan="5" class="empty-state">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Docs tab -->
+    <section id="tab-docs" style="display:none">
+      <div class="section-header"><h1>chartmetric-api Contract</h1></div>
+      <p class="muted">When the backend team implements the Chartmetric admin API, set
+        <code>CHARTMETRIC_ADMIN_API_BASE_URL</code> and
+        <code>CHARTMETRIC_ADMIN_API_TOKEN</code> in env, then set
+        <code>ANNOUNCEMENTS_STUB_MODE=false</code>. Until then, this admin
+        runs against a local JSON store.</p>
+      <p>The full REST contract (auth, schema, endpoints, validation rules,
+         error codes, deployment checklist) lives in
+         <a href="https://github.com/chartmetric/amplify/blob/main/docs/chartmetric-announcement-admin-api.md" target="_blank" rel="noopener">
+         <code>docs/chartmetric-announcement-admin-api.md</code></a>.
+      </p>
+    </section>
+  </main>
+</div>
+
+<!-- Post editor modal -->
+<div class="overlay" id="post-modal" onclick="if(event.target===this) closePostEditor()">
+  <div class="modal">
+    <h2 id="post-modal-title">New Post</h2>
+
+    <div class="form-row">
+      <label>Title (English)</label>
+      <input type="text" id="f-title" placeholder="A short, punchy headline" maxlength="300" />
+    </div>
+
+    <div class="form-row">
+      <label>Body (English)</label>
+      <div class="toolbar">
+        <button type="button" onclick="exec('bold')" title="Bold"><b>B</b></button>
+        <button type="button" onclick="exec('italic')" title="Italic"><i>I</i></button>
+        <button type="button" onclick="exec('underline')" title="Underline"><u>U</u></button>
+        <span class="sep"></span>
+        <button type="button" onclick="exec('formatBlock','H2')">H2</button>
+        <button type="button" onclick="exec('formatBlock','H3')">H3</button>
+        <button type="button" onclick="exec('formatBlock','P')">¶</button>
+        <span class="sep"></span>
+        <button type="button" onclick="exec('insertUnorderedList')" title="Bulleted list">• List</button>
+        <button type="button" onclick="exec('insertOrderedList')" title="Numbered list">1. List</button>
+        <button type="button" onclick="insertHr()" title="Divider">— HR</button>
+        <span class="sep"></span>
+        <button type="button" onclick="addLink()" title="Link">🔗 Link</button>
+        <button type="button" onclick="addMedia('image')" title="Image">🖼 Image</button>
+        <button type="button" onclick="addMedia('video')" title="Video">🎞 Video</button>
+        <span class="sep"></span>
+        <button type="button" onclick="autoTranslate()" id="btn-auto-translate" title="Translate to all 6 languages with Claude">✨ Auto-translate</button>
+      </div>
+      <div class="editor" id="f-body" contenteditable="true" data-placeholder="Write your update…"></div>
+      <div class="helper">Saved as Slate.js blocks. Inline marks: bold, italic, underline. Block elements: paragraph, H1-H3, lists, image, video, divider, link.</div>
+    </div>
+
+    <div class="form-row">
+      <label>Translations</label>
+      <div class="lang-tabs" id="lang-tabs"></div>
+      <div id="translation-panes"></div>
+      <div class="helper">English is the source. Click "✨ Auto-translate" to fill all six languages with Claude (preserving block structure and product names).</div>
+    </div>
+
+    <div class="form-row grid-3">
+      <div>
+        <label>Display format</label>
+        <select id="f-display-format">
+          <option value="banner">Banner (top-of-app strip)</option>
+          <option value="popup">Popup (modal on first sight)</option>
+          <option value="inline">Inline (embedded in feed)</option>
+        </select>
+      </div>
+      <div>
+        <label>Status</label>
+        <select id="f-status" onchange="onStatusChange()">
+          <option value="draft">Draft</option>
+          <option value="publish_now">Publish now</option>
+          <option value="schedule">Schedule for later</option>
+        </select>
+      </div>
+      <div id="schedule-wrap" style="display:none">
+        <label>Scheduled publish at (UTC)</label>
+        <input type="datetime-local" id="f-scheduled-at" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label>Categories</label>
+      <div class="cat-checkboxes" id="f-cats"></div>
+    </div>
+
+    <div class="form-row">
+      <label>Hero image (optional)</label>
+      <div class="upload-row">
+        <input type="text" id="f-image-url" placeholder="https://..." />
+        <button type="button" class="btn small secondary" onclick="document.getElementById('f-image-file').click()">Upload…</button>
+        <input type="file" id="f-image-file" accept="image/*" style="display:none" onchange="uploadHero(this)" />
+        <img id="f-image-preview" class="preview" style="display:none" />
+      </div>
+    </div>
+
+    <div class="form-row toggle-row">
+      <label class="toggle"><input type="checkbox" id="f-pinned" /> Pin to top</label>
+      <label class="toggle"><input type="checkbox" id="f-boosted" /> Boost (priority feed)</label>
+    </div>
+
+    <div class="actions">
+      <button class="btn ghost" onclick="closePostEditor()">Cancel</button>
+      <button class="btn secondary" onclick="savePost('draft')" id="btn-save-draft">Save Draft</button>
+      <button class="btn" onclick="savePost(null)" id="btn-save-publish">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Category editor modal -->
+<div class="overlay" id="cat-modal" onclick="if(event.target===this) closeCategoryEditor()">
+  <div class="modal" style="max-width:560px">
+    <h2 id="cat-modal-title">New Category</h2>
+    <div class="form-row">
+      <label>Name (English)</label>
+      <input type="text" id="cf-name" maxlength="80" />
+    </div>
+    <div class="form-row grid-2">
+      <div>
+        <label>Color</label>
+        <input type="color" id="cf-color" value="#00C9A7" />
+      </div>
+      <div>
+        <label>Hex (auto)</label>
+        <input type="text" id="cf-color-text" value="#00C9A7" maxlength="7" />
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Translations <button type="button" class="btn small secondary" style="float:right" onclick="autoTranslateCategory()">✨ Auto-translate</button></label>
+      <div id="cf-translations"></div>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" onclick="closeCategoryEditor()">Cancel</button>
+      <button class="btn" onclick="saveCategory()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pre-fill modal -->
+<div class="overlay" id="prefill-modal" onclick="if(event.target===this) closePrefill()">
+  <div class="modal" style="max-width:480px">
+    <h2>Pre-fill from Feature</h2>
+    <p class="muted">Enter a feature ID (Asana GID, Slack ts, or manual ID) and we'll seed the composer with its title and summary.</p>
+    <div class="form-row">
+      <label>Feature ID</label>
+      <input type="text" id="prefill-id" placeholder="e.g. 1234567890" />
+    </div>
+    <div class="actions">
+      <button class="btn ghost" onclick="closePrefill()">Cancel</button>
+      <button class="btn" onclick="doPrefill()">Pre-fill & Open Editor</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const LANGS = ['de','es','fr','ja','ko','pt'];
+const LANG_NAMES = { de:'Deutsch', es:'Español', fr:'Français', ja:'日本語', ko:'한국어', pt:'Português' };
+
+let _categoriesCache = [];
+let _editingPostId = null;
+let _editingCatId = null;
+let _activeLangTab = 'en';
+let _translationsState = {};   // lang -> { title, content_html }
+let _modeInfo = null;
+
+function $(id) { return document.getElementById(id); }
+function toast(msg, kind='success') {
+  const t = $('toast'); t.textContent = msg; t.className = 'toast show ' + kind;
+  setTimeout(()=>{ t.className = 'toast'; }, 2800);
+}
+async function apiJson(url, opts={}) {
+  const headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+  const r = await fetch(url, Object.assign({}, opts, { headers }));
+  let body = null;
+  try { body = await r.json(); } catch(_){ body = { error: r.statusText }; }
+  if (!r.ok || body.success === false) {
+    throw new Error(body.error || ('HTTP ' + r.status));
+  }
+  return body;
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.sidebar .tab').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.sidebar .tab[data-tab="${name}"]`).classList.add('active');
+  $('tab-posts').style.display = name === 'posts' ? '' : 'none';
+  $('tab-categories').style.display = name === 'categories' ? '' : 'none';
+  $('tab-docs').style.display = name === 'docs' ? '' : 'none';
+  if (name === 'categories') reloadCategories();
+}
+
+// ----- Mode banner -----
+async function loadMode() {
+  try {
+    const r = await fetch('/api/admin/announcement-mode');
+    const data = await r.json();
+    _modeInfo = data;
+    if (data.stub_mode) {
+      const b = $('mode-banner');
+      b.style.display = 'block';
+      b.innerHTML = '<b>Stub mode</b> — running against a local JSON store at <code>' +
+        (data.store_path||'.announcement_store.json') + '</code>. Configure <code>CHARTMETRIC_ADMIN_API_BASE_URL</code> + <code>CHARTMETRIC_ADMIN_API_TOKEN</code> and set <code>ANNOUNCEMENTS_STUB_MODE=false</code> to proxy to chartmetric-api.';
+    }
+  } catch(e) { console.warn('mode load failed', e); }
+}
+
+// ----- Posts list -----
+let _reloadTimer = null;
+function debouncedReload() {
+  clearTimeout(_reloadTimer);
+  _reloadTimer = setTimeout(reloadPosts, 280);
+}
+
+async function reloadPosts() {
+  const q = new URLSearchParams();
+  const s = $('filter-status').value; if (s) q.set('status', s);
+  const c = $('filter-category').value; if (c) q.set('category', c);
+  const t = $('filter-search').value; if (t) q.set('search', t);
+  q.set('limit', '100');
+  const tbody = $('posts-tbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><span class="spinner"></span></td></tr>';
+  try {
+    const data = await apiJson('/api/admin/announcements?' + q.toString());
+    renderPosts(data.items || []);
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load: '+escapeHtml(e.message)+'</td></tr>';
+  }
+}
+
+function renderPosts(items) {
+  const tbody = $('posts-tbody');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No announcements yet. Create your first one with the “+ New Post” button above.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(p => {
+    const cats = (p.categories||[]).map(c =>
+      `<span class="cat-pill" style="background:${escapeAttr(c.color||'#888')}">${escapeHtml(c.name||'')}</span>`
+    ).join('');
+    const updated = (p.modified_at||p.created_at||'').slice(0,16).replace('T',' ');
+    const pinned = p.is_pinned ? ' 📌' : '';
+    return `<tr>
+      <td><div style="font-weight:600">${escapeHtml(p.title||'(untitled)')}${pinned}</div>
+          <div class="dim" style="font-size:11px">id ${p.id}</div></td>
+      <td>${cats || '<span class="dim">—</span>'}</td>
+      <td><span class="badge format">${escapeHtml(p.display_format||'banner')}</span></td>
+      <td><span class="badge ${p.status}">${escapeHtml(p.status)}</span></td>
+      <td class="muted">${escapeHtml(updated)}</td>
+      <td class="row-actions">
+        <button class="btn small secondary" onclick="openPostEditor(${p.id})">Edit</button>
+        <button class="btn small danger" onclick="deletePost(${p.id})">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function deletePost(id) {
+  if (!confirm('Delete this announcement? This cannot be undone.')) return;
+  try {
+    await apiJson('/api/admin/announcements/' + id, { method: 'DELETE' });
+    toast('Deleted'); reloadPosts();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ----- Categories list -----
+async function reloadCategories() {
+  const tbody = $('cats-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><span class="spinner"></span></td></tr>';
+  try {
+    const data = await apiJson('/api/admin/announcement-categories');
+    _categoriesCache = data.categories || [];
+    refreshFilterCategoryOptions();
+    renderCategories(_categoriesCache);
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Failed to load: '+escapeHtml(e.message)+'</td></tr>';
+  }
+}
+
+function refreshFilterCategoryOptions() {
+  const sel = $('filter-category');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All categories</option>' +
+    _categoriesCache.map(c => `<option value="${escapeAttr(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+  sel.value = cur;
+}
+
+function renderCategories(items) {
+  const tbody = $('cats-tbody');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No categories yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(c => {
+    const trCount = Object.keys(c.translations||{}).length;
+    return `<tr>
+      <td><b>${escapeHtml(c.name)}</b></td>
+      <td><span class="cat-pill" style="background:${escapeAttr(c.color)}">${escapeHtml(c.color)}</span></td>
+      <td class="muted">${trCount}/6 languages</td>
+      <td class="muted">${c.posts_count||0}</td>
+      <td class="row-actions">
+        <button class="btn small secondary" onclick="openCategoryEditor(${c.id})">Edit</button>
+        <button class="btn small danger" onclick="deleteCategory(${c.id})">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function deleteCategory(id) {
+  if (!confirm('Delete this category? Posts using it will be unaffected.')) return;
+  try {
+    await apiJson('/api/admin/announcement-categories/' + id, { method: 'DELETE' });
+    toast('Deleted'); reloadCategories();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ----- Post editor -----
+
+function openPostEditor(id) {
+  _editingPostId = id;
+  _activeLangTab = 'en';
+  _translationsState = {};
+  $('post-modal-title').textContent = id ? 'Edit Post #' + id : 'New Post';
+  $('f-title').value = '';
+  $('f-body').innerHTML = '';
+  $('f-display-format').value = 'banner';
+  $('f-status').value = 'draft';
+  $('f-scheduled-at').value = '';
+  $('f-image-url').value = '';
+  $('f-image-preview').style.display = 'none';
+  $('f-pinned').checked = false;
+  $('f-boosted').checked = false;
+  $('btn-save-publish').textContent = 'Save';
+  onStatusChange();
+  renderCategoryCheckboxes([]);
+  renderLangTabs();
+  $('post-modal').classList.add('show');
+  if (id) loadPostIntoEditor(id);
+  else $('f-title').focus();
+}
+
+async function loadPostIntoEditor(id) {
+  try {
+    const data = await apiJson('/api/admin/announcements/' + id);
+    const p = data.post;
+    $('f-title').value = p.title || '';
+    $('f-body').innerHTML = await slateToHtml(p.content || []);
+    $('f-display-format').value = p.display_format || 'banner';
+    if (p.status === 'published') {
+      $('f-status').value = 'publish_now';
+      $('btn-save-publish').textContent = 'Update (republish)';
+    } else if (p.status === 'scheduled') {
+      $('f-status').value = 'schedule';
+      $('f-scheduled-at').value = (p.scheduled_publish_at||'').slice(0,16);
+    } else {
+      $('f-status').value = 'draft';
+    }
+    onStatusChange();
+    $('f-image-url').value = p.image_url || '';
+    if (p.image_url) { $('f-image-preview').src = p.image_url; $('f-image-preview').style.display='inline-block'; }
+    $('f-pinned').checked = !!p.is_pinned;
+    $('f-boosted').checked = !!p.is_boosted;
+    renderCategoryCheckboxes((p.categories||[]).map(c=>c.id));
+    // Load translations into state
+    _translationsState = {};
+    for (const lang of LANGS) {
+      const tr = (p.translations||{})[lang];
+      if (tr) {
+        _translationsState[lang] = {
+          title: tr.title || '',
+          content_html: await slateToHtml(tr.content || []),
+        };
+      }
+    }
+    renderLangTabs();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function closePostEditor() { $('post-modal').classList.remove('show'); }
+
+function onStatusChange() {
+  const status = $('f-status').value;
+  $('schedule-wrap').style.display = status === 'schedule' ? '' : 'none';
+  $('btn-save-publish').textContent =
+    status === 'publish_now' ? 'Publish now' :
+    status === 'schedule' ? 'Schedule' : 'Save';
+}
+
+function renderCategoryCheckboxes(selectedIds) {
+  const sel = new Set((selectedIds||[]).map(String));
+  $('f-cats').innerHTML = _categoriesCache.map(c =>
+    `<label class="cat-cb"><input type="checkbox" value="${c.id}" ${sel.has(String(c.id))?'checked':''} />
+      <span class="swatch" style="background:${escapeAttr(c.color)}"></span>${escapeHtml(c.name)}</label>`
+  ).join('');
+}
+
+function renderLangTabs() {
+  const tabs = ['en'].concat(LANGS);
+  $('lang-tabs').innerHTML = tabs.map(l => {
+    const has = l !== 'en' && _translationsState[l] ? ' has-content' : '';
+    const active = l === _activeLangTab ? ' active' : '';
+    const lbl = l === 'en' ? '🇬🇧 EN (source)' : l.toUpperCase() + ' · ' + LANG_NAMES[l];
+    return `<button type="button" class="lang-tab${has}${active}" onclick="setLangTab('${l}')">${lbl}</button>`;
+  }).join('');
+  $('translation-panes').innerHTML = LANGS.map(l => {
+    const tr = _translationsState[l] || { title:'', content_html:'' };
+    return `<div class="translation-pane ${l===_activeLangTab?'show':''}" data-lang="${l}">
+      <div class="form-row">
+        <label>${LANG_NAMES[l]} title</label>
+        <input type="text" data-tr-title="${l}" value="${escapeAttr(tr.title)}" />
+      </div>
+      <div class="form-row">
+        <label>${LANG_NAMES[l]} body (HTML)</label>
+        <textarea data-tr-body="${l}">${escapeHtml(tr.content_html)}</textarea>
+        <div class="helper">Edit as HTML — preserves the same block structure as the English source.</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setLangTab(l) {
+  // Capture current pane edits before switching.
+  collectTranslationsFromPanes();
+  _activeLangTab = l;
+  document.querySelectorAll('.lang-tab').forEach(b=>b.classList.remove('active'));
+  const all = document.querySelectorAll('.lang-tab');
+  for (const b of all) {
+    if (b.textContent.startsWith(l === 'en' ? '🇬🇧' : (l.toUpperCase()+' '))) b.classList.add('active');
+  }
+  document.querySelectorAll('.translation-pane').forEach(p=>p.classList.remove('show'));
+  if (l !== 'en') {
+    const pane = document.querySelector(`.translation-pane[data-lang="${l}"]`);
+    if (pane) pane.classList.add('show');
+  }
+}
+
+function collectTranslationsFromPanes() {
+  for (const l of LANGS) {
+    const tInput = document.querySelector(`[data-tr-title="${l}"]`);
+    const bInput = document.querySelector(`[data-tr-body="${l}"]`);
+    if (!tInput && !bInput) continue;
+    const title = tInput ? tInput.value : '';
+    const body = bInput ? bInput.value : '';
+    if (title || body) _translationsState[l] = { title, content_html: body };
+    else delete _translationsState[l];
+  }
+}
+
+// Toolbar actions
+function exec(cmd, val) { document.execCommand(cmd, false, val); $('f-body').focus(); }
+function insertHr() { exec('insertHorizontalRule'); }
+function addLink() {
+  const url = prompt('Link URL', 'https://');
+  if (!url) return;
+  exec('createLink', url);
+}
+async function addMedia(kind) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = kind === 'image' ? 'image/*' : 'video/*';
+  input.onchange = async () => {
+    const f = input.files[0]; if (!f) return;
+    try {
+      const url = await uploadFile(f);
+      const tag = kind === 'image' ? `<img src="${url}" alt="">` : `<video src="${url}" controls></video>`;
+      document.execCommand('insertHTML', false, tag + '<p></p>');
+    } catch(e) { toast(e.message,'error'); }
+  };
+  input.click();
+}
+
+async function uploadFile(f) {
+  const fd = new FormData(); fd.append('file', f);
+  const r = await fetch('/api/admin/announcements/upload', { method: 'POST', body: fd });
+  const data = await r.json();
+  if (!r.ok || data.success === false) throw new Error(data.error || 'Upload failed');
+  return data.url;
+}
+
+async function uploadHero(input) {
+  const f = input.files[0]; if (!f) return;
+  try {
+    const url = await uploadFile(f);
+    $('f-image-url').value = url;
+    $('f-image-preview').src = url;
+    $('f-image-preview').style.display = 'inline-block';
+  } catch(e) { toast(e.message,'error'); }
+  input.value = '';
+}
+
+async function autoTranslate() {
+  collectTranslationsFromPanes();
+  const title = $('f-title').value.trim();
+  if (!title) { toast('Add a title first','error'); return; }
+  const content = htmlToSlate($('f-body').innerHTML || '');
+  const btn = $('btn-auto-translate'); const old = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner"></span>'; btn.disabled = true;
+  try {
+    const data = await apiJson('/api/admin/announcements/translate', {
+      method: 'POST', body: JSON.stringify({ title, content })
+    });
+    for (const lang of LANGS) {
+      const tr = (data.translations||{})[lang];
+      if (!tr) continue;
+      _translationsState[lang] = {
+        title: tr.title || '',
+        content_html: await slateToHtml(tr.content || []),
+      };
+    }
+    renderLangTabs();
+    if (!data.claude_configured) toast('Claude not configured — copied English into all 6 languages','error');
+    else toast('Translated to ' + LANGS.length + ' languages');
+  } catch(e) { toast(e.message,'error'); }
+  finally { btn.innerHTML = old; btn.disabled = false; }
+}
+
+async function savePost(forceStatus) {
+  collectTranslationsFromPanes();
+  const title = $('f-title').value.trim();
+  if (!title) { toast('Title is required','error'); return; }
+  const body_html = $('f-body').innerHTML;
+  const content = htmlToSlate(body_html);
+  if (!content.length) { toast('Body is required','error'); return; }
+
+  const status = forceStatus || $('f-status').value;
+  const scheduled = status === 'schedule' ? new Date($('f-scheduled-at').value).toISOString() : null;
+  if (status === 'schedule' && (!scheduled || scheduled === 'Invalid Date')) {
+    toast('Pick a scheduled time','error'); return;
+  }
+  const cat_ids = Array.from(document.querySelectorAll('#f-cats input:checked'))
+                       .map(i => parseInt(i.value, 10));
+
+  // Build translations payload (Slate)
+  const translations = {};
+  for (const l of LANGS) {
+    const t = _translationsState[l];
+    if (!t) continue;
+    translations[l] = { title: t.title || '', content: htmlToSlate(t.content_html || '') };
+  }
+
+  const payload = {
+    title, content, translations,
+    category_ids: cat_ids,
+    image_url: $('f-image-url').value.trim() || null,
+    display_format: $('f-display-format').value,
+    is_pinned: $('f-pinned').checked,
+    is_boosted: $('f-boosted').checked,
+    status,
+    scheduled_publish_at: scheduled,
+  };
+
+  const isEdit = !!_editingPostId;
+  const url = isEdit ? '/api/admin/announcements/' + _editingPostId : '/api/admin/announcements';
+  try {
+    await apiJson(url, { method: isEdit ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+    toast(isEdit ? 'Saved' : 'Created');
+    closePostEditor();
+    reloadPosts();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ----- Category editor -----
+
+function openCategoryEditor(id) {
+  _editingCatId = id;
+  $('cat-modal-title').textContent = id ? 'Edit Category' : 'New Category';
+  $('cf-name').value = '';
+  $('cf-color').value = '#00C9A7';
+  $('cf-color-text').value = '#00C9A7';
+  renderCatTranslationFields({});
+  if (id) {
+    const c = _categoriesCache.find(x => x.id === id);
+    if (c) {
+      $('cf-name').value = c.name;
+      $('cf-color').value = c.color;
+      $('cf-color-text').value = c.color;
+      renderCatTranslationFields(c.translations || {});
+    }
+  }
+  $('cat-modal').classList.add('show');
+}
+function closeCategoryEditor() { $('cat-modal').classList.remove('show'); }
+
+function renderCatTranslationFields(tr) {
+  $('cf-translations').innerHTML = LANGS.map(l => {
+    const v = (tr[l]||{}).name || '';
+    return `<div class="form-row" style="margin-bottom:8px">
+      <label>${LANG_NAMES[l]} (${l})</label>
+      <input type="text" data-cat-tr="${l}" value="${escapeAttr(v)}" />
+    </div>`;
+  }).join('');
+}
+
+async function autoTranslateCategory() {
+  const name = $('cf-name').value.trim();
+  if (!name) { toast('Add a name first','error'); return; }
+  try {
+    const data = await apiJson('/api/admin/announcement-categories/translate', {
+      method: 'POST', body: JSON.stringify({ name })
+    });
+    for (const l of LANGS) {
+      const v = (data.translations||{})[l]?.name;
+      const inp = document.querySelector(`[data-cat-tr="${l}"]`);
+      if (v && inp) inp.value = v;
+    }
+    if (!data.claude_configured) toast('Claude not configured — copied English','error');
+    else toast('Translated');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function saveCategory() {
+  const name = $('cf-name').value.trim();
+  const color = $('cf-color-text').value.trim() || $('cf-color').value;
+  if (!name) { toast('Name required','error'); return; }
+  const translations = {};
+  for (const l of LANGS) {
+    const inp = document.querySelector(`[data-cat-tr="${l}"]`);
+    if (inp && inp.value.trim()) translations[l] = { name: inp.value.trim() };
+  }
+  const payload = { name, color, translations };
+  const isEdit = !!_editingCatId;
+  const url = isEdit ? '/api/admin/announcement-categories/'+_editingCatId : '/api/admin/announcement-categories';
+  try {
+    await apiJson(url, { method: isEdit ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+    toast(isEdit ? 'Saved' : 'Created');
+    closeCategoryEditor();
+    reloadCategories();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// Color picker sync
+document.addEventListener('input', (e) => {
+  if (e.target.id === 'cf-color') $('cf-color-text').value = e.target.value;
+  if (e.target.id === 'cf-color-text') {
+    const v = e.target.value;
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) $('cf-color').value = v;
+  }
+});
+
+// ----- Pre-fill -----
+function openPrefill() { $('prefill-modal').classList.add('show'); $('prefill-id').focus(); }
+function closePrefill() { $('prefill-modal').classList.remove('show'); }
+async function doPrefill() {
+  const id = $('prefill-id').value.trim();
+  if (!id) return;
+  try {
+    const data = await apiJson('/api/admin/announcements/prefill-from-feature/'+encodeURIComponent(id));
+    closePrefill();
+    openPostEditor(null);
+    $('f-title').value = data.title || '';
+    $('f-body').innerHTML = data.content_html || '';
+    toast('Pre-filled from feature ' + id);
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ----- HTML <-> Slate (client-side mirror of ai/announcement_serializer.py)
+// Used so we never have to send HTML to the server: the API expects
+// Slate.js blocks. The server has its own serializer for safety, but doing
+// it client-side keeps round-trips cheap and lets us preview translations
+// without a server round-trip.
+
+function htmlToSlate(html) {
+  if (!html || !html.trim()) return [{ type:'paragraph', children:[{text:''}] }];
+  const tmpl = document.createElement('template');
+  tmpl.innerHTML = html;
+  const blocks = [];
+  walkBlocks(tmpl.content.childNodes, blocks);
+  if (!blocks.length) blocks.push({ type:'paragraph', children:[{text:''}] });
+  return blocks;
+}
+
+function walkBlocks(nodes, out) {
+  let para = null;
+  function flushPara() { if (para) { out.push(para); para = null; } }
+  for (const n of nodes) {
+    if (n.nodeType === Node.TEXT_NODE) {
+      const txt = n.textContent;
+      if (!txt) continue;
+      if (!para) para = { type:'paragraph', children:[] };
+      para.children.push({ text: txt });
+      continue;
+    }
+    if (n.nodeType !== Node.ELEMENT_NODE) continue;
+    const tag = n.tagName.toLowerCase();
+    if (tag === 'p') { flushPara(); out.push({ type:'paragraph', children: walkInline(n) }); continue; }
+    if (tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' || tag === 'h5' || tag === 'h6') {
+      flushPara();
+      const t = (tag === 'h1') ? 'heading-one' : (tag === 'h2' ? 'heading-two' : 'heading-three');
+      out.push({ type:t, children: walkInline(n) }); continue;
+    }
+    if (tag === 'ul' || tag === 'ol') {
+      flushPara();
+      const items = [];
+      for (const li of n.children) {
+        if (li.tagName && li.tagName.toLowerCase() === 'li')
+          items.push({ type:'list-item', children: walkInline(li) });
+      }
+      out.push({ type: tag==='ul'?'bulleted-list':'numbered-list', children: items.length?items:[{type:'list-item',children:[{text:''}]}] });
+      continue;
+    }
+    if (tag === 'hr') { flushPara(); out.push({ type:'divider', children:[{text:''}] }); continue; }
+    if (tag === 'img') { flushPara(); out.push({ type:'image', url: n.getAttribute('src')||'', alt: n.getAttribute('alt')||'', children:[{text:''}] }); continue; }
+    if (tag === 'video') { flushPara(); out.push({ type:'video', url: n.getAttribute('src')||'', children:[{text:''}] }); continue; }
+    if (tag === 'br') { if (!para) para={type:'paragraph',children:[]}; para.children.push({text:'\n'}); continue; }
+    if (tag === 'div' || tag === 'span') {
+      // Recurse — flatten to nearest block
+      walkBlocks(n.childNodes, out); continue;
+    }
+    // Inline-by-default fallback
+    if (!para) para = { type:'paragraph', children:[] };
+    para.children.push(...walkInline(n));
+  }
+  flushPara();
+}
+
+function walkInline(node, marks={}) {
+  const out = [];
+  for (const c of node.childNodes) {
+    if (c.nodeType === Node.TEXT_NODE) {
+      const leaf = { text: c.textContent };
+      Object.assign(leaf, marks);
+      out.push(leaf);
+      continue;
+    }
+    if (c.nodeType !== Node.ELEMENT_NODE) continue;
+    const tag = c.tagName.toLowerCase();
+    if (tag === 'br') { out.push({ text: '\n', ...marks }); continue; }
+    if (tag === 'strong' || tag === 'b') { out.push(...walkInline(c, {...marks, bold:true})); continue; }
+    if (tag === 'em' || tag === 'i') { out.push(...walkInline(c, {...marks, italic:true})); continue; }
+    if (tag === 'u') { out.push(...walkInline(c, {...marks, underline:true})); continue; }
+    if (tag === 'code') { out.push(...walkInline(c, {...marks, code:true})); continue; }
+    if (tag === 'a') {
+      out.push({ type:'link', url: c.getAttribute('href')||'', children: walkInline(c, marks).length ? walkInline(c, marks) : [{text:''}] });
+      continue;
+    }
+    out.push(...walkInline(c, marks));
+  }
+  if (!out.length) out.push({ text: '' });
+  return out;
+}
+
+async function slateToHtml(blocks) {
+  // Use the server's serializer indirectly by building HTML in the same shape.
+  if (!blocks || !blocks.length) return '';
+  return blocks.map(renderBlock).join('');
+}
+function renderBlock(b) {
+  const t = b.type || 'paragraph';
+  const inner = (b.children || []).map(renderInline).join('');
+  if (t === 'paragraph') return `<p>${inner}</p>`;
+  if (t === 'heading-one') return `<h1>${inner}</h1>`;
+  if (t === 'heading-two') return `<h2>${inner}</h2>`;
+  if (t === 'heading-three') return `<h3>${inner}</h3>`;
+  if (t === 'bulleted-list') return `<ul>${(b.children||[]).map(li => `<li>${(li.children||[]).map(renderInline).join('')}</li>`).join('')}</ul>`;
+  if (t === 'numbered-list') return `<ol>${(b.children||[]).map(li => `<li>${(li.children||[]).map(renderInline).join('')}</li>`).join('')}</ol>`;
+  if (t === 'image') return `<img src="${escapeAttr(b.url||'')}" alt="${escapeAttr(b.alt||'')}">`;
+  if (t === 'video') return `<video src="${escapeAttr(b.url||'')}" controls></video>`;
+  if (t === 'divider') return '<hr>';
+  if (t === 'list-item') return `<li>${inner}</li>`;
+  return `<div>${inner}</div>`;
+}
+function renderInline(n) {
+  if (n.type === 'link') {
+    const inner = (n.children||[]).map(renderInline).join('');
+    return `<a href="${escapeAttr(n.url||'')}" target="_blank" rel="noopener">${inner}</a>`;
+  }
+  if (typeof n.text === 'string') {
+    let s = escapeHtml(n.text).replace(/\n/g, '<br>');
+    if (n.code) s = `<code>${s}</code>`;
+    if (n.underline) s = `<u>${s}</u>`;
+    if (n.italic) s = `<em>${s}</em>`;
+    if (n.bold) s = `<strong>${s}</strong>`;
+    return s;
+  }
+  return '';
+}
+
+function escapeHtml(s) { return (s||'').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[ch]); }
+function escapeAttr(s) { return escapeHtml(s); }
+
+// ----- Boot -----
+(async function init(){
+  await loadMode();
+  await reloadCategories();
+  await reloadPosts();
+})();
+</script>
+</body>
+</html>
