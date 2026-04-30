@@ -10895,40 +10895,76 @@ function saveCombinedAsDraft() {
 function renderDraftsBar() {
     var bar = document.getElementById('drafts-bar-step1');
     if (!bar) return;
+    // Preserve the active search query across refetches (e.g. after a delete)
+    // so marketers don't lose their filter when the list refreshes.
+    var existingSearch = document.getElementById('drafts-bar-search');
+    var preservedQuery = existingSearch ? existingSearch.value : '';
     bar.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:6px 0;">Loading saved drafts...</div>';
     fetch('/api/email-drafts')
     .then(function(r) { return r.json(); })
     .then(function(data) {
         var drafts = (data && data.drafts) || [];
+        window._savedDrafts = drafts;
         if (!drafts.length) { bar.innerHTML = ''; return; }
-        var rows = '';
-        for (var i = 0; i < drafts.length; i++) {
-            var d = drafts[i];
-            var when = new Date((d.ts || 0) * 1000).toLocaleString();
-            var meta = (d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's');
-            if (d.channel) meta += ' \u00b7 ' + d.channel.replace(/_/g, ' ');
-            if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
-            meta += ' \u00b7 ' + when;
-            var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic;">' + escHtml(d.subject) + '</div>' : '';
-            rows += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);">'
-                + '<div style="flex:1;min-width:0;">'
-                + '<div style="color:var(--text-body);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
-                + subjLine
-                + '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(meta) + '</div>'
-                + '</div>'
-                + '<button onclick="loadEmailDraft(\'' + d.id + '\')" style="background:#a78bfa;color:#fff;border:none;padding:6px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">Resume</button>'
-                + '<button onclick="deleteEmailDraft(\'' + d.id + '\')" title="Delete draft" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">\u2715</button>'
-                + '</div>';
-        }
         bar.innerHTML = '<div style="background:var(--bg-elev,rgba(167,139,250,0.04));border:1px solid rgba(167,139,250,0.25);border-radius:8px;padding:12px 14px;">'
-            + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
-            + '<div style="font-weight:600;color:var(--text-body);font-size:14px;">\uD83D\uDCBE Saved drafts (' + drafts.length + ')</div>'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap;">'
+            + '<div id="drafts-bar-count" style="font-weight:600;color:var(--text-body);font-size:14px;">\uD83D\uDCBE Saved drafts (' + drafts.length + ')</div>'
             + '<div style="font-size:11px;color:var(--text-muted);">Click "Resume" to reopen</div>'
             + '</div>'
-            + '<div style="max-height:200px;overflow-y:auto;padding-right:4px;"><div style="display:flex;flex-direction:column;gap:6px;">' + rows + '</div></div>'
+            + '<div style="margin-bottom:8px;">'
+            + '<input id="drafts-bar-search" type="search" placeholder="Search drafts by name or subject..." autocomplete="off" oninput="filterDraftsBar(this.value)" style="width:100%;box-sizing:border-box;background:var(--bg-card);color:var(--text-body);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;outline:none;" />'
+            + '</div>'
+            + '<div style="max-height:200px;overflow-y:auto;padding-right:4px;"><div id="drafts-bar-rows" style="display:flex;flex-direction:column;gap:6px;"></div></div>'
             + '</div>';
+        var input = document.getElementById('drafts-bar-search');
+        if (input && preservedQuery) input.value = preservedQuery;
+        filterDraftsBar(preservedQuery);
     })
     .catch(function() { bar.innerHTML = ''; });
+}
+
+function filterDraftsBar(query) {
+    var rowsEl = document.getElementById('drafts-bar-rows');
+    var countEl = document.getElementById('drafts-bar-count');
+    if (!rowsEl) return;
+    var drafts = window._savedDrafts || [];
+    var q = (query || '').trim().toLowerCase();
+    var filtered = q
+        ? drafts.filter(function(d) {
+            var name = (d.name || '').toLowerCase();
+            var subject = (d.subject || '').toLowerCase();
+            return name.indexOf(q) !== -1 || subject.indexOf(q) !== -1;
+        })
+        : drafts;
+    if (countEl) {
+        countEl.innerHTML = q
+            ? '\uD83D\uDCBE Saved drafts (' + filtered.length + ' of ' + drafts.length + ')'
+            : '\uD83D\uDCBE Saved drafts (' + drafts.length + ')';
+    }
+    if (!filtered.length) {
+        rowsEl.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 4px;">No drafts match</div>';
+        return;
+    }
+    var rows = '';
+    for (var i = 0; i < filtered.length; i++) {
+        var d = filtered[i];
+        var when = new Date((d.ts || 0) * 1000).toLocaleString();
+        var meta = (d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's');
+        if (d.channel) meta += ' \u00b7 ' + d.channel.replace(/_/g, ' ');
+        if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
+        meta += ' \u00b7 ' + when;
+        var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic;">' + escHtml(d.subject) + '</div>' : '';
+        rows += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);">'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="color:var(--text-body);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
+            + subjLine
+            + '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(meta) + '</div>'
+            + '</div>'
+            + '<button onclick="loadEmailDraft(\'' + d.id + '\')" style="background:#a78bfa;color:#fff;border:none;padding:6px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">Resume</button>'
+            + '<button onclick="deleteEmailDraft(\'' + d.id + '\')" title="Delete draft" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">\u2715</button>'
+            + '</div>';
+    }
+    rowsEl.innerHTML = rows;
 }
 
 function deleteEmailDraft(id) {
