@@ -10438,7 +10438,42 @@ function submitManualFeature() {
     });
 }
 
+// Wipe every piece of prep-flow state so the next session starts blank.
+// Called both when the user exits the overlay and when they re-enter via
+// the "Prep Content" button — without this reset, leftover state from a
+// previously opened draft (results, selections, channel, draft id, etc.)
+// would silently carry into the new session and make it look like an old
+// draft auto-loaded itself.
+function _resetPrepState() {
+    prepChannel = null;
+    prepSelectedIds = {};
+    prepBatchResults = [];
+    prepBatchApproved = {};
+    prepBatchPublished = {};
+    prepBatchInitialDrafts = {};
+    prepBatchRegenFeedback = {};
+    window.prepBatchImages = {};
+    window.prepBatchVideos = {};
+    window.prepBatchLinks = {};
+    window.prepBatchEmailSubject = {};
+    window.prepBatchModeOverride = null;
+    // Clear the latched batch-generation channel/mode too. These are set
+    // inside startBatchGeneration() and read by per-item regenerate (~line
+    // 12700) and the digest banner (~line 12408); without this reset, a
+    // re-entered prep session could regenerate items against the prior
+    // session's channel.
+    window.prepBatchMode = null;
+    window.prepBatchApiChannel = null;
+    window.prepBatchChannel = null;
+    window._currentDraftId = null;
+    window._currentDraftStatus = null;
+    window._restoredCombined = null;
+    _draftsBarSelectedIds = {};
+}
+
 function startPrepWorkflow() {
+    _resetPrepState();
+    _setArtifactUrl(null);
     var overlay = document.getElementById('prep-overlay');
     overlay.style.display = 'block';
     overlay.classList.add('crossfade-in');
@@ -10450,18 +10485,7 @@ function startPrepWorkflow() {
 function exitPrepWorkflow() {
     document.getElementById('prep-overlay').style.display = 'none';
     document.body.style.overflow = '';
-    prepChannel = null;
-    prepSelectedIds = {};
-    prepBatchResults = [];
-    prepBatchApproved = {};
-    prepBatchPublished = {};
-    prepBatchInitialDrafts = {};
-    prepBatchRegenFeedback = {};
-    window.prepBatchImages = {};
-    window.prepBatchVideos = {};
-    window.prepBatchLinks = {};
-    window._currentDraftId = null;
-    window._restoredCombined = null;
+    _resetPrepState();
     _setArtifactUrl(null);
     refreshMyArtifactsCount();
 }
