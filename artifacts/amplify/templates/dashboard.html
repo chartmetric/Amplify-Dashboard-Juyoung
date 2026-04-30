@@ -1838,7 +1838,6 @@
             <button class="btn-analytics" onclick="toggleAnalytics()">&#128202; Analytics</button>
             <button id="btn-my-artifacts" onclick="openMyArtifacts()" title="View saved drafts and past sends" style="position:relative;background:var(--bg-card);color:var(--text-body);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;transition:background 0.2s,border-color 0.2s;">&#128194; My Content<span id="my-artifacts-count" style="display:none;margin-left:6px;background:#a78bfa;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:700;"></span></button>
             <button class="btn-prep-content" onclick="startPrepWorkflow()">Prep Content</button>
-            <a href="/announcements" id="btn-announcements" title="Manage in-app announcements" style="background:var(--bg-card);color:var(--text-body);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;text-decoration:none;display:inline-flex;align-items:center;gap:6px;transition:background 0.2s,border-color 0.2s;">&#128226; Announcements</a>
             <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">&#127769;</button>
             <div style="display:flex;align-items:center;gap:6px;" title="API server connection">
                 <span class="health-dot" id="health-dot"></span>
@@ -9237,7 +9236,12 @@ function updateChannelStatus(chKey) {
                     var prevPubbed = contentViewPublished[chKey];
                     var toggleLabel = prevPubbed ? 'Republish or Preview' : 'Publish or Preview';
                     var pubLabel = prevPubbed ? 'Republish In-App' : 'Publish In-App';
-                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">' + toggleLabel + '</span><span class="dd-arrow">&#9650;</span></button><div class="custom-dropdown-menu"><div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">' + pubLabel + ' &#x1F4F1;</div><div class="custom-dropdown-item" onclick="window.open(\'/api/announcements/widget\', \'_blank\'); closeDropdown(\'' + ddId + '\');">Preview Widget &#x2197;</div></div>';
+                    ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="toggleCustomDropdown(\'' + ddId + '\')" type="button"><span class="dd-label">' + toggleLabel + '</span><span class="dd-arrow">&#9650;</span></button>' +
+                        '<div class="custom-dropdown-menu">' +
+                        '<div class="custom-dropdown-item" onclick="publishToChannel(\'' + chKey + '\'); closeDropdown(\'' + ddId + '\');">' + pubLabel + ' &#x1F4F1;</div>' +
+                        '<div class="custom-dropdown-item" onclick="window.open(\'/api/announcements/widget\', \'_blank\'); closeDropdown(\'' + ddId + '\');">Preview Widget &#x2197;</div>' +
+                        '<div class="custom-dropdown-item" onclick="window.open(\'/announcements\', \'_blank\'); closeDropdown(\'' + ddId + '\');">Manage all announcements &#x2197;</div>' +
+                        '</div>';
                 } else {
                     ddWrapper.innerHTML = '<button class="custom-dropdown-toggle" onclick="copyChannelContent(\'' + chKey + '\', this)" type="button"><span class="dd-label">Copy</span></button>';
                 }
