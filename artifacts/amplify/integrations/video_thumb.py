@@ -122,14 +122,37 @@ def get_cached_external_thumb_path(key: str) -> str:
     return ""
 
 
-def get_external_thumb_s3_url(key: str) -> str:
-    """Return a public S3 URL for a previously-cached external thumb, or ''."""
+def get_external_thumb_s3_key(key: str) -> str:
+    """Return the S3 object key for a cached external thumb, or ''.
+
+    Callers should pass the result through ``attachment_store.s3_serve_url``
+    to get a working serve URL. We deliberately do not return a URL
+    here — the bucket is private, so a public-form URL would 403 and
+    break thumbs in the email.
+    """
     if not key or not re.match(r"^[a-f0-9]{1,64}$", key):
         return ""
     try:
         from integrations import attachment_store as _astore
         if not _astore.s3_enabled():
             return ""
-        return _astore.s3_public_url(_s3_external_thumb_key(key)) or ""
+        return _s3_external_thumb_key(key) or ""
+    except Exception:
+        return ""
+
+
+def get_external_thumb_s3_url(key: str) -> str:
+    """Deprecated: returns a public S3 URL that 403s on private buckets.
+
+    Kept as a compatibility shim for any out-of-tree caller. New code
+    should call :func:`get_external_thumb_s3_key` and pass the key
+    through :func:`attachment_store.s3_serve_url`.
+    """
+    s3_key = get_external_thumb_s3_key(key)
+    if not s3_key:
+        return ""
+    try:
+        from integrations import attachment_store as _astore
+        return _astore.s3_public_url(s3_key) or ""
     except Exception:
         return ""

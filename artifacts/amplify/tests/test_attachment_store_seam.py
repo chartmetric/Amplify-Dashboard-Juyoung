@@ -242,21 +242,29 @@ class ServeRouteRedirectTests(unittest.TestCase):
     def tearDown(self):
         self._env_patch.stop()
 
+    # All serve routes funnel through ``attachment_store.s3_serve_url``
+    # to convert a stored S3 key into the URL the recipient gets
+    # 302-redirected to. The current implementation mints a presigned
+    # URL (private bucket); a future swap to public-read URLs would
+    # change only that helper. Tests mock the helper to a fixed string
+    # so they assert the contract — "serve route 302s to whatever
+    # s3_serve_url returns" — independent of the URL form.
+
     # --- feature-images ----------------------------------------------------
 
     def test_serve_feature_image_redirects_to_s3(self):
-        s3_url = "https://test-bucket.s3.us-east-1.amazonaws.com/feature-images/abc.png"
+        served = "https://signed.example/feature-images/abc.png?sig=token"
         with mock.patch.object(
             amp_app, "get_publish_image",
             return_value={
-                "s3_url": s3_url,
+                "s3_url": "",
                 "s3_key": "feature-images/abc.png",
                 "name": "abc.png",
             },
-        ):
+        ), mock.patch.object(attachment_store, "s3_serve_url", return_value=served):
             r = self.client.get("/api/publish/image/serve/feat-1")
         self.assertEqual(r.status_code, 302)
-        self.assertEqual(r.headers["Location"], s3_url)
+        self.assertEqual(r.headers["Location"], served)
 
     def test_serve_feature_image_falls_back_to_data_url_without_s3(self):
         with mock.patch.object(
@@ -277,64 +285,60 @@ class ServeRouteRedirectTests(unittest.TestCase):
     def test_serve_hosted_image_redirects_to_s3(self):
         # img_id must match the [a-f0-9]+ sanitiser.
         img_id = "abc123def4567890"
-        s3_url = (
-            "https://test-bucket.s3.us-east-1.amazonaws.com/hosted-emails/" + img_id + ".png"
-        )
+        served = "https://signed.example/hosted-emails/" + img_id + ".png?sig=token"
         with mock.patch.object(
             amp_app,
             "_load_hosted_image_s3_meta",
-            return_value=("hosted-emails/" + img_id + ".png", s3_url, "png"),
-        ):
+            return_value=("hosted-emails/" + img_id + ".png", "", "png"),
+        ), mock.patch.object(attachment_store, "s3_serve_url", return_value=served):
             r = self.client.get(f"/api/publish/image/hosted/{img_id}")
         self.assertEqual(r.status_code, 302)
-        self.assertEqual(r.headers["Location"], s3_url)
+        self.assertEqual(r.headers["Location"], served)
 
     # --- videos ------------------------------------------------------------
 
     def test_serve_video_redirects_to_s3(self):
-        s3_url = "https://test-bucket.s3.us-east-1.amazonaws.com/videos/abc/video.mp4"
+        served = "https://signed.example/videos/abc/video.mp4?sig=token"
         with mock.patch.object(
             publish_store, "get_video_meta",
             return_value={
-                "s3_url": s3_url,
+                "s3_url": "",
                 "s3_key": "videos/abc/video.mp4",
                 "ext": ".mp4",
             },
-        ):
+        ), mock.patch.object(attachment_store, "s3_serve_url", return_value=served):
             r = self.client.get("/api/videos/abc")
         self.assertEqual(r.status_code, 302)
-        self.assertEqual(r.headers["Location"], s3_url)
+        self.assertEqual(r.headers["Location"], served)
 
     # --- video-thumbs ------------------------------------------------------
 
     def test_serve_video_thumb_redirects_to_s3(self):
-        s3_url = "https://test-bucket.s3.us-east-1.amazonaws.com/videos/abc/thumb.jpg"
+        served = "https://signed.example/videos/abc/thumb.jpg?sig=token"
         with mock.patch.object(
             publish_store, "get_video_meta",
             return_value={
-                "s3_thumb_url": s3_url,
+                "s3_thumb_url": "",
                 "s3_thumb_key": "videos/abc/thumb.jpg",
                 "ext": ".mp4",
             },
-        ):
+        ), mock.patch.object(attachment_store, "s3_serve_url", return_value=served):
             r = self.client.get("/api/videos/abc/thumb")
         self.assertEqual(r.status_code, 302)
-        self.assertEqual(r.headers["Location"], s3_url)
+        self.assertEqual(r.headers["Location"], served)
 
     # --- external-thumbs ---------------------------------------------------
 
     def test_serve_external_thumb_redirects_to_s3(self):
         # Key must match [a-f0-9]{1,64}.
         key = "deadbeef"
-        s3_url = (
-            "https://test-bucket.s3.us-east-1.amazonaws.com/external-thumbs/"
-            + key
-            + ".jpg"
-        )
-        with mock.patch.object(video_thumb, "get_external_thumb_s3_url", return_value=s3_url):
+        s3_key = "external-thumbs/" + key + ".jpg"
+        served = "https://signed.example/" + s3_key + "?sig=token"
+        with mock.patch.object(video_thumb, "get_external_thumb_s3_key", return_value=s3_key), \
+             mock.patch.object(attachment_store, "s3_serve_url", return_value=served):
             r = self.client.get(f"/api/videos/external-thumb/{key}")
         self.assertEqual(r.status_code, 302)
-        self.assertEqual(r.headers["Location"], s3_url)
+        self.assertEqual(r.headers["Location"], served)
 
     # --- announcements -----------------------------------------------------
 
@@ -344,15 +348,20 @@ class ServeRouteRedirectTests(unittest.TestCase):
                 stored_name = "1700000000_token_demo.png"
                 with open(os.path.join(tmp, stored_name), "wb") as f:
                     f.write(_PNG_BYTES)
-                s3_url = (
-                    "https://test-bucket.s3.us-east-1.amazonaws.com/announcements/"
-                    + stored_name
-                )
+                s3_key = "announcements/" + stored_name
+                served = "https://signed.example/" + s3_key + "?sig=token"
                 with open(os.path.join(tmp, stored_name + ".s3"), "w") as f:
-                    f.write(f"announcements/{stored_name}\n{s3_url}\n")
-                r = self.client.get(f"/api/admin/announcement-uploads/{stored_name}")
+                    # The sidecar still records the public URL form for
+                    # historical/admin use; the serve route ignores it
+                    # and asks s3_serve_url for a working URL instead.
+                    public_form = (
+                        "https://test-bucket.s3.us-east-1.amazonaws.com/" + s3_key
+                    )
+                    f.write(f"{s3_key}\n{public_form}\n")
+                with mock.patch.object(attachment_store, "s3_serve_url", return_value=served):
+                    r = self.client.get(f"/api/admin/announcement-uploads/{stored_name}")
         self.assertEqual(r.status_code, 302)
-        self.assertEqual(r.headers["Location"], s3_url)
+        self.assertEqual(r.headers["Location"], served)
 
 
 # ---------------------------------------------------------------------------

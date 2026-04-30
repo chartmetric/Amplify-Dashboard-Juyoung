@@ -357,12 +357,14 @@ def _read_announcement_s3_sidecar(stored_name: str):
 def serve_upload(filename: str):
     from flask import redirect
     safe = os.path.basename(filename)
-    # Prefer S3 redirect when sidecar exists (Task #99).
-    s3_key, s3_url = _read_announcement_s3_sidecar(safe)
-    if s3_key or s3_url:
+    # Prefer S3 redirect when sidecar exists (Task #99). Always
+    # re-mint a presigned URL so a private bucket still serves; the
+    # stored s3_url is the public form that 403s in that case.
+    s3_key, _s3_url_unused = _read_announcement_s3_sidecar(safe)
+    if s3_key:
         try:
             from integrations import attachment_store as _astore
-            target = s3_url or _astore.s3_public_url(s3_key)
+            target = _astore.s3_serve_url(s3_key)
             if target:
                 return redirect(target, code=302)
         except Exception:

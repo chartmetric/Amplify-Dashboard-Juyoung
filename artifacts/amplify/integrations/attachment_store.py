@@ -350,3 +350,26 @@ def get_url(kind: str, key: str, presign_ttl: int = 3600) -> Optional[str]:
     if not key:
         return None
     return s3_public_url(key)
+
+
+# Default TTL for serve-time presigned URLs. One hour is plenty: email
+# clients (Gmail in particular) proxy and cache the image at the first
+# fetch, so this only needs to outlive the single open that triggers a
+# server hit. For non-proxying clients (Outlook, Apple Mail), every
+# open re-hits our Flask route and mints a fresh URL.
+_SERVE_PRESIGN_TTL_SECONDS = 3600
+
+
+def s3_serve_url(key: str) -> Optional[str]:
+    """Return the URL the serve routes should 302-redirect to for ``key``.
+
+    Today this returns a short-lived presigned URL because the bucket
+    is private (recipients can't read the virtual-hosted public URL —
+    S3 returns 403). When/if the bucket is configured for public read,
+    this can be flipped back to :func:`s3_public_url` so email clients
+    cache more aggressively. All serve routes funnel through this one
+    helper so that change is a single-line edit.
+    """
+    if not key:
+        return None
+    return s3_presigned_url(key, ttl_seconds=_SERVE_PRESIGN_TTL_SECONDS)

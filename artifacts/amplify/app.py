@@ -4260,15 +4260,19 @@ def serve_hosted_image(img_id):
         logger.info(f"[hosted-images] serve sanitized img_id {img_id!r} -> {safe_id!r}")
     mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
     # If the row was backfilled to S3, redirect there first (Task #99).
+    # We always re-mint a presigned URL via attachment_store.s3_serve_url
+    # rather than reusing the stored s3_url: the stored URL is the
+    # virtual-hosted public form, which 403s on private buckets and
+    # would silently break every email image.
     s3_meta = _load_hosted_image_s3_meta(safe_id)
     if s3_meta:
-        s3_key, s3_url, _ext = s3_meta
-        if s3_url or s3_key:
+        s3_key, _s3_url_unused, _ext = s3_meta
+        if s3_key:
             try:
                 from integrations import attachment_store as _astore
-                target = s3_url or _astore.s3_public_url(s3_key)
+                target = _astore.s3_serve_url(s3_key)
                 if target:
-                    logger.info(f"[hosted-images] serve REDIRECT(s3) id={safe_id} -> {target}")
+                    logger.info(f"[hosted-images] serve REDIRECT(s3) id={safe_id} key={s3_key}")
                     return redirect(target, code=302)
             except Exception:
                 pass
@@ -4334,13 +4338,14 @@ def serve_feature_image(feature_id):
     if not img_data:
         return "Not found", 404
     # Prefer S3 when we recorded a key (Task #99). 302 keeps the URL the
-    # frontend uses unchanged but offloads bandwidth to the bucket.
-    s3_url = img_data.get("s3_url") or ""
+    # frontend uses unchanged but offloads bandwidth to the bucket. We
+    # mint a fresh presigned URL each time (see s3_serve_url docs) so a
+    # private bucket still serves correctly.
     s3_key = img_data.get("s3_key") or ""
-    if s3_url or s3_key:
+    if s3_key:
         try:
             from integrations import attachment_store as _astore
-            target = s3_url or _astore.s3_public_url(s3_key)
+            target = _astore.s3_serve_url(s3_key)
             if target:
                 return redirect(target, code=302)
         except Exception:
@@ -4579,12 +4584,11 @@ def serve_video(video_id):
     except Exception:
         meta_only = None
     if meta_only:
-        s3_url = meta_only.get("s3_url") or ""
         s3_key = meta_only.get("s3_key") or ""
-        if s3_url or s3_key:
+        if s3_key:
             try:
                 from integrations import attachment_store as _astore
-                target = s3_url or _astore.s3_public_url(s3_key)
+                target = _astore.s3_serve_url(s3_key)
                 if target:
                     return redirect(target, code=302)
             except Exception:
@@ -4610,12 +4614,11 @@ def serve_video_thumb(video_id):
     except Exception:
         meta_only = None
     if meta_only:
-        s3_url = meta_only.get("s3_thumb_url") or ""
         s3_key = meta_only.get("s3_thumb_key") or ""
-        if s3_url or s3_key:
+        if s3_key:
             try:
                 from integrations import attachment_store as _astore
-                target = s3_url or _astore.s3_public_url(s3_key)
+                target = _astore.s3_serve_url(s3_key)
                 if target:
                     return redirect(target, code=302)
             except Exception:
@@ -4636,12 +4639,20 @@ def serve_video_thumb(video_id):
 @app.route("/api/videos/external-thumb/<key>")
 def serve_external_video_thumb(key):
     from flask import send_file
-    from integrations.video_thumb import get_cached_external_thumb_path, get_external_thumb_s3_url
+    from integrations.video_thumb import get_cached_external_thumb_path, get_external_thumb_s3_key
     from flask import redirect
-    # Prefer S3 when enabled (Task #99) — independent of local cache state.
-    s3_url = get_external_thumb_s3_url(key)
-    if s3_url:
-        return redirect(s3_url, code=302)
+    # Prefer S3 when enabled (Task #99) — independent of local cache
+    # state. Re-mint a presigned URL each request via s3_serve_url so
+    # private buckets work (the prior s3_public_url path returned 403).
+    s3_key = get_external_thumb_s3_key(key)
+    if s3_key:
+        try:
+            from integrations import attachment_store as _astore
+            target = _astore.s3_serve_url(s3_key)
+            if target:
+                return redirect(target, code=302)
+        except Exception:
+            pass
     path = get_cached_external_thumb_path(key)
     if not path:
         return (
