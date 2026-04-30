@@ -10892,6 +10892,29 @@ function saveCombinedAsDraft() {
     });
 }
 
+var _draftsBarSelectedIds = {};
+
+function _updateMergeDraftsButton() {
+    var btn = document.getElementById('drafts-bar-merge-btn');
+    if (!btn) return;
+    var ids = Object.keys(_draftsBarSelectedIds);
+    var n = ids.length;
+    if (n >= 2) {
+        btn.style.display = 'inline-block';
+        btn.disabled = false;
+        btn.textContent = 'Merge selected (' + n + ')';
+    } else {
+        btn.style.display = 'none';
+        btn.disabled = true;
+    }
+}
+
+function _onDraftsBarCheckboxToggle(cb, id) {
+    if (cb.checked) _draftsBarSelectedIds[id] = true;
+    else delete _draftsBarSelectedIds[id];
+    _updateMergeDraftsButton();
+}
+
 function renderDraftsBar() {
     var bar = document.getElementById('drafts-bar-step1');
     if (!bar) return;
@@ -10905,11 +10928,20 @@ function renderDraftsBar() {
     .then(function(data) {
         var drafts = (data && data.drafts) || [];
         window._savedDrafts = drafts;
-        if (!drafts.length) { bar.innerHTML = ''; return; }
+        if (!drafts.length) { bar.innerHTML = ''; _draftsBarSelectedIds = {}; return; }
+        // Preserve selection only for ids still present.
+        var stillPresent = {};
+        for (var k = 0; k < drafts.length; k++) stillPresent[drafts[k].id] = true;
+        Object.keys(_draftsBarSelectedIds).forEach(function(sid) {
+            if (!stillPresent[sid]) delete _draftsBarSelectedIds[sid];
+        });
         bar.innerHTML = '<div style="background:var(--bg-elev,rgba(167,139,250,0.04));border:1px solid rgba(167,139,250,0.25);border-radius:8px;padding:12px 14px;">'
             + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap;">'
             + '<div id="drafts-bar-count" style="font-weight:600;color:var(--text-body);font-size:14px;">\uD83D\uDCBE Saved drafts (' + drafts.length + ')</div>'
+            + '<div style="display:flex;align-items:center;gap:10px;">'
+            + '<button id="drafts-bar-merge-btn" onclick="mergeSelectedDrafts()" style="display:none;background:#a78bfa;color:#fff;border:none;padding:5px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">Merge selected (0)</button>'
             + '<div style="font-size:11px;color:var(--text-muted);">Click "Resume" to reopen</div>'
+            + '</div>'
             + '</div>'
             + '<div style="margin-bottom:8px;">'
             + '<input id="drafts-bar-search" type="search" placeholder="Search drafts by name or subject..." autocomplete="off" oninput="filterDraftsBar(this.value)" style="width:100%;box-sizing:border-box;background:var(--bg-card);color:var(--text-body);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;outline:none;" />'
@@ -10919,6 +10951,7 @@ function renderDraftsBar() {
         var input = document.getElementById('drafts-bar-search');
         if (input && preservedQuery) input.value = preservedQuery;
         filterDraftsBar(preservedQuery);
+        _updateMergeDraftsButton();
     })
     .catch(function() { bar.innerHTML = ''; });
 }
@@ -10954,17 +10987,172 @@ function filterDraftsBar(query) {
         if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
         meta += ' \u00b7 ' + when;
         var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic;">' + escHtml(d.subject) + '</div>' : '';
+        var isChecked = _draftsBarSelectedIds[d.id] ? ' checked' : '';
+        var cbId = 'draft-merge-cb-' + d.id;
         rows += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);">'
-            + '<div style="flex:1;min-width:0;">'
+            + '<input type="checkbox" id="' + cbId + '" aria-label="Select draft for merge" '
+            + 'onclick="event.stopPropagation();" '
+            + 'onchange="_onDraftsBarCheckboxToggle(this, \'' + d.id + '\')"'
+            + isChecked
+            + ' style="cursor:pointer;width:16px;height:16px;flex-shrink:0;accent-color:#a78bfa;">'
+            + '<label for="' + cbId + '" style="flex:1;min-width:0;cursor:pointer;" onclick="event.stopPropagation();">'
             + '<div style="color:var(--text-body);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
             + subjLine
             + '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(meta) + '</div>'
-            + '</div>'
+            + '</label>'
             + '<button onclick="loadEmailDraft(\'' + d.id + '\')" style="background:#a78bfa;color:#fff;border:none;padding:6px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">Resume</button>'
             + '<button onclick="deleteEmailDraft(\'' + d.id + '\')" title="Delete draft" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">\u2715</button>'
             + '</div>';
     }
     rowsEl.innerHTML = rows;
+}
+
+function mergeSelectedDrafts() {
+    var ids = Object.keys(_draftsBarSelectedIds);
+    if (ids.length < 2) { showToast('Select at least 2 drafts to merge', 'warning'); return; }
+    var btn = document.getElementById('drafts-bar-merge-btn');
+    var origText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Merging...'; }
+    var fetches = ids.map(function(id) {
+        return fetch('/api/email-drafts/' + encodeURIComponent(id))
+            .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); });
+    });
+    Promise.all(fetches).then(function(responses) {
+        var loaded = [];
+        for (var i = 0; i < responses.length; i++) {
+            var resp = responses[i];
+            if (!resp.ok || !resp.body || resp.body.error || !resp.body.snapshot) {
+                throw new Error('Could not load draft "' + ids[i] + '"' + (resp.body && resp.body.error ? ': ' + resp.body.error : ''));
+            }
+            loaded.push(resp.body);
+        }
+        // Sort oldest-first by ts.
+        loaded.sort(function(a, b) { return (a.ts || 0) - (b.ts || 0); });
+        // Validate single channel.
+        var firstChan = (loaded[0].snapshot && loaded[0].snapshot.channel) || '';
+        for (var j = 1; j < loaded.length; j++) {
+            var c = (loaded[j].snapshot && loaded[j].snapshot.channel) || '';
+            if (c !== firstChan) {
+                throw new Error('Only same-channel drafts can be merged. Selected drafts use different channels.');
+            }
+        }
+        // Compose union. Oldest-first for results/featureIds (first occurrence wins).
+        // For per-feature maps, most-recently-saved wins -> iterate newest-first when assigning.
+        var seenFids = {};
+        var mergedResults = [];
+        var mergedFeatureIds = [];
+        for (var k = 0; k < loaded.length; k++) {
+            var snap = loaded[k].snapshot || {};
+            var rs = snap.results || [];
+            for (var m = 0; m < rs.length; m++) {
+                var r = rs[m];
+                var fid = r && r.feature_id;
+                if (!fid || seenFids[fid]) continue;
+                seenFids[fid] = true;
+                mergedResults.push(r);
+                mergedFeatureIds.push(fid);
+            }
+            // Also include ids listed in snapshot.featureIds without a matching
+            // result entry, so legacy / partial snapshots don't silently drop ids.
+            var snapFids = snap.featureIds || [];
+            for (var fi = 0; fi < snapFids.length; fi++) {
+                var sfid = snapFids[fi];
+                if (!sfid || seenFids[sfid]) continue;
+                seenFids[sfid] = true;
+                mergedFeatureIds.push(sfid);
+            }
+        }
+        // Per-feature maps: newest-first so the most-recently-saved wins.
+        var mergedApproved = {};
+        var mergedInit = {};
+        var mergedImages = {};
+        var mergedVideos = {};
+        var mergedLinks = {};
+        var mergedSubjects = {};
+        for (var n = loaded.length - 1; n >= 0; n--) {
+            var s = loaded[n].snapshot || {};
+            var ap = s.approvedByFeatureId || {};
+            var ini = s.initialDraftsByFeatureId || {};
+            var im = s.imagesByFeatureId || {};
+            var vi = s.videosByFeatureId || {};
+            var li = s.linksByFeatureId || {};
+            var sj = s.emailSubjects || {};
+            Object.keys(ap).forEach(function(fid) { if (!(fid in mergedApproved)) mergedApproved[fid] = ap[fid]; });
+            Object.keys(ini).forEach(function(fid) { if (!(fid in mergedInit)) mergedInit[fid] = ini[fid]; });
+            Object.keys(im).forEach(function(fid) { if (!(fid in mergedImages)) mergedImages[fid] = im[fid]; });
+            Object.keys(vi).forEach(function(fid) { if (!(fid in mergedVideos)) mergedVideos[fid] = vi[fid]; });
+            Object.keys(li).forEach(function(fid) { if (!(fid in mergedLinks)) mergedLinks[fid] = li[fid]; });
+            Object.keys(sj).forEach(function(fid) { if (!(fid in mergedSubjects)) mergedSubjects[fid] = sj[fid]; });
+        }
+        // Combined: seed from most-recently-saved, body = oldest-first concat with divider.
+        var newest = loaded[loaded.length - 1];
+        var newestCombined = (newest.snapshot && newest.snapshot.combined) || {};
+        var bodyParts = [];
+        for (var p = 0; p < loaded.length; p++) {
+            var snapP = loaded[p].snapshot || {};
+            var cb = snapP.combined || {};
+            var partBody = (cb.body || '').toString();
+            if (!partBody) continue;
+            var label = '--- From draft: ' + (loaded[p].name || 'Untitled') + ' ---';
+            bodyParts.push(label + '\n\n' + partBody);
+        }
+        var stitchedBody = bodyParts.join('\n\n');
+        var mergedCombined = {
+            subject: newestCombined.subject || '',
+            fromName: newestCombined.fromName || '',
+            templateId: newestCombined.templateId || '',
+            audienceId: newestCombined.audienceId || '',
+            audienceLabel: newestCombined.audienceLabel || '',
+            customEmails: newestCombined.customEmails || '',
+            bcc: newestCombined.bcc || '',
+            bannerTitle: newestCombined.bannerTitle || '',
+            bannerMonth: newestCombined.bannerMonth || '',
+            body: stitchedBody
+        };
+        var mergedSnapshot = {
+            channel: firstChan,
+            featureIds: mergedFeatureIds,
+            results: mergedResults,
+            approvedByFeatureId: mergedApproved,
+            initialDraftsByFeatureId: mergedInit,
+            imagesByFeatureId: mergedImages,
+            videosByFeatureId: mergedVideos,
+            linksByFeatureId: mergedLinks,
+            emailSubjects: mergedSubjects,
+            modeOverride: (newest.snapshot && newest.snapshot.modeOverride) || null,
+            combined: mergedCombined
+        };
+        // Build name.
+        var names = loaded.map(function(d) { return (d.name || 'Untitled'); });
+        var mergedName;
+        if (names.length <= 3) {
+            mergedName = 'Merged: ' + names.join(' + ');
+        } else {
+            mergedName = 'Merged: ' + names.slice(0, 3).join(' + ') + ' +' + (names.length - 3) + ' more';
+        }
+        if (mergedName.length > 200) mergedName = mergedName.substring(0, 197) + '...';
+        return fetch('/api/email-drafts', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name: mergedName, snapshot: mergedSnapshot })
+        }).then(function(r) {
+            return r.json().then(function(j) {
+                if (!r.ok || (j && j.error)) {
+                    throw new Error((j && j.error) || ('Save failed (HTTP ' + r.status + ')'));
+                }
+                return j;
+            });
+        });
+    }).then(function(saveResp) {
+        if (btn) { btn.disabled = false; btn.textContent = origText; }
+        _draftsBarSelectedIds = {};
+        showToast('Merged into new draft \u2705');
+        renderDraftsBar();
+        if (saveResp && saveResp.id) loadEmailDraft(saveResp.id);
+    }).catch(function(err) {
+        if (btn) { btn.disabled = false; btn.textContent = origText; _updateMergeDraftsButton(); }
+        showToast('Merge failed: ' + (err && err.message ? err.message : err), 'error');
+    });
 }
 
 function deleteEmailDraft(id) {
