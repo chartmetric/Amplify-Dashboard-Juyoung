@@ -896,6 +896,14 @@ def _ensure_drafts_table(conn) -> bool:
                 )
                 """
             )
+            # `category` is added separately so existing deployments pick it
+            # up without a manual migration. Nullable on purpose: the save UI
+            # doesn't expose it yet (a future task), but the column round-
+            # trips end-to-end so writers can start populating it later
+            # without another schema change.
+            cur.execute(
+                "ALTER TABLE email_drafts ADD COLUMN IF NOT EXISTS category TEXT"
+            )
             conn.commit()
         _drafts_db_initialized = True
         # One-time migration from on-disk JSON -> DB so any drafts saved
@@ -914,8 +922,8 @@ def _ensure_drafts_table(conn) -> bool:
                             for d in drafts:
                                 cur.execute(
                                     """
-                                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot)
-                                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                                     ON CONFLICT (id) DO NOTHING
                                     """,
                                     (
@@ -926,6 +934,7 @@ def _ensure_drafts_table(conn) -> bool:
                                         float(d.get("last_published_ts") or 0),
                                         int(d.get("last_recipient_count") or 0),
                                         json.dumps(d.get("snapshot") or {}),
+                                        d.get("category") or None,
                                     ),
                                 )
                             conn.commit()
@@ -950,6 +959,9 @@ def _row_to_draft(row) -> dict:
             snap = json.loads(snap)
         except Exception:
             snap = {}
+    # `category` may be missing on rows written before the column existed,
+    # so guard the index lookup.
+    category = row[7] if len(row) > 7 else None
     return {
         "id": row[0],
         "name": row[1],
@@ -958,6 +970,7 @@ def _row_to_draft(row) -> dict:
         "last_published_ts": float(row[4] or 0),
         "last_recipient_count": int(row[5] or 0),
         "snapshot": snap or {},
+        "category": category,
     }
 
 
@@ -969,7 +982,7 @@ def _load_email_drafts() -> dict:
             if _ensure_drafts_table(conn):
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot FROM email_drafts ORDER BY ts DESC"
+                        "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category FROM email_drafts ORDER BY ts DESC"
                     )
                     rows = cur.fetchall()
                 return {"drafts": [_row_to_draft(r) for r in rows]}
@@ -986,6 +999,12 @@ def _load_email_drafts() -> dict:
             with open(_EMAIL_DRAFTS_PATH, "r") as f:
                 data = json.load(f)
             if isinstance(data, dict) and isinstance(data.get("drafts"), list):
+                # Normalize: ensure every record exposes `category` (as
+                # null when missing) so callers don't have to special-case
+                # records that predate the column.
+                for d in data["drafts"]:
+                    if isinstance(d, dict) and "category" not in d:
+                        d["category"] = None
                 return data
     except Exception as e:
         logger.warning(f"[email-drafts] JSON load failed: {e}")
@@ -1011,15 +1030,16 @@ def _save_email_drafts(data: dict) -> None:
                     for d in drafts:
                         cur.execute(
                             """
-                            INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                             ON CONFLICT (id) DO UPDATE SET
                                 name = EXCLUDED.name,
                                 ts = EXCLUDED.ts,
                                 status = EXCLUDED.status,
                                 last_published_ts = EXCLUDED.last_published_ts,
                                 last_recipient_count = EXCLUDED.last_recipient_count,
-                                snapshot = EXCLUDED.snapshot
+                                snapshot = EXCLUDED.snapshot,
+                                category = EXCLUDED.category
                             """,
                             (
                                 d.get("id"),
@@ -1029,6 +1049,7 @@ def _save_email_drafts(data: dict) -> None:
                                 float(d.get("last_published_ts") or 0),
                                 int(d.get("last_recipient_count") or 0),
                                 json.dumps(d.get("snapshot") or {}),
+                                d.get("category") or None,
                             ),
                         )
                     conn.commit()
@@ -1060,6 +1081,9 @@ def _save_email_drafts(data: dict) -> None:
 def _draft_summary(d: dict) -> dict:
     snap = d.get("snapshot") or {}
     combined = snap.get("combined") or {}
+    # `category` is intentionally exposed even when null so the frontend
+    # can rely on the key being present (the My Content grouping seam
+    # reads it directly).
     return {
         "id": d.get("id"),
         "name": d.get("name") or "Untitled draft",
@@ -1071,6 +1095,7 @@ def _draft_summary(d: dict) -> dict:
         "status": d.get("status") or "draft",
         "last_published_ts": d.get("last_published_ts") or 0,
         "last_recipient_count": d.get("last_recipient_count") or 0,
+        "category": d.get("category") or None,
     }
 
 
@@ -1133,6 +1158,18 @@ def save_email_draft():
         incoming_status = (body.get("status") or "").strip().lower()
         if incoming_status not in ("draft", "published"):
             incoming_status = prev.get("status") or "draft"
+        # `category` is optional and currently nullable. The save UI does
+        # not surface it yet (a future task will), but accept it here so
+        # programmatic writers and future UI changes can populate it
+        # without another round of plumbing.
+        if "category" in body:
+            raw_category = body.get("category")
+            if raw_category is None:
+                category = None
+            else:
+                category = (str(raw_category) or "").strip() or None
+        else:
+            category = prev.get("category") or None
         record = {
             "id": draft_id,
             "name": name,
@@ -1141,6 +1178,7 @@ def save_email_draft():
             "status": incoming_status,
             "last_published_ts": prev.get("last_published_ts") or 0,
             "last_recipient_count": prev.get("last_recipient_count") or 0,
+            "category": category,
         }
         if existing_idx >= 0:
             drafts[existing_idx] = record

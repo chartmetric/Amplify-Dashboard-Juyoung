@@ -1836,7 +1836,7 @@
                 </div>
             </div>
             <button class="btn-analytics" onclick="toggleAnalytics()">&#128202; Analytics</button>
-            <button id="btn-my-artifacts" onclick="openMyArtifacts()" title="View saved drafts and past sends" style="position:relative;background:var(--bg-card);color:var(--text-body);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;transition:background 0.2s,border-color 0.2s;">&#128194; My Artifacts<span id="my-artifacts-count" style="display:none;margin-left:6px;background:#a78bfa;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:700;"></span></button>
+            <button id="btn-my-artifacts" onclick="openMyArtifacts()" title="View saved drafts and past sends" style="position:relative;background:var(--bg-card);color:var(--text-body);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;transition:background 0.2s,border-color 0.2s;">&#128194; My Content<span id="my-artifacts-count" style="display:none;margin-left:6px;background:#a78bfa;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:700;"></span></button>
             <button class="btn-prep-content" onclick="startPrepWorkflow()">Prep Content</button>
             <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">&#127769;</button>
             <div style="display:flex;align-items:center;gap:6px;" title="API server connection">
@@ -2295,15 +2295,14 @@
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;max-width:880px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
             <div style="padding:18px 22px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
                 <div>
-                    <div style="font-size:18px;font-weight:700;color:var(--text-body);">&#128194; My Artifacts</div>
-                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Saved drafts and past sends. Open to edit, resend, or delete.</div>
+                    <div style="font-size:18px;font-weight:700;color:var(--text-body);">&#128194; My Content</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Drafts you're working on and artifacts you've published. Open to edit, resend, or delete.</div>
                 </div>
                 <button onclick="closeMyArtifacts()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;">&#10005;</button>
             </div>
             <div style="padding:14px 22px 8px;display:flex;gap:8px;align-items:center;">
-                <button id="my-art-tab-all" class="cat-filter-pill active" onclick="setMyArtifactsTab('all')" style="cursor:pointer;">All <span id="my-art-count-all" style="margin-left:4px;color:var(--text-muted);"></span></button>
-                <button id="my-art-tab-draft" class="cat-filter-pill" onclick="setMyArtifactsTab('draft')" style="cursor:pointer;">Drafts <span id="my-art-count-draft" style="margin-left:4px;color:var(--text-muted);"></span></button>
-                <button id="my-art-tab-published" class="cat-filter-pill" onclick="setMyArtifactsTab('published')" style="cursor:pointer;">Published <span id="my-art-count-published" style="margin-left:4px;color:var(--text-muted);"></span></button>
+                <button id="my-art-tab-draft" class="cat-filter-pill active" onclick="setMyArtifactsTab('draft')" style="cursor:pointer;">Drafts <span id="my-art-count-draft" style="margin-left:4px;color:var(--text-muted);"></span></button>
+                <button id="my-art-tab-published" class="cat-filter-pill" onclick="setMyArtifactsTab('published')" style="cursor:pointer;">Artifacts <span id="my-art-count-published" style="margin-left:4px;color:var(--text-muted);"></span></button>
             </div>
             <div id="my-artifacts-list" style="padding:8px 22px 22px;max-height:60vh;overflow-y:auto;"></div>
         </div>
@@ -10476,10 +10475,12 @@ window.addEventListener('popstate', function(ev) {
 });
 
 // ---------------------------------------------------------------------------
-// My Artifacts modal: unified list of drafts + past sends, with Open / Resend
-// / Delete actions. Reuses /api/email-drafts as the storage layer.
+// My Content modal: two top-level views — Drafts (in-progress) and
+// Artifacts (already published) — backed by /api/email-drafts.
+// The internal tab keys still match the underlying status values
+// ('draft' / 'published') so we don't have to re-map data on every render.
 // ---------------------------------------------------------------------------
-window._myArtifactsTab = 'all';
+window._myArtifactsTab = 'draft';
 window._myArtifactsCache = [];
 
 function refreshMyArtifactsCount() {
@@ -10504,7 +10505,9 @@ function openMyArtifacts() {
     var modal = document.getElementById('my-artifacts-modal');
     if (!modal) return;
     modal.style.display = 'flex';
-    renderMyArtifactsList();
+    // Always re-open on Drafts (in-progress work) per the My Content
+    // contract, regardless of which tab the user last left active.
+    setMyArtifactsTab('draft');
     fetch('/api/email-drafts').then(function(r) { return r.json(); }).then(function(data) {
         window._myArtifactsCache = (data && data.drafts) || [];
         renderMyArtifactsList();
@@ -10517,8 +10520,9 @@ function closeMyArtifacts() {
 }
 
 function setMyArtifactsTab(tab) {
+    if (tab !== 'draft' && tab !== 'published') tab = 'draft';
     window._myArtifactsTab = tab;
-    ['all','draft','published'].forEach(function(t) {
+    ['draft','published'].forEach(function(t) {
         var el = document.getElementById('my-art-tab-' + t);
         if (el) {
             if (t === tab) el.classList.add('active'); else el.classList.remove('active');
@@ -10527,27 +10531,108 @@ function setMyArtifactsTab(tab) {
     renderMyArtifactsList();
 }
 
+// Channel chip: surfaces the snapshot's channel value (e.g. "email_newsletter",
+// "notion_monthly") on each draft row so marketers can see at a glance what
+// kind of draft it is, even before we add Slack/SMS/etc. Returns '' when
+// the draft has no channel set so the caller can omit the chip entirely.
+function _channelChipHtml(channel) {
+    if (!channel) return '';
+    var raw = String(channel);
+    var label;
+    if (/^email/i.test(raw)) label = 'Email';
+    else if (/^notion/i.test(raw)) label = 'Notion';
+    else if (/^slack/i.test(raw)) label = 'Slack';
+    else if (/^sms/i.test(raw)) label = 'SMS';
+    else label = raw.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+    return '<span style="display:inline-block;background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.35);border-radius:10px;padding:1px 8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;">'
+        + escHtml(label) + '</span>';
+}
+
+// Grouping seam for the Drafts tab. Today this returns a single
+// "All drafts" group containing every draft, but it's a function (not
+// inlined) and keyed by group-id so a follow-up task can swap in
+// channel-based, category-based, or manual groups without touching the
+// renderer. Each group has: { id, label, items }.
+function _buildDraftGroups(items) {
+    return [{ id: 'all', label: 'All drafts', items: items.slice() }];
+}
+
+function _renderDraftRow(d, ID_RE) {
+    if (!d || !ID_RE.test(String(d.id || ''))) return '';
+    var safeId = String(d.id);
+    var when = new Date((d.ts || 0) * 1000).toLocaleString();
+    var meta = (d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's');
+    if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
+    var chip = _channelChipHtml(d.channel);
+    var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:12px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">' + escHtml(d.subject) + '</div>' : '';
+    var sentMeta = '<span style="color:#a78bfa;font-size:11px;font-weight:600;">Draft \u00b7 saved ' + escHtml(when) + '</span>';
+    var nameRow = '<div style="display:flex;align-items:center;gap:8px;min-width:0;">'
+        + '<div style="font-weight:600;color:var(--text-body);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
+        + (chip ? chip : '')
+        + '</div>';
+    return '<div data-art-id="' + safeId + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);margin-bottom:8px;">'
+        + '<div style="flex:1;min-width:0;">'
+        + nameRow
+        + subjLine
+        + '<div style="margin-top:5px;color:var(--text-muted);font-size:11px;">' + escHtml(meta) + '</div>'
+        + '<div style="margin-top:3px;">' + sentMeta + '</div>'
+        + '<div style="margin-top:4px;"><a href="/artifact/' + encodeURIComponent(safeId) + '" data-art-link="' + safeId + '" style="color:var(--text-muted);font-size:10px;text-decoration:none;font-family:monospace;">/artifact/' + escHtml(safeId) + '</a></div>'
+        + '</div>'
+        + '<div style="display:flex;flex-direction:column;gap:6px;">'
+        + '<button data-art-action="open" data-art-id="' + safeId + '" style="background:#a78bfa;color:#fff;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Open</button>'
+        + '<button data-art-action="delete" data-art-id="' + safeId + '" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">Delete</button>'
+        + '</div>'
+        + '</div>';
+}
+
+function _renderArtifactRow(d, ID_RE) {
+    if (!d || !ID_RE.test(String(d.id || ''))) return '';
+    var safeId = String(d.id);
+    var when = new Date(((d.last_published_ts ? d.last_published_ts : d.ts) || 0) * 1000).toLocaleString();
+    var meta = (d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's');
+    if (d.channel) meta += ' \u00b7 ' + d.channel.replace(/_/g, ' ');
+    if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
+    var sentMeta = '<span style="color:#4ade80;font-size:11px;font-weight:600;">\u2713 Sent ' + escHtml(when) + (d.last_recipient_count ? ' \u00b7 ' + d.last_recipient_count + ' recipients' : '') + '</span>';
+    var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:12px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">' + escHtml(d.subject) + '</div>' : '';
+    return '<div data-art-id="' + safeId + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);margin-bottom:8px;">'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-weight:600;color:var(--text-body);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
+        + subjLine
+        + '<div style="margin-top:5px;color:var(--text-muted);font-size:11px;">' + escHtml(meta) + '</div>'
+        + '<div style="margin-top:3px;">' + sentMeta + '</div>'
+        + '<div style="margin-top:4px;"><a href="/artifact/' + encodeURIComponent(safeId) + '" data-art-link="' + safeId + '" style="color:var(--text-muted);font-size:10px;text-decoration:none;font-family:monospace;">/artifact/' + escHtml(safeId) + '</a></div>'
+        + '</div>'
+        + '<div style="display:flex;flex-direction:column;gap:6px;">'
+        + '<button data-art-action="open" data-art-id="' + safeId + '" style="background:#4ade80;color:#fff;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Open / Resend</button>'
+        + '<button data-art-action="delete" data-art-id="' + safeId + '" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">Delete</button>'
+        + '</div>'
+        + '</div>';
+}
+
 function renderMyArtifactsList() {
     var list = document.getElementById('my-artifacts-list');
     if (!list) return;
     var all = window._myArtifactsCache || [];
-    var counts = { all: all.length, draft: 0, published: 0 };
+    var counts = { draft: 0, published: 0 };
     for (var i = 0; i < all.length; i++) {
         var s = all[i].status || 'draft';
         if (s === 'published') counts.published++; else counts.draft++;
     }
-    ['all','draft','published'].forEach(function(t) {
+    ['draft','published'].forEach(function(t) {
         var c = document.getElementById('my-art-count-' + t);
         if (c) c.textContent = '(' + counts[t] + ')';
     });
-    var tab = window._myArtifactsTab || 'all';
+    var tab = window._myArtifactsTab || 'draft';
+    if (tab !== 'draft' && tab !== 'published') tab = 'draft';
     var items = all.filter(function(d) {
-        if (tab === 'all') return true;
         var s = d.status || 'draft';
         return s === tab;
     });
     if (!items.length) {
-        list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text-muted);font-size:13px;">No artifacts in this view yet. Drafts you save and emails you send will show up here.</div>';
+        var emptyMsg = (tab === 'published')
+            ? 'No artifacts yet. Emails you send will show up here.'
+            : 'No drafts yet. Drafts you save will show up here.';
+        list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text-muted);font-size:13px;">' + escHtml(emptyMsg) + '</div>';
         return;
     }
     // ID format is enforced server-side ([A-Za-z0-9]{1,64}), but we still
@@ -10555,34 +10640,27 @@ function renderMyArtifactsList() {
     // delegation rather than inline onclick to defang any future bypass.
     var ID_RE = /^[A-Za-z0-9]{1,64}$/;
     var html = '';
-    for (var i = 0; i < items.length; i++) {
-        var d = items[i];
-        if (!d || !ID_RE.test(String(d.id || ''))) continue;
-        var safeId = String(d.id);
-        var isPub = (d.status === 'published');
-        var when = new Date(((isPub && d.last_published_ts) ? d.last_published_ts : d.ts) * 1000).toLocaleString();
-        var meta = (d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's');
-        if (d.channel) meta += ' \u00b7 ' + d.channel.replace(/_/g, ' ');
-        if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
-        var sentMeta = isPub
-            ? ('<span style="color:#4ade80;font-size:11px;font-weight:600;">\u2713 Sent ' + escHtml(when) + (d.last_recipient_count ? ' \u00b7 ' + d.last_recipient_count + ' recipients' : '') + '</span>')
-            : ('<span style="color:#a78bfa;font-size:11px;font-weight:600;">Draft \u00b7 saved ' + escHtml(when) + '</span>');
-        var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:12px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">' + escHtml(d.subject) + '</div>' : '';
-        var openLabel = isPub ? 'Open / Resend' : 'Open';
-        var openColor = isPub ? '#4ade80' : '#a78bfa';
-        html += '<div data-art-id="' + safeId + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);margin-bottom:8px;">'
-            + '<div style="flex:1;min-width:0;">'
-            + '<div style="font-weight:600;color:var(--text-body);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
-            + subjLine
-            + '<div style="margin-top:5px;color:var(--text-muted);font-size:11px;">' + escHtml(meta) + '</div>'
-            + '<div style="margin-top:3px;">' + sentMeta + '</div>'
-            + '<div style="margin-top:4px;"><a href="/artifact/' + encodeURIComponent(safeId) + '" data-art-link="' + safeId + '" style="color:var(--text-muted);font-size:10px;text-decoration:none;font-family:monospace;">/artifact/' + escHtml(safeId) + '</a></div>'
-            + '</div>'
-            + '<div style="display:flex;flex-direction:column;gap:6px;">'
-            + '<button data-art-action="open" data-art-id="' + safeId + '" style="background:' + openColor + ';color:#fff;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">' + openLabel + '</button>'
-            + '<button data-art-action="delete" data-art-id="' + safeId + '" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">Delete</button>'
-            + '</div>'
-            + '</div>';
+    if (tab === 'draft') {
+        // Drafts go through a small grouping seam so a follow-up can split
+        // by channel / category without touching the renderer. Today there
+        // is exactly one group, so we render its items as a flat list and
+        // skip the group header to keep the visual output identical to
+        // what marketers see now.
+        var groups = _buildDraftGroups(items);
+        for (var gi = 0; gi < groups.length; gi++) {
+            var g = groups[gi];
+            if (groups.length > 1) {
+                html += '<div style="margin:6px 0 6px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">'
+                    + escHtml(g.label || 'Drafts') + ' <span style="color:var(--text-muted);font-weight:500;">(' + g.items.length + ')</span></div>';
+            }
+            for (var ii = 0; ii < g.items.length; ii++) {
+                html += _renderDraftRow(g.items[ii], ID_RE);
+            }
+        }
+    } else {
+        for (var i = 0; i < items.length; i++) {
+            html += _renderArtifactRow(items[i], ID_RE);
+        }
     }
     list.innerHTML = html;
     // Delegated handler: bind once per render.
@@ -13893,7 +13971,7 @@ function publishCombinedEmail() {
             // for an artifact the user already shipped.
             if (typeof _clearBatchAutoSave === 'function') _clearBatchAutoSave();
             // Persist this artifact and mark it published so it appears
-            // under "My Artifacts > Published" with a Resend button later.
+            // under "My Content > Artifacts" with a Resend button later.
             (function _persistAsPublished() {
                 var snapshot = _collectCombinedDraftSnapshot();
                 var subjEl = document.getElementById('combined-email-subject');
