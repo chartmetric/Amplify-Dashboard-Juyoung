@@ -57,6 +57,17 @@ except BaseException:
     raise
 
 try:
+    # Kick off the background attachment-backfill sweep (Task #104). The
+    # starter is idempotent and self-gates on S3 being enabled, so this
+    # is safe even when AMPLIFY_IMAGE_STORAGE_BACKEND is still ``local``.
+    app_module._start_background_attachment_backfill()
+    _log("attachment-backfill sweep starter invoked")
+except BaseException:
+    _log("WARN: attachment-backfill sweep starter failed (continuing)")
+    for line in traceback.format_exc().splitlines():
+        _log(line)
+
+try:
     port = int(os.environ.get("PORT", 5000))
     _log(f"starting waitress on 0.0.0.0:{port}")
     from waitress import serve

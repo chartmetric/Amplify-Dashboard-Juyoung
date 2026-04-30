@@ -1976,20 +1976,248 @@ def _attachments_pending_counts() -> dict:
             out["announcements"] = n
     except Exception:
         pass
-    # External thumbs cache: count cached files (we can't cheaply tell
-    # which are already mirrored to S3 without HEADing each one, so the
-    # status panel just shows "cached" count as a proxy).
+    # External thumbs cache: count cached jpgs that don't yet have a
+    # ``.s3`` sidecar marker recording the mirror.
     try:
         from integrations.video_thumb import _CACHE_DIR as _XT_DIR  # type: ignore
         if os.path.isdir(_XT_DIR):
             n = 0
             for fn in os.listdir(_XT_DIR):
-                if fn.endswith(".jpg"):
-                    n += 1
+                if not fn.endswith(".jpg"):
+                    continue
+                full = os.path.join(_XT_DIR, fn)
+                if not os.path.isfile(full):
+                    continue
+                if os.path.isfile(full + ".s3"):
+                    continue
+                n += 1
             out["external-thumbs"] = n
     except Exception:
         pass
     return out
+
+
+# ---------------------------------------------------------------------------
+# Background attachment-backfill sweep (Task #104).
+#
+# When S3 is enabled we run a daemon thread that walks each kind in small
+# batches via the existing ``_backfill_*`` helpers, so historical
+# attachments migrate to S3 without an operator having to click the
+# "Backfill 50" buttons over and over. Knobs are exposed via env vars so
+# operators can tune the cadence without code changes; the manual buttons
+# in the dashboard panel keep working untouched.
+# ---------------------------------------------------------------------------
+
+_BACKFILL_SWEEP_LOCK = threading.Lock()
+_BACKFILL_SWEEP_STATE: dict = {
+    "started": False,
+    "running": False,
+    "enabled": False,
+    "interval_seconds": 0,
+    "batch_size": 0,
+    "max_cycle_seconds": 0,
+    "initial_delay_seconds": 0,
+    "cycle_count": 0,
+    "last_started_at": None,
+    "last_finished_at": None,
+    "last_duration_seconds": None,
+    "last_report": None,
+    "last_totals": None,
+    "next_run_at": None,
+    "last_error": None,
+}
+
+
+def _backfill_sweep_env_int(name: str, default: int, lo: int, hi: int) -> int:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        v = int(raw)
+    except Exception:
+        return default
+    return max(lo, min(hi, v))
+
+
+def _backfill_sweep_settings() -> dict:
+    """Resolve env-var knobs for the background sweep."""
+    return {
+        "interval_seconds": _backfill_sweep_env_int(
+            "AMPLIFY_BACKFILL_INTERVAL_SECONDS", 600, 30, 24 * 3600),
+        "batch_size": _backfill_sweep_env_int(
+            "AMPLIFY_BACKFILL_BATCH_SIZE", 100, 1, 500),
+        "max_cycle_seconds": _backfill_sweep_env_int(
+            "AMPLIFY_BACKFILL_MAX_CYCLE_SECONDS", 540, 10, 24 * 3600),
+        "initial_delay_seconds": _backfill_sweep_env_int(
+            "AMPLIFY_BACKFILL_INITIAL_DELAY_SECONDS", 60, 0, 24 * 3600),
+    }
+
+
+def _backfill_sweep_auto_enabled() -> bool:
+    """Master toggle. Defaults to on; set ``AMPLIFY_BACKFILL_AUTO=0`` to disable."""
+    raw = (os.environ.get("AMPLIFY_BACKFILL_AUTO") or "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    return True
+
+
+def _backfill_runners() -> dict:
+    """Mirror the dispatch table used by the manual endpoint."""
+    return {
+        "feature-images": _backfill_feature_images,
+        "videos": lambda n: _backfill_videos(n, want_thumbs=False),
+        "video-thumbs": lambda n: _backfill_videos(n, want_thumbs=True),
+        "external-thumbs": _backfill_external_thumbs,
+        "hosted-emails": _backfill_hosted_emails,
+        "announcements": _backfill_announcements,
+    }
+
+
+def _run_backfill_sweep_cycle(batch_size: int, deadline_ts: float) -> dict:
+    """Walk every kind once, honouring the ``deadline_ts`` between kinds.
+
+    The deadline is a *best-effort* guard, checked between kinds — once a
+    runner is in flight we let it finish its current batch (the
+    ``_backfill_*`` helpers already cap themselves at ``batch_size``
+    items, so wall-clock cost per kind is bounded by S3 latency × batch
+    size). If the deadline passes mid-cycle, every remaining kind is
+    skipped with ``{"skipped": "deadline_reached"}`` and the next cycle
+    picks up where this one left off. We deliberately do not interrupt
+    a running runner because S3 PUTs are not safely cancellable.
+
+    Returns a per-kind report plus aggregate totals.
+    """
+    report: dict = {}
+    totals = {"scanned": 0, "uploaded": 0, "errors": 0}
+    for kind, fn in _backfill_runners().items():
+        if time.time() >= deadline_ts:
+            report[kind] = {"skipped": "deadline_reached"}
+            continue
+        try:
+            r = fn(batch_size) or {}
+        except Exception as e:
+            logger.exception(f"[backfill-sweep] kind={kind} crashed")
+            report[kind] = {"error": str(e)}
+            totals["errors"] += 1
+            continue
+        report[kind] = r
+        # ``_backfill_videos`` reports both ``uploaded`` (videos) and
+        # ``thumbs_uploaded``; collapse both into the aggregate uploaded
+        # counter so operators get one headline number.
+        totals["scanned"] += int(r.get("scanned") or 0)
+        totals["uploaded"] += int(r.get("uploaded") or 0)
+        totals["uploaded"] += int(r.get("thumbs_uploaded") or 0)
+        totals["errors"] += int(r.get("errors") or 0)
+    return {"report": report, "totals": totals}
+
+
+def _backfill_sweep_loop() -> None:
+    """Daemon-thread loop: cycle, sleep, repeat. Self-pauses if S3 is disabled."""
+    settings = _backfill_sweep_settings()
+    with _BACKFILL_SWEEP_LOCK:
+        _BACKFILL_SWEEP_STATE.update(settings)
+    initial_delay = settings["initial_delay_seconds"]
+    interval = settings["interval_seconds"]
+    batch_size = settings["batch_size"]
+    max_cycle = settings["max_cycle_seconds"]
+    if initial_delay > 0:
+        time.sleep(initial_delay)
+    while True:
+        try:
+            from integrations import attachment_store as _astore
+            enabled = _astore.s3_enabled() and _backfill_sweep_auto_enabled()
+            with _BACKFILL_SWEEP_LOCK:
+                _BACKFILL_SWEEP_STATE["enabled"] = enabled
+            if not enabled:
+                # S3 was turned off (or AMPLIFY_BACKFILL_AUTO unset/0); sit
+                # tight and re-check next interval.
+                time.sleep(interval)
+                continue
+            with _BACKFILL_SWEEP_LOCK:
+                _BACKFILL_SWEEP_STATE["running"] = True
+                _BACKFILL_SWEEP_STATE["last_started_at"] = time.time()
+                _BACKFILL_SWEEP_STATE["last_error"] = None
+            t0 = time.time()
+            deadline = t0 + max_cycle
+            try:
+                result = _run_backfill_sweep_cycle(batch_size, deadline)
+            except Exception as e:
+                logger.exception("[backfill-sweep] cycle crashed")
+                with _BACKFILL_SWEEP_LOCK:
+                    _BACKFILL_SWEEP_STATE["last_error"] = str(e)
+                result = {"report": {}, "totals": {"scanned": 0, "uploaded": 0, "errors": 1}}
+            t1 = time.time()
+            totals = result["totals"]
+            logger.info(
+                "[backfill-sweep] cycle done in %.1fs scanned=%d uploaded=%d errors=%d",
+                t1 - t0, totals["scanned"], totals["uploaded"], totals["errors"],
+            )
+            with _BACKFILL_SWEEP_LOCK:
+                _BACKFILL_SWEEP_STATE["running"] = False
+                _BACKFILL_SWEEP_STATE["last_finished_at"] = t1
+                _BACKFILL_SWEEP_STATE["last_duration_seconds"] = round(t1 - t0, 3)
+                _BACKFILL_SWEEP_STATE["last_report"] = result["report"]
+                _BACKFILL_SWEEP_STATE["last_totals"] = totals
+                _BACKFILL_SWEEP_STATE["cycle_count"] += 1
+                _BACKFILL_SWEEP_STATE["next_run_at"] = t1 + interval
+        except Exception as e:
+            # The outer try keeps the daemon alive across any surprises.
+            logger.exception("[backfill-sweep] loop iteration failed")
+            with _BACKFILL_SWEEP_LOCK:
+                _BACKFILL_SWEEP_STATE["running"] = False
+                _BACKFILL_SWEEP_STATE["last_error"] = str(e)
+        time.sleep(interval)
+
+
+def _start_background_attachment_backfill() -> bool:
+    """Start the daemon thread if it's not already running and S3 is enabled.
+
+    Idempotent — safe to call multiple times. Returns True if a thread was
+    started this call, False if skipped (already running, S3 disabled, or
+    auto-sweep turned off).
+    """
+    with _BACKFILL_SWEEP_LOCK:
+        if _BACKFILL_SWEEP_STATE.get("started"):
+            return False
+        if not _backfill_sweep_auto_enabled():
+            logger.info("[backfill-sweep] disabled via AMPLIFY_BACKFILL_AUTO=0")
+            return False
+        try:
+            from integrations import attachment_store as _astore
+            if not _astore.s3_enabled():
+                logger.info(
+                    "[backfill-sweep] not starting — S3 backend not enabled "
+                    "(AMPLIFY_IMAGE_STORAGE_BACKEND or S3_* secrets unset)"
+                )
+                return False
+        except Exception:
+            logger.exception("[backfill-sweep] could not query attachment_store; skipping start")
+            return False
+        _BACKFILL_SWEEP_STATE["started"] = True
+        settings = _backfill_sweep_settings()
+        _BACKFILL_SWEEP_STATE.update(settings)
+        _BACKFILL_SWEEP_STATE["enabled"] = True
+        _BACKFILL_SWEEP_STATE["next_run_at"] = (
+            time.time() + settings["initial_delay_seconds"]
+        )
+    t = threading.Thread(
+        target=_backfill_sweep_loop,
+        name="attachment-backfill-sweep",
+        daemon=True,
+    )
+    t.start()
+    logger.info(
+        "[backfill-sweep] started: every %ds, batch=%d, max_cycle=%ds, initial_delay=%ds",
+        settings["interval_seconds"], settings["batch_size"],
+        settings["max_cycle_seconds"], settings["initial_delay_seconds"],
+    )
+    return True
+
+
+def _backfill_sweep_status_snapshot() -> dict:
+    """Lock-protected copy of the sweep state for the admin status panel."""
+    with _BACKFILL_SWEEP_LOCK:
+        return dict(_BACKFILL_SWEEP_STATE)
 
 
 @app.route("/api/admin/attachments/status", methods=["GET"])
@@ -2005,7 +2233,12 @@ def attachments_status_endpoint():
             "s3_enabled": bool,
             "secrets_present": {S3_Bucket_name: bool, ...},
             "pending": {feature-images: N, videos: N, ...},
-            "recent": [{ts, backend, kind, key, bytes, ok, error}, ...]
+            "recent": [{ts, backend, kind, key, bytes, ok, error}, ...],
+            "auto_sweep": {started, enabled, running, cycle_count,
+                           interval_seconds, batch_size, max_cycle_seconds,
+                           last_started_at, last_finished_at,
+                           last_duration_seconds, last_totals, last_report,
+                           next_run_at, last_error}
         }
     """
     auth_err = _check_admin_auth()
@@ -2019,6 +2252,7 @@ def attachments_status_endpoint():
         "secrets_present": _astore.secrets_present(),
         "pending": _attachments_pending_counts(),
         "recent": _astore.recent_uploads(limit=25),
+        "auto_sweep": _backfill_sweep_status_snapshot(),
     })
 
 
@@ -2356,6 +2590,10 @@ def _backfill_external_thumbs(limit: int) -> dict:
         full = os.path.join(_XT_DIR, fn)
         if not os.path.isfile(full):
             continue
+        # Sidecar marker so the auto-sweep doesn't re-upload bytes we've
+        # already mirrored. Mirrors the announcements pattern.
+        if os.path.isfile(full + ".s3"):
+            continue
         scanned += 1
         try:
             with open(full, "rb") as f:
@@ -2367,7 +2605,18 @@ def _backfill_external_thumbs(limit: int) -> dict:
                 content_type="image/jpeg",
             )
             if res.get("backend") == "s3" and res.get("key"):
-                uploaded += 1
+                # Match the announcements pattern: only count as uploaded
+                # once the sidecar marker is durably written. Otherwise
+                # we'd count success but the next sweep would re-upload
+                # the same bytes (since the pending count keys off the
+                # sidecar).
+                try:
+                    with open(full + ".s3", "w") as sc:
+                        sc.write(f"{res['key']}\n{res.get('url') or ''}\n")
+                    uploaded += 1
+                except Exception as e:
+                    logger.warning(f"[backfill] external-thumbs sidecar write {fn} failed: {e}")
+                    errors += 1
             else:
                 errors += 1
         except Exception as e:
@@ -2414,14 +2663,7 @@ def attachments_backfill_endpoint():
             "secrets_present": _astore.secrets_present(),
         }), 503
 
-    runners = {
-        "feature-images": _backfill_feature_images,
-        "videos": lambda n: _backfill_videos(n, want_thumbs=False),
-        "video-thumbs": lambda n: _backfill_videos(n, want_thumbs=True),
-        "external-thumbs": _backfill_external_thumbs,
-        "hosted-emails": _backfill_hosted_emails,
-        "announcements": _backfill_announcements,
-    }
+    runners = _backfill_runners()
     if kind == "all":
         report = {}
         for k, fn in runners.items():
@@ -5656,6 +5898,15 @@ if __name__ == "__main__":
 
     heartbeat = threading.Thread(target=keep_alive, daemon=True)
     heartbeat.start()
+
+    # Kick off the background attachment-backfill sweep (Task #104). It
+    # only starts when S3 is enabled and ``AMPLIFY_BACKFILL_AUTO`` isn't
+    # set to 0 — see ``_start_background_attachment_backfill`` for the
+    # gate and the env-var knobs.
+    try:
+        _start_background_attachment_backfill()
+    except Exception:
+        logger.exception("[backfill-sweep] failed to start")
 
     port = config.PORT
     logger.info(f"Amplify starting on port {port}")

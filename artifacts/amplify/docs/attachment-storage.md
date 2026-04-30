@@ -88,6 +88,54 @@ panel shows backend / secret state, pending counts, a one-click
 "Backfill 50" per kind, and the same recent-uploads ring buffer the API
 returns.
 
+## Background sweep (Task #104)
+
+Once S3 is enabled, a daemon thread starts shortly after server boot
+and walks each kind in small batches via the same `_backfill_*` helpers
+the manual buttons use. Pending counts trend to zero on their own — no
+operator clicks required. The manual "Backfill 50" buttons keep
+working untouched, and the sweep skips items that are already mirrored.
+
+| Variable                                  | Default | Notes                                                         |
+| ----------------------------------------- | ------- | ------------------------------------------------------------- |
+| `AMPLIFY_BACKFILL_AUTO`                   | `1`     | Master toggle. Set to `0`/`false` to disable the sweep.       |
+| `AMPLIFY_BACKFILL_INITIAL_DELAY_SECONDS`  | `60`    | Seconds to wait after boot before the first cycle.            |
+| `AMPLIFY_BACKFILL_INTERVAL_SECONDS`       | `600`   | Seconds between cycles (10 minutes by default).               |
+| `AMPLIFY_BACKFILL_BATCH_SIZE`             | `100`   | Max items per kind per cycle (1–500).                         |
+| `AMPLIFY_BACKFILL_MAX_CYCLE_SECONDS`      | `540`   | Hard wall-clock guard per cycle so one run can't overlap.     |
+
+The sweep is gated on `attachment_store.s3_enabled()`, so flipping
+`AMPLIFY_IMAGE_STORAGE_BACKEND` back to `local` (or unsetting any S3
+secret) automatically pauses it — no restart needed. The status
+endpoint adds an `auto_sweep` block so you can watch the cycle count,
+last duration, last per-kind report, and the next scheduled run:
+
+```json
+{
+  "auto_sweep": {
+    "started": true,
+    "enabled": true,
+    "running": false,
+    "cycle_count": 7,
+    "interval_seconds": 600,
+    "batch_size": 100,
+    "max_cycle_seconds": 540,
+    "last_started_at": 1714512000.1,
+    "last_finished_at": 1714512012.7,
+    "last_duration_seconds": 12.6,
+    "last_totals": {"scanned": 312, "uploaded": 312, "errors": 0},
+    "last_report": {"feature-images": {...}, "videos": {...}, ...},
+    "next_run_at": 1714512612.7,
+    "last_error": null
+  }
+}
+```
+
+External-thumb mirrors now leave a `.s3` sidecar next to the cached
+JPEG so the sweep doesn't keep re-uploading the same bytes every
+cycle. The dashboard's "external-thumbs" pending count therefore
+trends to zero like the others.
+
 ## Reverting
 
 Set `AMPLIFY_IMAGE_STORAGE_BACKEND=local` (or unset any S3 secret) and
