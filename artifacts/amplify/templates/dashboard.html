@@ -2202,7 +2202,6 @@
                 <h2 class="prep-title">What are you prepping content for?</h2>
                 <p class="prep-subtitle">Pick a channel to batch-generate content for multiple features at once</p>
             </div>
-            <div id="drafts-bar-step1" style="margin:0 0 14px 0;"></div>
             <div class="use-case-grid" id="use-case-grid"></div>
         </div>
 
@@ -11634,7 +11633,7 @@ function prepGoToStep(step) {
     });
     document.getElementById('prep-step' + step).style.display = 'block';
 
-    if (step === 1) { renderUseCaseGrid(); renderDraftsBar('drafts-bar-step1'); }
+    if (step === 1) { renderUseCaseGrid(); }
     if (step === 2) {
         renderFeaturePicker();
         // Saved drafts are an email-only concept (the bar lets marketers
