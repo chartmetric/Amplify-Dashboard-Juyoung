@@ -10,3 +10,4 @@ sendgrid
 resend
 Pillow
 imageio-ffmpeg
+boto3

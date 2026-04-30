@@ -403,9 +403,13 @@ class MediaResolutionError(Exception):
 # HTML never embeds base64 blobs.
 #
 # The active backend is selected by the ``AMPLIFY_IMAGE_STORAGE_BACKEND``
-# environment variable. Today only ``local`` is implemented (Postgres with
-# an on-disk fallback, both fronted by ``/api/publish/image/hosted/<id>``).
-# Adding S3 (or any other object store) later means: implement a new
+# environment variable. Two backends are implemented:
+#   - ``local`` (default): Postgres with an on-disk fallback, both fronted
+#     by ``/api/publish/image/hosted/<id>`` served from this app.
+#   - ``s3``: AWS S3 bucket; recipients fetch directly from S3 over HTTPS.
+# When ``s3`` is selected and a single upload fails, the seam falls back
+# to ``local`` for that one image so the email still ships.
+# Adding another object store (R2, GCS, etc.) means: implement a new
 # ``_store_image_<backend>`` function, dispatch to it from
 # ``_store_image_and_get_url``, and flip the env var. Callers do not change.
 # ---------------------------------------------------------------------------
@@ -414,8 +418,8 @@ class MediaResolutionError(Exception):
 def _get_image_storage_backend() -> str:
     """Return the active image-storage backend name.
 
-    Today only ``"local"`` is supported. The env var exists so we can swap
-    backends (for example, ``"s3"``) without editing every caller.
+    Supported values: ``"local"`` (default) and ``"s3"``. Unknown values
+    log an error and fall back to ``"local"``.
     """
     return (os.environ.get("AMPLIFY_IMAGE_STORAGE_BACKEND") or "local").strip().lower()
 
@@ -503,8 +507,9 @@ def _store_image_s3(raw: bytes, ext: str, name: str) -> str | None:
     Returns the virtual-hosted-style URL
     ``https://<bucket>.s3.<region>.amazonaws.com/<key>`` on success,
     or ``None`` on any failure (missing creds, missing boto3, upload
-    error). When ``None`` is returned, the caller drops the image
-    rather than inlining base64 (see ``_build_hosted_image_map``).
+    error). When ``None`` is returned, ``_store_image_and_get_url``
+    falls back to the local backend for that single image so the email
+    can still ship.
 
     Note: this only uploads. The bucket itself must be configured to
     allow public reads (via a bucket policy) for recipients to view
