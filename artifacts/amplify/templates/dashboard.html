@@ -13641,6 +13641,10 @@ function onCombinedBannerInputChange() {
     } else {
         bodyEl.value = newTag + '\n\n' + bodyEl.value;
     }
+    // Programmatic .value writes don't fire 'input', so the live preview
+    // wouldn't refresh when the user types in the Banner title/month fields.
+    // Nudge the existing debounced refresh path.
+    try { bodyEl.dispatchEvent(new Event('input', { bubbles: true })); } catch (_e) { scheduleCombinedEmailPreview(); }
 }
 
 function regenerateCombinedIntro() {
