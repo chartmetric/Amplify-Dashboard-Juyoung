@@ -3,3 +3,5 @@
 .manual_overrides.json
 .override_history.json
 .content_cache.json
+.email_drafts.json
+.email_drafts.snapshot-*.json
