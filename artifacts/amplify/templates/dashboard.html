@@ -5111,6 +5111,13 @@ function enterContentView(feature) {
                 contentViewFeatureLink = null;
             }
             syncFeatureUrlInput();
+            // Reset the bidirectional-sync settle baseline to whatever URL
+            // is current for this newly-opened feature so an edit later
+            // compares against the right starting point and doesn't fire a
+            // stale prompt for a previously-viewed feature.
+            if (typeof _resetContentViewSettledUrl === 'function') {
+                _resetContentViewSettledUrl();
+            }
             var idx = 0;
             function revealNext() {
                 if (idx >= keys.length) {
@@ -5265,6 +5272,12 @@ function buildChannelCard(chKey, ch) {
     setTimeout(function() { autoResizeTextarea(ta); }, 0);
     setupCardDragDrop(card, chKey, false);
     ta.addEventListener('input', function() { autoResizeTextarea(this); });
+    // Live, debounced detection of URL edits inside hyperlinks. Pulls the
+    // newly-typed URL up into the Feature URL field + every other body so
+    // the surfaces stay aligned. Re-entrancy is naturally avoided because
+    // a programmatic propagation results in `bodyHrefs == [contentViewFeatureLink]`,
+    // which the candidate check skips.
+    ta.addEventListener('input', function() { _scheduleContentViewBodyUrlSync('ta-' + chKey); });
 
     var mdPreview = card.querySelector('.md-preview');
     if (mdPreview) {
@@ -5282,6 +5295,16 @@ function buildChannelCard(chKey, ch) {
     ta.addEventListener('blur', function() {
         switchToPreview(chKey);
         autoSaveDraft(chKey);
+        // Flush any pending body-side URL detection so a blur can produce
+        // a same-tick settle (no waiting another 250ms). Then settle.
+        var bodyId = 'ta-' + chKey;
+        if (_featureUrlBodyTimers[bodyId]) {
+            clearTimeout(_featureUrlBodyTimers[bodyId]);
+            _featureUrlBodyTimers[bodyId] = null;
+            var candidate = _featureUrlPickCandidateFromBody(this.value, contentViewFeatureLink || '');
+            if (candidate) _propagateContentViewFeatureUrl(candidate, bodyId);
+        }
+        _settleContentViewFeatureUrl();
     });
 
     var fbInput = card.querySelector('.regen-feedback-input');
@@ -6859,52 +6882,53 @@ function _normalizeFeatureUrl_b(raw) {
 function onBatchFeatureUrlInput(idx, e) {
     var open = document.getElementById('batch-furl-open-' + idx);
     var raw = (e && e.target ? e.target.value : '').trim();
-    if (!open) return;
-    if (raw) { open.href = _normalizeFeatureUrl_b(raw); open.classList.remove('disabled'); }
-    else { open.removeAttribute('href'); open.classList.add('disabled'); }
+    if (open) {
+        if (raw) { open.href = _normalizeFeatureUrl_b(raw); open.classList.remove('disabled'); }
+        else { open.removeAttribute('href'); open.classList.add('disabled'); }
+    }
+    // Live debounced rewrite of body hyperlinks in this row's textarea so
+    // the editor follows the field as the marketer types — persistence +
+    // override-reason prompt happen on settle.
+    if (typeof _scheduleBatchFieldUrlSync === 'function') _scheduleBatchFieldUrlSync(idx);
 }
 
 function onBatchFeatureUrlBlur(idx, e) {
+    if (_batchUrlFieldTimers && _batchUrlFieldTimers[idx]) {
+        clearTimeout(_batchUrlFieldTimers[idx]);
+        _batchUrlFieldTimers[idx] = null;
+    }
     var raw = (e && e.target ? e.target.value : '').trim();
     var r = (prepBatchResults || [])[idx] || {};
     var fid = r.feature_id || '';
     if (!fid) return;
-    var current = getPersistedFeatureLink(fid) || '';
     if (!raw) {
-        if (current) {
-            persistFeatureLink(fid, null);
-            var open = document.getElementById('batch-furl-open-' + idx);
-            if (open) { open.removeAttribute('href'); open.classList.add('disabled'); }
-            // Title was rendered as a hyperlink when there was a URL; flip
-            // it back to a plain span now that there isn't one. Pass an
-            // empty url so the helper renders the no-link span variant.
-            if (typeof _refreshBatchItemTitleLink === 'function') _refreshBatchItemTitleLink(idx, '');
-            if (typeof _scheduleBatchAutoSave === 'function') _scheduleBatchAutoSave();
-            showToast('Feature URL cleared', 'success');
+        // Route clears through the same propagate + settle pair so the
+        // in-memory live URL, open arrow, title link, and override indicator
+        // all flip consistently — and so persistence + the toast happen
+        // exactly once at settle. We deliberately do NOT rewrite body
+        // hyperlinks here: clearing the Feature URL doesn't mean the
+        // marketer wants every existing `[text](url)` link stripped from
+        // their draft.
+        if (typeof _propagateBatchFeatureUrl === 'function') {
+            _propagateBatchFeatureUrl(idx, null, null);
         }
+        if (typeof _settleBatchFeatureUrl === 'function') _settleBatchFeatureUrl(idx);
         return;
     }
     var url = _normalizeFeatureUrl_b(raw);
-    if (url === current) {
-        if (e && e.target) e.target.value = url;
-        return;
-    }
-    persistFeatureLink(fid, url);
     if (e && e.target) e.target.value = url;
-    var open2 = document.getElementById('batch-furl-open-' + idx);
-    if (open2) { open2.href = url; open2.classList.remove('disabled'); }
-    // Sync the linked feature title at the top of the batch row so its
-    // arrow-link points at the new URL (or appears for the first time when
-    // a previously empty URL got filled in). Pass the freshly-typed url
-    // explicitly — see the comment on _refreshBatchItemTitleLink for why
-    // re-reading it from the persistence layer here would be stale.
-    if (typeof _refreshBatchItemTitleLink === 'function') _refreshBatchItemTitleLink(idx, url);
-    // Sync any hyperlinks in this batch entry's body to the new URL so the
-    // generated draft never lingers on the corrected URL's predecessor.
-    var n = (typeof _rewriteBatchBodyHyperlinks === 'function')
-        ? _rewriteBatchBodyHyperlinks(idx, current, url) : 0;
-    showToast(n > 0 ? ('Feature URL saved \u2014 updated ' + n + ' hyperlink' + (n === 1 ? '' : 's') + ' in body') : 'Feature URL saved', 'success');
-    _promptForBatchUrlOverrideReasonIfChanged(idx, fid, current, url);
+    var current = (typeof _batchCurrentUrl === 'function')
+        ? _batchCurrentUrl(idx, fid)
+        : (getPersistedFeatureLink(fid) || '');
+    if (url !== current) {
+        // Even on blur the new value must be propagated so half-typed values
+        // that didn't pass `_featureUrlLooksComplete` during the live path
+        // still flush through on commit.
+        if (typeof _propagateBatchFeatureUrl === 'function') {
+            _propagateBatchFeatureUrl(idx, url, null);
+        }
+    }
+    if (typeof _settleBatchFeatureUrl === 'function') _settleBatchFeatureUrl(idx);
 }
 
 function promptBatchLink(idx) {
@@ -8006,6 +8030,380 @@ function _promptForBatchUrlOverrideReasonIfChanged(idx, fid, prevUrl, newUrl) {
     });
 }
 
+// ============================================================================
+// Bidirectional Feature URL <-> body hyperlink live sync
+// ----------------------------------------------------------------------------
+// The Feature URL field at the top of the content view and the `[text](url)`
+// / `<a href>` references inside each channel editor (and the combined-email
+// composer body, and per-row batch editors) must behave like one shared value.
+// As the marketer types in either side, the other should follow within ~250ms
+// without spamming server writes, toasts, or the "Why this URL?" reason
+// prompt. The rules are:
+//   * Field input -> debounced propagation into every body that still
+//     contains the previous URL.
+//   * Body input  -> debounced detection: if the body now has exactly one
+//     distinct, well-formed hyperlink href and it differs from the current
+//     Feature URL, treat that href as the new Feature URL and propagate to
+//     the field and every other body.
+//   * Persistence + override-reason prompt fire once on settle (blur or ~1.5s
+//     idle) and only when the URL actually moved away from the value we last
+//     persisted.
+// ============================================================================
+
+var _featureUrlSyncDebounceMs = 250;
+var _featureUrlSettleMs = 1500;
+var _featureUrlFieldDebTimer = null;
+var _featureUrlSettleTimer = null;
+var _featureUrlBodyTimers = {};
+// Snapshot of the URL we last persisted for the currently-open feature. Used
+// by the settle path so rapid back-and-forth typing doesn't fire duplicate
+// server writes or override-reason prompts.
+var _contentViewSettledFid = null;
+var _contentViewSettledFeatureUrl = null;
+// Running count of in-body hyperlinks rewritten since the last settle, so the
+// settle toast can report "updated N hyperlinks" without us emitting one toast
+// per keystroke during the live path.
+var _contentViewLiveRewriteCount = 0;
+
+// Per-batch-row mirror of the same state.
+var _batchUrlFieldTimers = {};
+var _batchUrlBodyTimers = {};
+var _batchUrlSettleTimers = {};
+// In-memory live URL per batch row. We can't read this back from
+// `getPersistedFeatureLink(fid)` because that helper is server-first: when a
+// feature has a `chartmetric_url`, it returns the server value and even
+// reconciles localStorage back to it, so an unsettled live edit would be
+// invisible. Tracking it explicitly here is what lets the settle path see
+// the real before/after pair and fire persist + the override-reason prompt
+// exactly once per settled change.
+var _batchLiveFeatureUrl = {};
+var _batchSettledFeatureUrl = {};
+var _batchLiveRewriteCount = {};
+
+function _batchCurrentUrl(idx, fid) {
+    if (idx in _batchLiveFeatureUrl) return _batchLiveFeatureUrl[idx] || '';
+    return fid ? (getPersistedFeatureLink(fid) || '') : '';
+}
+
+function _featureUrlExtractHrefs(text) {
+    var urls = [];
+    if (!text) return urls;
+    var seen = {};
+    function add(u) {
+        u = (u || '').trim();
+        if (!u) return;
+        if (!seen[u]) { seen[u] = 1; urls.push(u); }
+    }
+    // Markdown link hrefs: `[label](href)` or `[label](href "title")`.
+    var mdRe = /\[[^\]]*\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g;
+    var m;
+    while ((m = mdRe.exec(text)) !== null) add(m[1]);
+    // HTML <a href="..."> attributes (covers email-mode bodies that ship as
+    // HTML rather than markdown).
+    var htmlRe = /<a\s+[^>]*href\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>/gi;
+    while ((m = htmlRe.exec(text)) !== null) add(m[1] || m[2]);
+    return urls;
+}
+
+function _featureUrlIsValidHref(u) {
+    if (!u) return false;
+    if (/^https?:\/\/[^\s<>"']+$/i.test(u)) return true;
+    if (/^mailto:[^\s<>"']+$/i.test(u)) return true;
+    return false;
+}
+
+// "Looks complete enough to broadcast" — used by the live propagation path
+// so a half-typed URL like `https://h` doesn't immediately overwrite a
+// well-formed link in every body. Requires a `.` in the host, or a real
+// `mailto:user@host.tld` form.
+function _featureUrlLooksComplete(u) {
+    if (!u) return false;
+    if (/^mailto:[^\s@]+@[^\s@]+\.[^\s]+$/i.test(u)) return true;
+    return /^https?:\/\/[^\s/?#]+\.[^\s]+/i.test(u);
+}
+
+// Pick a single "candidate new URL" from the body's hyperlinks. Returns the
+// URL string if the body has exactly one distinct, well-formed href and it
+// differs from `currentUrl`. Returns null otherwise (zero hrefs / multiple
+// distinct hrefs / malformed / unchanged).
+function _featureUrlPickCandidateFromBody(bodyText, currentUrl) {
+    var hrefs = _featureUrlExtractHrefs(bodyText);
+    if (hrefs.length !== 1) return null;
+    var only = hrefs[0];
+    if (!_featureUrlIsValidHref(only)) return null;
+    if (only === currentUrl) return null;
+    return only;
+}
+
+// Variant of `_rewriteBodyHyperlinks` that skips a specific element id so the
+// origin of an edit isn't rewritten under the user's caret. Returns the
+// number of body occurrences replaced across the touched surfaces so the
+// settle toast can report a meaningful count.
+function _rewriteBodyHyperlinksExcept(oldUrl, newUrl, skipId) {
+    if (!newUrl || oldUrl === newUrl) return 0;
+    var total = 0;
+    if (contentViewChannels) {
+        var keys = Object.keys(contentViewChannels);
+        for (var i = 0; i < keys.length; i++) {
+            var chKey = keys[i];
+            var taId = 'ta-' + chKey;
+            if (taId === skipId) continue;
+            var ta = document.getElementById(taId);
+            if (!ta) continue;
+            var before = ta.value;
+            var after = _rewriteUrlReferences(before, oldUrl, newUrl);
+            if (after !== before) {
+                total += Math.max(0, _countOccurrences(before, oldUrl) - _countOccurrences(after, oldUrl));
+                ta.value = after;
+                ta.dispatchEvent(new Event('input'));
+                var isEmail = (chKey === 'email_newsletter' || chKey === 'email_standalone');
+                _refreshPreviewElement(document.getElementById('md-preview-' + chKey), after, isEmail);
+                try { autoSaveDraft(chKey); } catch (e) {}
+            }
+        }
+    }
+    if (skipId !== 'combined-email-body') {
+        var combinedTa = document.getElementById('combined-email-body');
+        if (combinedTa) {
+            var cBefore = combinedTa.value;
+            var cAfter = _rewriteUrlReferences(cBefore, oldUrl, newUrl);
+            if (cAfter !== cBefore) {
+                total += Math.max(0, _countOccurrences(cBefore, oldUrl) - _countOccurrences(cAfter, oldUrl));
+                combinedTa.value = cAfter;
+                combinedTa.dispatchEvent(new Event('input'));
+                _refreshPreviewElement(document.getElementById('combined-email-preview'), cAfter, true);
+            }
+        }
+    }
+    return total;
+}
+
+// Push a new live URL into the content view: update the in-memory feature
+// link, propagate the rewrite into every body except the originating one,
+// and refresh the field's value, open-arrow, stored-link preview card, and
+// override indicator. Does NOT persist to the server or fire the override
+// reason prompt — that happens on settle.
+function _propagateContentViewFeatureUrl(newUrl, originBodyId) {
+    var prev = contentViewFeatureLink;
+    if (newUrl === prev) return;
+    contentViewFeatureLink = newUrl || null;
+    if (newUrl) {
+        _contentViewLiveRewriteCount += _rewriteBodyHyperlinksExcept(prev, newUrl, originBodyId);
+    }
+    var inp = document.getElementById('feature-url-input');
+    if (inp && document.activeElement !== inp) inp.value = newUrl || '';
+    var open = document.getElementById('feature-url-open');
+    if (open) {
+        if (newUrl) { open.href = newUrl; open.classList.remove('disabled'); }
+        else { open.removeAttribute('href'); open.classList.add('disabled'); }
+    }
+    renderFeatureLinkPreview();
+    if (newUrl) showInsertLinkButtons(); else hideInsertLinkButtons();
+    if (typeof renderFeatureUrlOverrideIndicator === 'function') {
+        renderFeatureUrlOverrideIndicator();
+    }
+}
+
+// Fire persist + override-reason prompt iff the URL has actually moved from
+// the snapshot we last persisted. Called by both the field's blur and the
+// idle settle timer so either path produces exactly one server write.
+function _settleContentViewFeatureUrl() {
+    if (_featureUrlSettleTimer) { clearTimeout(_featureUrlSettleTimer); _featureUrlSettleTimer = null; }
+    if (!contentViewFeature) return;
+    var fid = contentViewFeature.id || '';
+    if (!fid || fid !== _contentViewSettledFid) return;
+    var current = contentViewFeatureLink || null;
+    var settled = _contentViewSettledFeatureUrl;
+    if (current === settled) {
+        _contentViewLiveRewriteCount = 0;
+        return;
+    }
+    if (current) {
+        persistFeatureLink(fid, current);
+        var n = _contentViewLiveRewriteCount;
+        showToast(n > 0 ? ('Feature URL saved \u2014 updated ' + n + ' hyperlink' + (n === 1 ? '' : 's') + ' in body') : 'Feature URL saved', 'success');
+        _promptForUrlOverrideReasonIfChanged(fid, settled || '', current);
+    } else {
+        persistFeatureLink(fid, null);
+        showToast('Feature URL cleared', 'success');
+    }
+    _contentViewSettledFeatureUrl = current;
+    _contentViewLiveRewriteCount = 0;
+}
+
+function _scheduleContentViewSettle() {
+    if (_featureUrlSettleTimer) clearTimeout(_featureUrlSettleTimer);
+    _featureUrlSettleTimer = setTimeout(function() {
+        _featureUrlSettleTimer = null;
+        _settleContentViewFeatureUrl();
+    }, _featureUrlSettleMs);
+}
+
+// Wire-up entry point used by every channel textarea + the combined-email
+// composer body. The element fires `input` events for both user typing AND
+// the programmatic propagation we just did from the field; the candidate
+// check (single distinct href that differs from the current feature URL)
+// makes the programmatic path naturally a no-op so we don't loop.
+function _scheduleContentViewBodyUrlSync(bodyId) {
+    if (!contentViewFeature) return;
+    if (_featureUrlBodyTimers[bodyId]) clearTimeout(_featureUrlBodyTimers[bodyId]);
+    _featureUrlBodyTimers[bodyId] = setTimeout(function() {
+        _featureUrlBodyTimers[bodyId] = null;
+        var el = document.getElementById(bodyId);
+        if (!el) return;
+        var candidate = _featureUrlPickCandidateFromBody(el.value, contentViewFeatureLink || '');
+        if (!candidate) return;
+        _propagateContentViewFeatureUrl(candidate, bodyId);
+        _scheduleContentViewSettle();
+    }, _featureUrlSyncDebounceMs);
+}
+
+// Live propagation as the marketer types in the Feature URL field itself.
+// Empty / mid-typed (incomplete) values intentionally do nothing here — the
+// blur handler is what clears the URL when the field is left empty.
+function _scheduleFieldUrlSync() {
+    if (_featureUrlFieldDebTimer) clearTimeout(_featureUrlFieldDebTimer);
+    _featureUrlFieldDebTimer = setTimeout(function() {
+        _featureUrlFieldDebTimer = null;
+        var inp = document.getElementById('feature-url-input');
+        if (!inp) return;
+        var raw = (inp.value || '').trim();
+        if (!raw) return;
+        var url = _normalizeFeatureUrl(raw);
+        if (!_featureUrlLooksComplete(url)) return;
+        if (url === contentViewFeatureLink) return;
+        _propagateContentViewFeatureUrl(url, null);
+        _scheduleContentViewSettle();
+    }, _featureUrlSyncDebounceMs);
+}
+
+// Reset the settle snapshot to whatever URL is current when a feature is
+// opened so subsequent edits compare against the right baseline (otherwise
+// switching features mid-edit could fire stale prompts on the old fid).
+function _resetContentViewSettledUrl() {
+    if (_featureUrlFieldDebTimer) { clearTimeout(_featureUrlFieldDebTimer); _featureUrlFieldDebTimer = null; }
+    if (_featureUrlSettleTimer) { clearTimeout(_featureUrlSettleTimer); _featureUrlSettleTimer = null; }
+    _featureUrlBodyTimers = {};
+    _contentViewSettledFid = contentViewFeature ? (contentViewFeature.id || null) : null;
+    _contentViewSettledFeatureUrl = contentViewFeatureLink || null;
+    _contentViewLiveRewriteCount = 0;
+}
+
+// ---- Batch view (per-row Feature URL <-> body) ---------------------------
+
+// Push a new live URL into a batch row: update the in-memory live URL,
+// rewrite hyperlinks in this row's body (skipping the originating textarea
+// when the change came from the body itself), and refresh the field, open
+// arrow, title link, and override indicator. Persistence + the override
+// reason prompt are intentionally NOT performed here — settle does that.
+function _propagateBatchFeatureUrl(idx, newUrl, originBodyId) {
+    var r = (window.prepBatchResults || [])[idx] || {};
+    var fid = r.feature_id || '';
+    if (!fid) return;
+    var prev = _batchCurrentUrl(idx, fid);
+    if ((newUrl || '') === prev) return;
+    _batchLiveFeatureUrl[idx] = newUrl || null;
+    var inp = document.getElementById('batch-furl-' + idx);
+    if (inp && document.activeElement !== inp) inp.value = newUrl || '';
+    var open = document.getElementById('batch-furl-open-' + idx);
+    if (open) {
+        if (newUrl) { open.href = newUrl; open.classList.remove('disabled'); }
+        else { open.removeAttribute('href'); open.classList.add('disabled'); }
+    }
+    if (typeof _refreshBatchItemTitleLink === 'function') _refreshBatchItemTitleLink(idx, newUrl || '');
+    if (newUrl && originBodyId !== ('batch-ta-' + idx)) {
+        var n = (typeof _rewriteBatchBodyHyperlinks === 'function')
+            ? _rewriteBatchBodyHyperlinks(idx, prev, newUrl) : 0;
+        _batchLiveRewriteCount[idx] = (_batchLiveRewriteCount[idx] || 0) + n;
+    }
+    if (typeof renderBatchUrlOverrideIndicator === 'function') {
+        renderBatchUrlOverrideIndicator(idx, fid);
+    }
+}
+
+function _settleBatchFeatureUrl(idx) {
+    if (_batchUrlSettleTimers[idx]) { clearTimeout(_batchUrlSettleTimers[idx]); _batchUrlSettleTimers[idx] = null; }
+    var r = (window.prepBatchResults || [])[idx] || {};
+    var fid = r.feature_id || '';
+    if (!fid) return;
+    var current = (idx in _batchLiveFeatureUrl) ? _batchLiveFeatureUrl[idx] : null;
+    var settled = (idx in _batchSettledFeatureUrl) ? _batchSettledFeatureUrl[idx] : null;
+    if ((current || null) === (settled || null)) {
+        _batchLiveRewriteCount[idx] = 0;
+        return;
+    }
+    // Persist exactly once per settled change so rapid back-and-forth typing
+    // can't fire multiple server writes or override-reason prompts. The
+    // server-side override + reason prompt is also gated to this single
+    // settle.
+    persistFeatureLink(fid, current || null);
+    if (current) {
+        var n = _batchLiveRewriteCount[idx] || 0;
+        showToast(n > 0 ? ('Feature URL saved \u2014 updated ' + n + ' hyperlink' + (n === 1 ? '' : 's') + ' in body') : 'Feature URL saved', 'success');
+        _promptForBatchUrlOverrideReasonIfChanged(idx, fid, settled || '', current);
+    } else {
+        showToast('Feature URL cleared', 'success');
+    }
+    if (typeof _scheduleBatchAutoSave === 'function') _scheduleBatchAutoSave();
+    _batchSettledFeatureUrl[idx] = current || null;
+    _batchLiveRewriteCount[idx] = 0;
+}
+
+function _scheduleBatchSettle(idx) {
+    if (_batchUrlSettleTimers[idx]) clearTimeout(_batchUrlSettleTimers[idx]);
+    _batchUrlSettleTimers[idx] = setTimeout(function() {
+        _batchUrlSettleTimers[idx] = null;
+        _settleBatchFeatureUrl(idx);
+    }, _featureUrlSettleMs);
+}
+
+function _scheduleBatchBodyUrlSync(idx) {
+    if (_batchUrlBodyTimers[idx]) clearTimeout(_batchUrlBodyTimers[idx]);
+    _batchUrlBodyTimers[idx] = setTimeout(function() {
+        _batchUrlBodyTimers[idx] = null;
+        var ta = document.getElementById('batch-ta-' + idx);
+        if (!ta) return;
+        var r = (window.prepBatchResults || [])[idx] || {};
+        var fid = r.feature_id || '';
+        if (!fid) return;
+        var current = _batchCurrentUrl(idx, fid);
+        var candidate = _featureUrlPickCandidateFromBody(ta.value, current);
+        if (!candidate) return;
+        _propagateBatchFeatureUrl(idx, candidate, 'batch-ta-' + idx);
+        _scheduleBatchSettle(idx);
+    }, _featureUrlSyncDebounceMs);
+}
+
+function _scheduleBatchFieldUrlSync(idx) {
+    if (_batchUrlFieldTimers[idx]) clearTimeout(_batchUrlFieldTimers[idx]);
+    _batchUrlFieldTimers[idx] = setTimeout(function() {
+        _batchUrlFieldTimers[idx] = null;
+        var inp = document.getElementById('batch-furl-' + idx);
+        if (!inp) return;
+        var raw = (inp.value || '').trim();
+        if (!raw) return;
+        var url = (typeof _normalizeFeatureUrl_b === 'function') ? _normalizeFeatureUrl_b(raw) : _normalizeFeatureUrl(raw);
+        if (!_featureUrlLooksComplete(url)) return;
+        var r = (window.prepBatchResults || [])[idx] || {};
+        var fid = r.feature_id || '';
+        if (!fid) return;
+        var current = _batchCurrentUrl(idx, fid);
+        if (url === current) return;
+        _propagateBatchFeatureUrl(idx, url, null);
+        _scheduleBatchSettle(idx);
+    }, _featureUrlSyncDebounceMs);
+}
+
+function _resetBatchSettledUrl(idx, fid) {
+    if (_batchUrlFieldTimers[idx]) { clearTimeout(_batchUrlFieldTimers[idx]); _batchUrlFieldTimers[idx] = null; }
+    if (_batchUrlBodyTimers[idx]) { clearTimeout(_batchUrlBodyTimers[idx]); _batchUrlBodyTimers[idx] = null; }
+    if (_batchUrlSettleTimers[idx]) { clearTimeout(_batchUrlSettleTimers[idx]); _batchUrlSettleTimers[idx] = null; }
+    var initial = fid ? (getPersistedFeatureLink(fid) || null) : null;
+    _batchLiveFeatureUrl[idx] = initial;
+    _batchSettledFeatureUrl[idx] = initial;
+    _batchLiveRewriteCount[idx] = 0;
+}
+
 // Replace any existing markdown hyperlinks that pointed to oldUrl with
 // newUrl across every channel body. Returns the number of replacements
 // made so the caller can surface a toast.
@@ -8270,33 +8668,42 @@ function onFeatureUrlInput(e) {
         if (raw) { open.href = _normalizeFeatureUrl(raw); open.classList.remove('disabled'); }
         else { open.removeAttribute('href'); open.classList.add('disabled'); }
     }
+    // Live, debounced propagation: rewrite matching hyperlinks in every
+    // body as the marketer types so the editors stay aligned without
+    // waiting for blur. Persistence + override-reason prompt happen on
+    // settle so we don't spam the server / prompt on every keystroke.
+    _scheduleFieldUrlSync();
 }
 
 function onFeatureUrlBlur(e) {
+    // Flush any in-flight live propagation so the URL reflected in
+    // contentViewFeatureLink already matches the current field value
+    // before we persist.
+    if (_featureUrlFieldDebTimer) {
+        clearTimeout(_featureUrlFieldDebTimer);
+        _featureUrlFieldDebTimer = null;
+    }
     var raw = (e && e.target ? e.target.value : '').trim();
     var fid = contentViewFeature ? (contentViewFeature.id || '') : '';
     if (!raw) {
         if (contentViewFeatureLink) {
-            contentViewFeatureLink = null;
-            if (fid) persistFeatureLink(fid, null);
-            renderFeatureLinkPreview();
-            hideInsertLinkButtons();
-            syncFeatureUrlInput();
-            showToast('Feature URL cleared', 'success');
+            // Field cleared explicitly — drop the URL everywhere. The
+            // settle path handles persistence + toast.
+            _propagateContentViewFeatureUrl(null, null);
         }
+        _settleContentViewFeatureUrl();
+        syncFeatureUrlInput();
         return;
     }
     var url = _normalizeFeatureUrl(raw);
-    if (url === contentViewFeatureLink) { syncFeatureUrlInput(); return; }
-    var prevUrl = contentViewFeatureLink;
-    contentViewFeatureLink = url;
-    if (fid) persistFeatureLink(fid, url);
-    renderFeatureLinkPreview();
+    if (url !== contentViewFeatureLink) {
+        // Even on blur the new value must be propagated to bodies so
+        // half-typed values that didn't pass `_featureUrlLooksComplete`
+        // during the live path still flush through on commit.
+        _propagateContentViewFeatureUrl(url, null);
+    }
     syncFeatureUrlInput();
-    showInsertLinkButtons();
-    var n = _rewriteBodyHyperlinks(prevUrl, url);
-    showToast(n > 0 ? ('Feature URL saved — updated ' + n + ' hyperlink' + (n === 1 ? '' : 's') + ' in body') : 'Feature URL saved', 'success');
-    _promptForUrlOverrideReasonIfChanged(fid, prevUrl, url);
+    _settleContentViewFeatureUrl();
 }
 
 function renderFeatureLinkPreview() {
@@ -12614,6 +13021,28 @@ function buildBatchItem(r, idx) {
     setTimeout(function() { autoResizeTextarea(ta); }, 0);
     setupCardDragDrop(item, null, true, idx);
     ta.addEventListener('input', function() { autoResizeTextarea(this); });
+    // Live debounced detection of URL edits inside this row's hyperlinks,
+    // mirroring the content-view wiring so the per-row Feature URL field
+    // and editor follow each other in both directions.
+    ta.addEventListener('input', function() {
+        if (typeof _scheduleBatchBodyUrlSync === 'function') _scheduleBatchBodyUrlSync(idx);
+    });
+    ta.addEventListener('blur', function() {
+        if (_batchUrlBodyTimers && _batchUrlBodyTimers[idx]) {
+            clearTimeout(_batchUrlBodyTimers[idx]);
+            _batchUrlBodyTimers[idx] = null;
+            var current = getPersistedFeatureLink(batchFid) || '';
+            var candidate = _featureUrlPickCandidateFromBody(this.value, current);
+            if (candidate && typeof _propagateBatchFeatureUrl === 'function') {
+                _propagateBatchFeatureUrl(idx, candidate, 'batch-ta-' + idx);
+            }
+        }
+        if (typeof _settleBatchFeatureUrl === 'function') _settleBatchFeatureUrl(idx);
+    });
+    // Initialise the per-row settle baseline so a subsequent edit here
+    // compares against the URL we already had at row creation rather than
+    // re-firing the override prompt for an unchanged value.
+    if (typeof _resetBatchSettledUrl === 'function') _resetBatchSettledUrl(idx, batchFid);
     if (typeof renderBatchUrlOverrideIndicator === 'function') {
         setTimeout(function() { renderBatchUrlOverrideIndicator(idx, batchFid); }, 0);
     }
@@ -13497,6 +13926,22 @@ function renderCombinedEmailComposer(items) {
     if (fromEl) fromEl.addEventListener('input', scheduleCombinedEmailPreview);
     if (bodyEl) bodyEl.addEventListener('input', scheduleCombinedEmailPreview);
     if (tplEl) tplEl.addEventListener('change', function() { scheduleCombinedEmailPreview(true); });
+    // Mirror the per-channel textarea wiring: live URL detection + a blur
+    // settle so editing a hyperlink in the combined-email composer body
+    // pushes the new URL up to the Feature URL field and across the other
+    // channel bodies.
+    if (bodyEl) {
+        bodyEl.addEventListener('input', function() { _scheduleContentViewBodyUrlSync('combined-email-body'); });
+        bodyEl.addEventListener('blur', function() {
+            if (_featureUrlBodyTimers['combined-email-body']) {
+                clearTimeout(_featureUrlBodyTimers['combined-email-body']);
+                _featureUrlBodyTimers['combined-email-body'] = null;
+                var candidate = _featureUrlPickCandidateFromBody(this.value, contentViewFeatureLink || '');
+                if (candidate) _propagateContentViewFeatureUrl(candidate, 'combined-email-body');
+            }
+            _settleContentViewFeatureUrl();
+        });
+    }
 
     setCombinedEmailPreviewView(_combinedEmailPreviewView);
     refreshCombinedEmailLivePreview();
