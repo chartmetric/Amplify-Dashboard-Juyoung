@@ -11751,8 +11751,61 @@ function loadEmailDraft(id) {
         // Now jump to step 4 — renderCombinedPreview will see the populated list.
         prepGoToStep(4);
         setTimeout(_applyRestoredCombinedFields, 80);
+        // Server-side image rehydration: every locally uploaded image has
+        // already been POSTed to /api/publish/image keyed by feature_id
+        // at attach time, so we can fetch it back here when the snapshot
+        // didn't carry the dataUrl (which happens when the snapshot was
+        // saved before the upload completed, when the snapshot exceeded
+        // the size cap, or when the user uploaded after the last save).
+        // Without this fallback the [image: filename.png] marker survives
+        // in the body but renders as a broken image because prepBatchImages
+        // is empty after a hard refresh.
+        _rehydrateBatchImagesFromServer();
     })
     .catch(function(err) { showToast('Load failed: ' + err.message, 'error'); });
+}
+
+function _rehydrateBatchImagesFromServer() {
+    var results = prepBatchResults || [];
+    if (!results.length) return;
+    var pending = 0;
+    var landed = 0;
+    for (var i = 0; i < results.length; i++) {
+        var r = results[i] || {};
+        var fid = r.feature_id;
+        if (!fid) continue;
+        if (window.prepBatchImages && window.prepBatchImages[i]) continue;
+        (function(idx, featureId) {
+            pending++;
+            fetch('/api/publish/image/meta/' + encodeURIComponent(featureId))
+                .then(function(r) {
+                    if (r.status === 404) return null;
+                    if (!r.ok) return null;
+                    return r.json();
+                })
+                .then(function(meta) {
+                    if (!meta || !meta.exists || !meta.dataUrl) return;
+                    if (window.prepBatchImages && window.prepBatchImages[idx]) return;
+                    window.prepBatchImages = window.prepBatchImages || {};
+                    window.prepBatchImages[idx] = {
+                        name: meta.name || 'image',
+                        dataUrl: meta.dataUrl,
+                        size: 0,
+                        isGif: !!meta.isGif
+                    };
+                    landed++;
+                })
+                .catch(function() {})
+                .then(function() {
+                    pending--;
+                    // Refresh the live preview once everything has settled
+                    // so the iframe re-renders with the rehydrated images.
+                    if (pending === 0 && landed > 0 && typeof refreshCombinedEmailLivePreview === 'function') {
+                        refreshCombinedEmailLivePreview(true);
+                    }
+                });
+        })(i, fid);
+    }
 }
 
 function _applyRestoredCombinedFields() {
@@ -14442,9 +14495,10 @@ function publishCombinedEmail() {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ name: name, snapshot: snapshot, id: window._currentDraftId || null, status: 'published' })
                 })
-                .then(function(r) { return r.json(); })
-                .then(function(s) {
-                    if (s && s.id) {
+                .then(function(r) { return r.json().then(function(j) { return {ok: r.ok, j: j}; }); })
+                .then(function(res) {
+                    var s = res.j || {};
+                    if (res.ok && s.id) {
                         window._currentDraftId = s.id;
                         _setArtifactUrl(s.id);
                         fetch('/api/email-drafts/' + encodeURIComponent(s.id) + '/mark-published', {
@@ -14452,6 +14506,13 @@ function publishCombinedEmail() {
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({ recipient_count: resp.count || 0 })
                         }).then(function() { refreshMyArtifactsCount(); }).catch(function() {});
+                    } else if (s.error) {
+                        // Snapshot save failed (e.g. 413 oversized). The email
+                        // already sent, but the published artifact's saved
+                        // snapshot may be stale, so its inline screenshots
+                        // could appear broken on later page refresh.
+                        showToast('Email sent, but saving the artifact failed: ' + s.error
+                            + '. Inline screenshots may not appear when reopening this artifact.', 'warning');
                     }
                 })
                 .catch(function() {});
