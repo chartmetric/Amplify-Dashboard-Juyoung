@@ -864,13 +864,31 @@ def _apply_feature_url_overrides(features: list) -> None:
 # performs a one-time migration from JSON -> DB on first DB write so existing
 # drafts aren't lost.
 # ---------------------------------------------------------------------------
-_email_drafts_lock = threading.RLock()  # re-entrant: mark-downloaded holds it across load+_save_email_drafts (which re-acquires for the JSON write)
+_email_drafts_lock = threading.RLock()  # re-entrant: mark-downloaded holds it across load+_upsert_email_draft (which re-acquires for the JSON write)
 _EMAIL_DRAFTS_PATH = os.path.join(_FEATURES_CACHE_DIR, ".email_drafts.json")
 _EMAIL_DRAFT_MAX_BYTES = 8 * 1024 * 1024  # 8 MB safety cap per draft
 _EMAIL_DRAFTS_TOTAL_MAX_BYTES = 64 * 1024 * 1024  # 64 MB total store cap
 
+# Daily on-disk JSON snapshots of the full email_drafts table. Written next to
+# `_EMAIL_DRAFTS_PATH` (e.g. `.email_drafts.snapshot-YYYYMMDD.json`) so that a
+# future accidental wipe of the Postgres table is recoverable from disk
+# without needing Neon PITR. Triggered lazily on the first successful
+# `_load_email_drafts()` of the day; older snapshots beyond the retention
+# window are pruned best-effort.
+_EMAIL_DRAFTS_SNAPSHOT_PREFIX = ".email_drafts.snapshot-"
+_EMAIL_DRAFTS_SNAPSHOT_RETENTION_DAYS = 14
+
 _DRAFTS_DB_URL = os.environ.get("DATABASE_URL", "").strip()
 _drafts_db_initialized = False
+
+
+class EmailDraftsUnavailable(RuntimeError):
+    """Raised when the configured Postgres drafts store is temporarily unreachable.
+
+    Routes catch this and respond with HTTP 503 instead of letting the
+    underlying read silently look like "the table is empty" (which previously
+    let downstream "save the full list" calls wipe every other row).
+    """
 
 
 def _drafts_db_conn():
@@ -994,26 +1012,90 @@ def _row_to_draft(row) -> dict:
     }
 
 
-def _load_email_drafts() -> dict:
-    """Load all drafts. Tries Postgres first, falls back to JSON file."""
-    conn = _drafts_db_conn()
-    if conn is not None:
+def _maybe_write_daily_drafts_snapshot(data: dict) -> None:
+    """Write today's full-table drafts snapshot to disk if not already done.
+
+    Lazy trigger on the first successful `_load_email_drafts()` of the day.
+    Best-effort: failures are logged but never propagate to the caller (we
+    must not block a normal load on snapshot I/O). Older snapshot files
+    beyond `_EMAIL_DRAFTS_SNAPSHOT_RETENTION_DAYS` are pruned in the same
+    pass so disk usage stays bounded.
+    """
+    try:
+        from datetime import datetime, timezone
+        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+        snap_path = os.path.join(
+            _FEATURES_CACHE_DIR, f"{_EMAIL_DRAFTS_SNAPSHOT_PREFIX}{date_str}.json"
+        )
+        if os.path.exists(snap_path):
+            return
         try:
-            if _ensure_drafts_table(conn):
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts FROM email_drafts ORDER BY ts DESC"
-                    )
-                    rows = cur.fetchall()
-                return {"drafts": [_row_to_draft(r) for r in rows]}
+            os.makedirs(_FEATURES_CACHE_DIR, exist_ok=True)
+        except Exception:
+            pass
+        import uuid as _uuid
+        payload = {"drafts": (data or {}).get("drafts") or []}
+        tmp = snap_path + f".{_uuid.uuid4().hex[:8]}.tmp"
+        with open(tmp, "w") as f:
+            json.dump(payload, f, separators=(",", ":"))
+        os.replace(tmp, snap_path)
+        # Prune older snapshots beyond retention. Filenames sort
+        # lexicographically the same way they sort by date because we use
+        # YYYYMMDD, so a reverse sort puts the newest first.
+        try:
+            existing = [
+                fn for fn in os.listdir(_FEATURES_CACHE_DIR)
+                if fn.startswith(_EMAIL_DRAFTS_SNAPSHOT_PREFIX) and fn.endswith(".json")
+            ]
+            existing.sort(reverse=True)
+            for old_fn in existing[_EMAIL_DRAFTS_SNAPSHOT_RETENTION_DAYS:]:
+                try:
+                    os.unlink(os.path.join(_FEATURES_CACHE_DIR, old_fn))
+                except OSError:
+                    pass
         except Exception as e:
-            logger.warning(f"[email-drafts] DB load failed, falling back to JSON: {e}")
+            logger.warning(f"[email-drafts] snapshot prune failed: {e}")
+    except Exception as e:
+        logger.warning(f"[email-drafts] snapshot write skipped: {e}")
+
+
+def _load_email_drafts() -> dict:
+    """Load all drafts. Postgres-first; JSON fallback only when no DB is configured.
+
+    Raises `EmailDraftsUnavailable` when `DATABASE_URL` is set but the
+    Postgres store is unreachable (connect timeout, `_ensure_drafts_table`
+    failure, or a `SELECT` exception). Routes catch that and return 503 so a
+    transient DB blip can never silently look like "the table is empty" --
+    which is exactly the failure mode that let prior versions of this code
+    wipe every draft via downstream "save the full list" calls.
+    """
+    if _DRAFTS_DB_URL:
+        conn = _drafts_db_conn()
+        if conn is None:
+            raise EmailDraftsUnavailable("Postgres drafts store: connect failed")
+        try:
+            if not _ensure_drafts_table(conn):
+                raise EmailDraftsUnavailable("Postgres drafts store: CREATE TABLE failed")
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts FROM email_drafts ORDER BY ts DESC"
+                )
+                rows = cur.fetchall()
+            result = {"drafts": [_row_to_draft(r) for r in rows]}
+        except EmailDraftsUnavailable:
+            raise
+        except Exception as e:
+            logger.error(f"[email-drafts] DB load failed: {e}")
+            raise EmailDraftsUnavailable(f"Postgres drafts store: {e}") from e
         finally:
             try:
                 conn.close()
             except Exception:
                 pass
-    # JSON fallback
+        _maybe_write_daily_drafts_snapshot(result)
+        return result
+    # JSON fallback (Postgres genuinely not configured for this environment).
+    result = {"drafts": []}
     try:
         if os.path.exists(_EMAIL_DRAFTS_PATH):
             with open(_EMAIL_DRAFTS_PATH, "r") as f:
@@ -1027,73 +1109,22 @@ def _load_email_drafts() -> dict:
                         d["category"] = None
                     if isinstance(d, dict) and "downloaded_ts" not in d:
                         d["downloaded_ts"] = None
-                return data
+                result = data
     except Exception as e:
         logger.warning(f"[email-drafts] JSON load failed: {e}")
-    return {"drafts": []}
+    _maybe_write_daily_drafts_snapshot(result)
+    return result
 
 
-def _save_email_drafts(data: dict) -> None:
-    """Persist the full drafts list. Postgres-first; JSON fallback for dev."""
-    drafts = (data or {}).get("drafts") or []
-    conn = _drafts_db_conn()
-    if conn is not None:
-        try:
-            if _ensure_drafts_table(conn):
-                ids = [d.get("id") for d in drafts if d.get("id")]
-                with conn.cursor() as cur:
-                    # Delete rows no longer present (eviction by total-cap, etc.)
-                    if ids:
-                        cur.execute(
-                            "DELETE FROM email_drafts WHERE id <> ALL(%s)", (ids,)
-                        )
-                    else:
-                        cur.execute("DELETE FROM email_drafts")
-                    for d in drafts:
-                        _dl_ts = d.get("downloaded_ts")
-                        cur.execute(
-                            """
-                            INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (id) DO UPDATE SET
-                                name = EXCLUDED.name,
-                                ts = EXCLUDED.ts,
-                                status = EXCLUDED.status,
-                                last_published_ts = EXCLUDED.last_published_ts,
-                                last_recipient_count = EXCLUDED.last_recipient_count,
-                                snapshot = EXCLUDED.snapshot,
-                                category = EXCLUDED.category,
-                                downloaded_ts = EXCLUDED.downloaded_ts
-                            """,
-                            (
-                                d.get("id"),
-                                d.get("name") or "Untitled draft",
-                                float(d.get("ts") or 0),
-                                d.get("status") or "draft",
-                                float(d.get("last_published_ts") or 0),
-                                int(d.get("last_recipient_count") or 0),
-                                json.dumps(d.get("snapshot") or {}),
-                                d.get("category") or None,
-                                float(_dl_ts) if _dl_ts else None,
-                            ),
-                        )
-                    conn.commit()
-                return
-        except Exception as e:
-            logger.warning(f"[email-drafts] DB save failed, falling back to JSON: {e}")
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
-    # JSON fallback (local dev or DB outage)
+def _write_drafts_json_atomic(data: dict) -> None:
+    """Atomically write the full drafts JSON file under the per-store lock."""
     import uuid as _uuid
     with _email_drafts_lock:
         try:
+            try:
+                os.makedirs(os.path.dirname(_EMAIL_DRAFTS_PATH), exist_ok=True)
+            except Exception:
+                pass
             tmp = _EMAIL_DRAFTS_PATH + f".{_uuid.uuid4().hex[:8]}.tmp"
             with open(tmp, "w") as f:
                 json.dump(data, f, separators=(",", ":"))
@@ -1101,6 +1132,251 @@ def _save_email_drafts(data: dict) -> None:
         except Exception as e:
             logger.warning(f"[email-drafts] JSON save failed: {e}")
             raise
+
+
+def _upsert_email_draft(draft: dict) -> None:
+    """Insert-or-update a single draft row.
+
+    Postgres path: one `INSERT ... ON CONFLICT (id) DO UPDATE` against just
+    this draft. JSON fallback: read the file, swap or append the matching
+    record, write it back atomically. **Never** issues a bulk `DELETE`, so
+    a single stray call cannot wipe other drafts.
+
+    Raises `EmailDraftsUnavailable` when the configured Postgres store is
+    unreachable; callers should surface a 503.
+    """
+    if not isinstance(draft, dict) or not draft.get("id"):
+        raise ValueError("draft must be a dict with a non-empty id")
+    if _DRAFTS_DB_URL:
+        conn = _drafts_db_conn()
+        if conn is None:
+            raise EmailDraftsUnavailable("Postgres drafts store: connect failed")
+        try:
+            if not _ensure_drafts_table(conn):
+                raise EmailDraftsUnavailable("Postgres drafts store: CREATE TABLE failed")
+            _dl_ts = draft.get("downloaded_ts")
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        ts = EXCLUDED.ts,
+                        status = EXCLUDED.status,
+                        last_published_ts = EXCLUDED.last_published_ts,
+                        last_recipient_count = EXCLUDED.last_recipient_count,
+                        snapshot = EXCLUDED.snapshot,
+                        category = EXCLUDED.category,
+                        downloaded_ts = EXCLUDED.downloaded_ts
+                    """,
+                    (
+                        draft.get("id"),
+                        draft.get("name") or "Untitled draft",
+                        float(draft.get("ts") or 0),
+                        draft.get("status") or "draft",
+                        float(draft.get("last_published_ts") or 0),
+                        int(draft.get("last_recipient_count") or 0),
+                        json.dumps(draft.get("snapshot") or {}),
+                        draft.get("category") or None,
+                        float(_dl_ts) if _dl_ts else None,
+                    ),
+                )
+                conn.commit()
+            return
+        except EmailDraftsUnavailable:
+            raise
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logger.error(f"[email-drafts] DB upsert failed: {e}")
+            raise EmailDraftsUnavailable(f"Postgres drafts store: {e}") from e
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    # JSON fallback (no Postgres configured): swap-or-append this row only.
+    with _email_drafts_lock:
+        existing = {"drafts": []}
+        try:
+            if os.path.exists(_EMAIL_DRAFTS_PATH):
+                with open(_EMAIL_DRAFTS_PATH, "r") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict) and isinstance(loaded.get("drafts"), list):
+                    existing = loaded
+        except Exception as e:
+            logger.warning(f"[email-drafts] JSON read failed during upsert: {e}")
+        drafts = existing.get("drafts") or []
+        idx = next(
+            (
+                i for i, d in enumerate(drafts)
+                if isinstance(d, dict) and d.get("id") == draft.get("id")
+            ),
+            -1,
+        )
+        if idx >= 0:
+            drafts[idx] = draft
+        else:
+            drafts.append(draft)
+        existing["drafts"] = drafts
+        _write_drafts_json_atomic(existing)
+
+
+def _delete_email_draft_by_id(draft_id: str) -> bool:
+    """Delete a single draft by id. Returns True if a row was removed.
+
+    Postgres path: `DELETE FROM email_drafts WHERE id = %s`. JSON fallback:
+    load, drop the matching record, write back atomically. Never inverts
+    "keep these" -- always names the exact id to drop.
+
+    Raises `EmailDraftsUnavailable` when the configured Postgres store is
+    unreachable; callers should surface a 503.
+    """
+    if not draft_id or not isinstance(draft_id, str):
+        return False
+    if _DRAFTS_DB_URL:
+        conn = _drafts_db_conn()
+        if conn is None:
+            raise EmailDraftsUnavailable("Postgres drafts store: connect failed")
+        try:
+            if not _ensure_drafts_table(conn):
+                raise EmailDraftsUnavailable("Postgres drafts store: CREATE TABLE failed")
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM email_drafts WHERE id = %s", (draft_id,))
+                deleted = cur.rowcount
+                conn.commit()
+            return deleted > 0
+        except EmailDraftsUnavailable:
+            raise
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logger.error(f"[email-drafts] DB delete failed: {e}")
+            raise EmailDraftsUnavailable(f"Postgres drafts store: {e}") from e
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    # JSON fallback.
+    with _email_drafts_lock:
+        existing = {"drafts": []}
+        try:
+            if os.path.exists(_EMAIL_DRAFTS_PATH):
+                with open(_EMAIL_DRAFTS_PATH, "r") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict) and isinstance(loaded.get("drafts"), list):
+                    existing = loaded
+        except Exception as e:
+            logger.warning(f"[email-drafts] JSON read failed during delete: {e}")
+            return False
+        before = len(existing.get("drafts") or [])
+        existing["drafts"] = [
+            d for d in (existing.get("drafts") or [])
+            if not (isinstance(d, dict) and d.get("id") == draft_id)
+        ]
+        if len(existing["drafts"]) == before:
+            return False
+        _write_drafts_json_atomic(existing)
+        return True
+
+
+def _evict_email_drafts_by_ids(ids) -> int:
+    """Bulk-delete drafts by an explicit ID list. Logs WARNING with count + ids.
+
+    Used by the per-store size cap eviction in the save endpoint. Always
+    names the exact ids to drop (`DELETE WHERE id = ANY(%s)`) -- never
+    inverts "keep these" -- so a caller bug or miscount cannot wipe the
+    table. Returns the number of rows actually removed.
+
+    Raises `EmailDraftsUnavailable` when the configured Postgres store is
+    unreachable.
+    """
+    ids = [i for i in (ids or []) if isinstance(i, str) and i]
+    if not ids:
+        return 0
+    logger.warning(
+        f"[email-drafts] eviction: dropping {len(ids)} drafts by explicit id list: {ids}"
+    )
+    if _DRAFTS_DB_URL:
+        conn = _drafts_db_conn()
+        if conn is None:
+            raise EmailDraftsUnavailable("Postgres drafts store: connect failed")
+        try:
+            if not _ensure_drafts_table(conn):
+                raise EmailDraftsUnavailable("Postgres drafts store: CREATE TABLE failed")
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM email_drafts WHERE id = ANY(%s)", (ids,))
+                deleted = cur.rowcount
+                conn.commit()
+            logger.warning(
+                f"[email-drafts] eviction: actually removed {deleted} of {len(ids)} requested rows from Postgres"
+            )
+            return deleted
+        except EmailDraftsUnavailable:
+            raise
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logger.error(f"[email-drafts] DB eviction failed: {e}")
+            raise EmailDraftsUnavailable(f"Postgres drafts store: {e}") from e
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    # JSON fallback.
+    with _email_drafts_lock:
+        existing = {"drafts": []}
+        try:
+            if os.path.exists(_EMAIL_DRAFTS_PATH):
+                with open(_EMAIL_DRAFTS_PATH, "r") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict) and isinstance(loaded.get("drafts"), list):
+                    existing = loaded
+        except Exception as e:
+            logger.warning(f"[email-drafts] JSON read failed during eviction: {e}")
+            return 0
+        ids_set = set(ids)
+        before = len(existing.get("drafts") or [])
+        existing["drafts"] = [
+            d for d in (existing.get("drafts") or [])
+            if not (isinstance(d, dict) and d.get("id") in ids_set)
+        ]
+        deleted = before - len(existing["drafts"])
+        if deleted > 0:
+            _write_drafts_json_atomic(existing)
+        logger.warning(
+            f"[email-drafts] eviction: actually removed {deleted} of {len(ids)} requested rows from JSON fallback"
+        )
+        return deleted
+
+
+def _save_email_drafts(data: dict) -> None:
+    """Per-row upsert wrapper for callers that still pass the full drafts list.
+
+    Issues only `INSERT ... ON CONFLICT (id) DO UPDATE` per row -- **never**
+    a bulk `DELETE`. An empty drafts list is rejected to prevent the
+    historical "wipe everything" footgun: removals must go through
+    `_delete_email_draft_by_id` (single row) or `_evict_email_drafts_by_ids`
+    (explicit id list).
+    """
+    drafts = (data or {}).get("drafts") or []
+    if not drafts:
+        raise ValueError(
+            "_save_email_drafts requires a non-empty drafts list; "
+            "use _delete_email_draft_by_id or _evict_email_drafts_by_ids for removals"
+        )
+    for d in drafts:
+        if isinstance(d, dict) and d.get("id"):
+            _upsert_email_draft(d)
 
 
 def _draft_summary(d: dict) -> dict:
@@ -1130,7 +1406,14 @@ def _draft_summary(d: dict) -> dict:
 @app.route("/api/email-drafts", methods=["GET"])
 def list_email_drafts():
     try:
-        data = _load_email_drafts()
+        try:
+            data = _load_email_drafts()
+        except EmailDraftsUnavailable as e:
+            logger.error(f"[email-drafts] list: store unavailable: {e}")
+            return jsonify({
+                "error": "drafts store temporarily unavailable",
+                "detail": str(e),
+            }), 503
         drafts = sorted(
             (_draft_summary(d) for d in data.get("drafts", [])),
             key=lambda d: d.get("ts", 0),
@@ -1175,8 +1458,21 @@ def save_email_draft():
                 }), 413
         except Exception:
             pass
-        data = _load_email_drafts()
+        try:
+            data = _load_email_drafts()
+        except EmailDraftsUnavailable as e:
+            # Refuse to write when we couldn't read the current state -- a
+            # transient blip here used to look like "the table is empty" and
+            # let the (now removed) bulk reinsert wipe every other draft.
+            logger.error(f"[email-drafts] save: store unavailable, refusing to write: {e}")
+            return jsonify({
+                "error": "drafts store temporarily unavailable",
+                "detail": str(e),
+            }), 503
         drafts = data.get("drafts", [])
+        # Snapshot the pre-write id set so we can compute the exact eviction
+        # list below (instead of inverting "keep these").
+        existing_ids_before = {d.get("id") for d in drafts if isinstance(d, dict) and d.get("id")}
         now = time.time()
         # Upsert by id.
         existing_idx = next((i for i, d in enumerate(drafts) if d.get("id") == draft_id), -1)
@@ -1230,8 +1526,30 @@ def save_email_draft():
                     break
             else:
                 break
-        data["drafts"] = drafts
-        _save_email_drafts(data)
+        # Compute the explicit eviction id list: anything that was present
+        # before this call but is no longer in the desired post-cap list,
+        # excluding the draft we're about to upsert. This is the only path
+        # that bulk-removes drafts -- it always names the exact ids and
+        # logs at WARNING.
+        final_ids = {d.get("id") for d in drafts if isinstance(d, dict) and d.get("id")}
+        to_evict = sorted(existing_ids_before - final_ids - {draft_id})
+        if to_evict:
+            try:
+                _evict_email_drafts_by_ids(to_evict)
+            except EmailDraftsUnavailable as e:
+                logger.error(f"[email-drafts] save: eviction failed, refusing to write: {e}")
+                return jsonify({
+                    "error": "drafts store temporarily unavailable",
+                    "detail": str(e),
+                }), 503
+        try:
+            _upsert_email_draft(record)
+        except EmailDraftsUnavailable as e:
+            logger.error(f"[email-drafts] save: upsert failed: {e}")
+            return jsonify({
+                "error": "drafts store temporarily unavailable",
+                "detail": str(e),
+            }), 503
         return jsonify({"success": True, "id": draft_id, "summary": _draft_summary(record)})
     except Exception as e:
         logger.error(f"[email-drafts] save error: {e}")
@@ -1241,7 +1559,14 @@ def save_email_draft():
 @app.route("/api/email-drafts/<draft_id>", methods=["GET"])
 def get_email_draft(draft_id: str):
     try:
-        data = _load_email_drafts()
+        try:
+            data = _load_email_drafts()
+        except EmailDraftsUnavailable as e:
+            logger.error(f"[email-drafts] get: store unavailable: {e}")
+            return jsonify({
+                "error": "drafts store temporarily unavailable",
+                "detail": str(e),
+            }), 503
         for d in data.get("drafts", []):
             if d.get("id") == draft_id:
                 return jsonify(d)
@@ -1261,7 +1586,14 @@ def mark_email_draft_published(draft_id: str):
     try:
         body = request.get_json(silent=True) or {}
         recipient_count = int(body.get("recipient_count") or 0)
-        data = _load_email_drafts()
+        try:
+            data = _load_email_drafts()
+        except EmailDraftsUnavailable as e:
+            logger.error(f"[email-drafts] mark-published: store unavailable, refusing to write: {e}")
+            return jsonify({
+                "error": "drafts store temporarily unavailable",
+                "detail": str(e),
+            }), 503
         drafts = data.get("drafts", [])
         for d in drafts:
             if d.get("id") == draft_id:
@@ -1269,7 +1601,16 @@ def mark_email_draft_published(draft_id: str):
                 d["last_published_ts"] = time.time()
                 if recipient_count > 0:
                     d["last_recipient_count"] = recipient_count
-                _save_email_drafts(data)
+                # Per-row write only -- never re-saves the rest of the list,
+                # so a stale in-memory snapshot can't clobber other drafts.
+                try:
+                    _upsert_email_draft(d)
+                except EmailDraftsUnavailable as e:
+                    logger.error(f"[email-drafts] mark-published: upsert failed: {e}")
+                    return jsonify({
+                        "error": "drafts store temporarily unavailable",
+                        "detail": str(e),
+                    }), 503
                 return jsonify({"success": True, "summary": _draft_summary(d)})
         return jsonify({"error": "not found"}), 404
     except Exception as e:
@@ -1288,60 +1629,85 @@ def mark_email_draft_downloaded(draft_id: str):
     "what did I export to a file?").
 
     Implementation note: writes the new timestamp with a targeted single-row
-    UPDATE (Postgres) or a lock-wrapped read-modify-write (JSON fallback), so
-    a concurrent mark-published or save call can't clobber the stamp by
-    rewriting the whole store on top of stale in-memory data.
+    UPDATE (Postgres) or a per-row upsert via `_upsert_email_draft` (JSON
+    fallback), so a concurrent mark-published or save call can't clobber the
+    stamp -- and a transient DB blip returns 503 instead of silently falling
+    through to the JSON file (which would create a stale on-disk record
+    diverging from the Postgres source of truth).
     """
     try:
         now = time.time()
-        # Postgres path: single-row UPDATE -- atomic, won't race with
-        # mark-published / save_email_draft writes against the rest of the row.
-        conn = _drafts_db_conn()
-        if conn is not None:
+        if _DRAFTS_DB_URL:
+            # Postgres-configured path: single-row UPDATE; on any failure
+            # return 503 -- never silently fall back to JSON.
+            conn = _drafts_db_conn()
+            if conn is None:
+                logger.error("[email-drafts] mark-downloaded: DB connect failed; refusing JSON fallback")
+                return jsonify({
+                    "error": "drafts store temporarily unavailable",
+                    "detail": "Postgres drafts store: connect failed",
+                }), 503
             try:
-                if _ensure_drafts_table(conn):
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "UPDATE email_drafts SET downloaded_ts = %s WHERE id = %s",
-                            (now, draft_id),
-                        )
-                        updated = cur.rowcount
-                        conn.commit()
-                    if updated == 0:
-                        return jsonify({"error": "not found"}), 404
-                    # Return the freshly-loaded summary so the client gets
-                    # the canonical record (status, downloaded_ts, etc.)
-                    # without a second round trip.
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts FROM email_drafts WHERE id = %s",
-                            (draft_id,),
-                        )
-                        row = cur.fetchone()
-                    if row is None:
-                        return jsonify({"error": "not found"}), 404
-                    return jsonify({"success": True, "summary": _draft_summary(_row_to_draft(row))})
+                if not _ensure_drafts_table(conn):
+                    return jsonify({
+                        "error": "drafts store temporarily unavailable",
+                        "detail": "Postgres drafts store: CREATE TABLE failed",
+                    }), 503
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE email_drafts SET downloaded_ts = %s WHERE id = %s",
+                        (now, draft_id),
+                    )
+                    updated = cur.rowcount
+                    conn.commit()
+                if updated == 0:
+                    return jsonify({"error": "not found"}), 404
+                # Return the freshly-loaded summary so the client gets
+                # the canonical record (status, downloaded_ts, etc.)
+                # without a second round trip.
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts FROM email_drafts WHERE id = %s",
+                        (draft_id,),
+                    )
+                    row = cur.fetchone()
+                if row is None:
+                    return jsonify({"error": "not found"}), 404
+                return jsonify({"success": True, "summary": _draft_summary(_row_to_draft(row))})
             except Exception as e:
-                logger.warning(f"[email-drafts] DB mark-downloaded failed, falling back to JSON: {e}")
+                logger.error(f"[email-drafts] DB mark-downloaded failed: {e}")
                 try:
                     conn.rollback()
                 except Exception:
                     pass
+                return jsonify({
+                    "error": "drafts store temporarily unavailable",
+                    "detail": str(e),
+                }), 503
             finally:
                 try:
                     conn.close()
                 except Exception:
                     pass
-        # JSON fallback: hold the existing per-store lock around the
-        # read-modify-write so concurrent writers (mark-published, save)
-        # serialize and don't lose this stamp.
+        # JSON fallback (no Postgres configured): hold the per-store lock
+        # around the read-modify-write so concurrent writers serialize and
+        # don't lose this stamp. The RLock lets `_upsert_email_draft`
+        # re-acquire safely for its own JSON write.
         with _email_drafts_lock:
-            data = _load_email_drafts()
+            try:
+                data = _load_email_drafts()
+            except EmailDraftsUnavailable as e:
+                # Belt and suspenders: load shouldn't raise here because we
+                # already gated on _DRAFTS_DB_URL above, but be defensive.
+                return jsonify({
+                    "error": "drafts store temporarily unavailable",
+                    "detail": str(e),
+                }), 503
             drafts = data.get("drafts", [])
             for d in drafts:
                 if d.get("id") == draft_id:
                     d["downloaded_ts"] = now
-                    _save_email_drafts(data)
+                    _upsert_email_draft(d)
                     return jsonify({"success": True, "summary": _draft_summary(d)})
             return jsonify({"error": "not found"}), 404
     except Exception as e:
@@ -1352,12 +1718,18 @@ def mark_email_draft_downloaded(draft_id: str):
 @app.route("/api/email-drafts/<draft_id>", methods=["DELETE"])
 def delete_email_draft(draft_id: str):
     try:
-        data = _load_email_drafts()
-        before = len(data.get("drafts", []))
-        data["drafts"] = [d for d in data.get("drafts", []) if d.get("id") != draft_id]
-        if len(data["drafts"]) == before:
+        # Per-row delete: never inverts "keep these," so a stale
+        # in-memory snapshot can't take down the rest of the table.
+        try:
+            removed = _delete_email_draft_by_id(draft_id)
+        except EmailDraftsUnavailable as e:
+            logger.error(f"[email-drafts] delete: store unavailable: {e}")
+            return jsonify({
+                "error": "drafts store temporarily unavailable",
+                "detail": str(e),
+            }), 503
+        if not removed:
             return jsonify({"error": "not found"}), 404
-        _save_email_drafts(data)
         return jsonify({"success": True})
     except Exception as e:
         logger.error(f"[email-drafts] delete error: {e}")

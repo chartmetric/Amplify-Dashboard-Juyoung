@@ -48,6 +48,12 @@ class SaveDraftCarriesDownloadedTsTests(unittest.TestCase):
 
     def setUp(self):
         # Force JSON fallback so we don't depend on Postgres being available.
+        # Both _DRAFTS_DB_URL and _drafts_db_conn must be neutralized: the
+        # loader now distinguishes "configured but blipping" (-> 503) from
+        # "not configured" (-> JSON), and that decision is gated on
+        # _DRAFTS_DB_URL.
+        self._patch_url = mock.patch.object(amplify_app, "_DRAFTS_DB_URL", "")
+        self._patch_url.start()
         self._patch_conn = mock.patch.object(amplify_app, "_drafts_db_conn", return_value=None)
         self._patch_conn.start()
         # Isolate the JSON store to a temp file per test.
@@ -61,6 +67,7 @@ class SaveDraftCarriesDownloadedTsTests(unittest.TestCase):
 
     def tearDown(self):
         self._patch_conn.stop()
+        self._patch_url.stop()
         amplify_app._EMAIL_DRAFTS_PATH = self._orig_path
         try:
             os.unlink(self._tmp.name)
@@ -105,6 +112,10 @@ class MarkDownloadedRouteJsonFallbackTests(unittest.TestCase):
     """
 
     def setUp(self):
+        # Force JSON fallback (see SaveDraftCarriesDownloadedTsTests for why
+        # both _DRAFTS_DB_URL and _drafts_db_conn must be neutralized).
+        self._patch_url = mock.patch.object(amplify_app, "_DRAFTS_DB_URL", "")
+        self._patch_url.start()
         self._patch_conn = mock.patch.object(amplify_app, "_drafts_db_conn", return_value=None)
         self._patch_conn.start()
         import tempfile
@@ -127,6 +138,7 @@ class MarkDownloadedRouteJsonFallbackTests(unittest.TestCase):
 
     def tearDown(self):
         self._patch_conn.stop()
+        self._patch_url.stop()
         amplify_app._EMAIL_DRAFTS_PATH = self._orig_path
         try:
             os.unlink(self._tmp.name)
