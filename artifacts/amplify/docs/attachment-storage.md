@@ -103,6 +103,8 @@ working untouched, and the sweep skips items that are already mirrored.
 | `AMPLIFY_BACKFILL_INTERVAL_SECONDS`       | `600`   | Seconds between cycles (10 minutes by default).               |
 | `AMPLIFY_BACKFILL_BATCH_SIZE`             | `100`   | Max items per kind per cycle (1–500).                         |
 | `AMPLIFY_BACKFILL_MAX_CYCLE_SECONDS`      | `540`   | Hard wall-clock guard per cycle so one run can't overlap.     |
+| `AMPLIFY_BACKFILL_ALERT_THRESHOLD`        | `2`     | Consecutive failed cycles before the dashboard fires an alert.|
+| `AMPLIFY_BACKFILL_ALERT_WEBHOOK`          | unset   | Optional URL POSTed JSON on first-fail and recovery.          |
 
 The sweep is gated on `attachment_store.s3_enabled()`, so flipping
 `AMPLIFY_IMAGE_STORAGE_BACKEND` back to `local` (or unsetting any S3
@@ -126,10 +128,50 @@ last duration, last per-kind report, and the next scheduled run:
     "last_totals": {"scanned": 312, "uploaded": 312, "errors": 0},
     "last_report": {"feature-images": {...}, "videos": {...}, ...},
     "next_run_at": 1714512612.7,
-    "last_error": null
+    "last_error": null,
+    "alert": {
+      "active": false, "visible": false, "silenced": false,
+      "threshold": 2, "consecutive_failures": 0,
+      "webhook_configured": false
+    }
   }
 }
 ```
+
+### Failure alerting (Task #108)
+
+Two signals fire on different cadences so we can balance "tell me right
+away" with "don't latch a banner over a one-off blip":
+
+1. **Webhook (immediate)** — if `AMPLIFY_BACKFILL_ALERT_WEBHOOK` is set,
+   the FIRST failed cycle of an incident POSTs JSON to that URL
+   (Slack incoming-webhook compatible — top-level `text` plus structured
+   `kind`/`totals`/`kind_errors`/`last_error` fields). The next clean
+   cycle POSTs `kind: "resolved"`. Subsequent failures inside the same
+   incident don't re-fire, so a flapping sweep produces at most one
+   firing/resolved pair.
+2. **Dashboard banner (latched)** — once `consecutive_failures` reaches
+   `AMPLIFY_BACKFILL_ALERT_THRESHOLD`, `auto_sweep.alert.active` latches
+   `true`, the topbar shows a red "Sweep failing" pill, and the
+   Attachment Storage panel surfaces a banner with the last error and
+   per-kind error counts.
+
+Operators can:
+- **Silence** the dashboard alert for up to 24h
+  (`POST /api/admin/attachments/sweep/silence`, body `{minutes}`). The
+  silence drops automatically on recovery.
+- **Clear** the alert without waiting for a clean cycle
+  (`POST /api/admin/attachments/sweep/clear`). Clearing also resets
+  `webhook_in_incident` so the next failure pings the webhook again.
+
+> **Note for operators:** the topbar pill polls `/api/admin/attachments/status`
+> only after the admin token has been entered once and cached in
+> `localStorage` (we never want to pop a token prompt on page load just
+> to drive a small indicator). Until that happens — typically the first
+> time the operator opens **Lab → Attachment Storage** — the webhook is
+> the canonical real-time signal and the panel itself is the canonical
+> in-dashboard view. Configure `AMPLIFY_BACKFILL_ALERT_WEBHOOK` if you
+> need failures to reach off-dashboard channels.
 
 External-thumb mirrors now leave a `.s3` sidecar next to the cached
 JPEG so the sweep doesn't keep re-uploading the same bytes every

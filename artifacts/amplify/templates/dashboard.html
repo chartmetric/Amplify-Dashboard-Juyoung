@@ -1817,6 +1817,12 @@
             <span class="subtitle">Product Marketing Autopilot</span>
         </div>
         <div class="topbar-right">
+            <button id="sweep-alert-pill" onclick="labOpenAttachmentsPanel()"
+                    title="Attachment auto-migration is failing — click for details"
+                    style="display:none;align-items:center;gap:6px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;padding:6px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;">
+                <span style="font-size:14px;">&#9888;</span>
+                <span id="sweep-alert-pill-label">Attachment sweep failing</span>
+            </button>
             <div class="lab-wrapper">
                 <button class="btn-lab" id="btn-lab" onclick="toggleLabDropdown()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v5.586a1 1 0 0 0 .293.707l5.414 5.414a2 2 0 0 1 .586 1.414V19a2 2 0 0 1-2 2H4.707a2 2 0 0 1-2-2v-2.879a2 2 0 0 1 .586-1.414l5.414-5.414A1 1 0 0 0 9 8.586V3z"/><line x1="9" y1="3" x2="15" y2="3"/></svg>
@@ -15671,7 +15677,76 @@ function _attachRender(data) {
     var secrets = data.secrets_present || {};
     var pending = data.pending || {};
     var recent = data.recent || [];
+    var sweep = data.auto_sweep || {};
+    var alert = sweep.alert || {};
     var html = '';
+
+    // Auto-migration alert banner — sits above everything else so a
+    // failing sweep can't be missed even if the operator was just
+    // looking up pending counts.
+    if (alert.active || alert.silenced) {
+        var bannerColor = alert.silenced ? '#fffbeb' : '#fef2f2';
+        var bannerBorder = alert.silenced ? '#fcd34d' : '#fca5a5';
+        var bannerText = alert.silenced ? '#92400e' : '#991b1b';
+        var icon = alert.silenced ? '&#128263;' : '&#9888;';
+        var headline = alert.silenced
+            ? 'Auto-migration alert silenced'
+            : 'Auto-migration is failing';
+        var failures = alert.consecutive_failures || 0;
+        var threshold = alert.threshold || 0;
+        var detail = failures + ' consecutive failed cycle' + (failures === 1 ? '' : 's')
+            + (threshold ? ' (threshold ' + threshold + ')' : '');
+        var lastErr = alert.last_error || sweep.last_error || '';
+        var kindErrs = alert.kind_errors || {};
+        var kindList = Object.keys(kindErrs);
+        html += '<div style="margin-bottom:14px;padding:12px 14px;border:1px solid ' + bannerBorder
+            + ';border-radius:8px;background:' + bannerColor + ';color:' + bannerText + ';">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">';
+        html += '<div>';
+        html += '<div style="font-weight:700;font-size:14px;margin-bottom:4px;">' + icon + ' ' + headline + '</div>';
+        html += '<div style="font-size:12px;line-height:1.5;">' + detail;
+        if (alert.first_seen_at) {
+            try {
+                html += ' &middot; first seen ' + new Date(alert.first_seen_at * 1000).toLocaleString();
+            } catch (e) {}
+        }
+        html += '</div>';
+        if (lastErr) {
+            html += '<div style="margin-top:6px;font-size:12px;font-family:ui-monospace,monospace;word-break:break-word;"><b>Last error:</b> '
+                + (lastErr + '').replace(/</g, '&lt;') + '</div>';
+        }
+        if (kindList.length) {
+            var parts = [];
+            for (var ki = 0; ki < kindList.length; ki++) {
+                parts.push(kindList[ki] + '=' + kindErrs[kindList[ki]]);
+            }
+            html += '<div style="margin-top:6px;font-size:12px;"><b>Affected kinds:</b> ' + parts.join(', ') + '</div>';
+        }
+        if (alert.silenced && alert.silenced_until) {
+            try {
+                html += '<div style="margin-top:6px;font-size:12px;">Silenced until '
+                    + new Date(alert.silenced_until * 1000).toLocaleString() + '.</div>';
+            } catch (e) {}
+        }
+        if (alert.webhook_configured) {
+            var notif = alert.last_notification_kind
+                ? ('last ping: ' + alert.last_notification_kind
+                   + (alert.last_notification_error ? ' (failed: ' + alert.last_notification_error + ')' : ' (ok)'))
+                : 'no pings yet this process';
+            html += '<div style="margin-top:6px;font-size:11px;opacity:0.8;">Ops webhook configured &middot; ' + notif + '.</div>';
+        }
+        html += '</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">';
+        if (!alert.silenced) {
+            html += '<button id="sweep-silence-btn" style="padding:5px 10px;border-radius:6px;border:1px solid ' + bannerBorder
+                + ';background:#fff;color:' + bannerText + ';cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;">Silence 1h</button>';
+        }
+        html += '<button id="sweep-clear-btn" style="padding:5px 10px;border-radius:6px;border:1px solid ' + bannerBorder
+            + ';background:#fff;color:' + bannerText + ';cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;">Clear alert</button>';
+        html += '</div>';
+        html += '</div></div>';
+    }
+
     html += '<div style="margin-bottom:14px;padding:10px 12px;border:1px solid var(--border,#e5e5e5);border-radius:8px;">';
     html += '<div><b>Backend:</b> ' + (data.backend || 'local');
     html += ' &nbsp; <b>S3 enabled:</b> ' + (data.s3_enabled ? '<span style="color:#0a8a3a;">yes</span>' : '<span style="color:#b54;">no</span>');
@@ -15731,6 +15806,121 @@ function _attachRender(data) {
     for (var b = 0; b < btns.length; b++) {
         btns[b].onclick = function(ev) { _attachBackfill(ev.currentTarget.getAttribute('data-kind')); };
     }
+    var silenceBtn = document.getElementById('sweep-silence-btn');
+    if (silenceBtn) silenceBtn.onclick = function() { _attachSweepSilence(60); };
+    var clearBtn = document.getElementById('sweep-clear-btn');
+    if (clearBtn) clearBtn.onclick = function() { _attachSweepClear(); };
+
+    // Refresh the topbar pill state in case the panel was the trigger
+    // for the operator's first visit since the alert latched.
+    _attachUpdateAlertPill(data);
+}
+
+function _attachSweepSilence(minutes) {
+    var token = _attachAdminToken();
+    if (!token) return;
+    fetch('/api/admin/attachments/sweep/silence', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutes: minutes })
+    })
+        .then(function(r) { return r.json(); })
+        .then(function() { _attachLoadStatus(); _attachPollAlertPill(); })
+        .catch(function(e) { window.alert('Silence failed: ' + (e.message || e)); });
+}
+
+function _attachSweepClear() {
+    var token = _attachAdminToken();
+    if (!token) return;
+    fetch('/api/admin/attachments/sweep/clear', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': token, 'Content-Type': 'application/json' },
+        body: '{}'
+    })
+        .then(function(r) { return r.json(); })
+        .then(function() { _attachLoadStatus(); _attachPollAlertPill(); })
+        .catch(function(e) { window.alert('Clear failed: ' + (e.message || e)); });
+}
+
+// ----------------------------------------------------------------------
+// Topbar warning pill — polls /api/admin/attachments/status only when
+// the operator has already entered the admin token (we never want to
+// pop a token-prompt on dashboard load just to drive a tiny indicator).
+// ----------------------------------------------------------------------
+function _attachStoredAdminToken() {
+    try { return localStorage.getItem('amplify_admin_token') || ''; } catch (e) { return ''; }
+}
+
+function _attachUpdateAlertPill(data) {
+    var pill = document.getElementById('sweep-alert-pill');
+    var labStatus = document.getElementById('lab-attachments-status');
+    var alert = (data && data.auto_sweep && data.auto_sweep.alert) || null;
+    if (pill) {
+        if (alert && alert.visible) {
+            pill.style.display = 'inline-flex';
+            var failures = alert.consecutive_failures || 0;
+            var label = document.getElementById('sweep-alert-pill-label');
+            if (label) {
+                label.textContent = 'Sweep failing (' + failures + ')';
+            }
+        } else {
+            pill.style.display = 'none';
+        }
+    }
+    if (labStatus) {
+        if (alert && alert.visible) {
+            labStatus.textContent = 'ALERT';
+            labStatus.className = 'lab-item-status';
+            labStatus.style.color = '#b91c1c';
+            labStatus.style.fontWeight = '700';
+        } else if (alert && alert.silenced) {
+            labStatus.textContent = 'silenced';
+            labStatus.className = 'lab-item-status';
+            labStatus.style.color = '#92400e';
+            labStatus.style.fontWeight = '600';
+        } else {
+            labStatus.textContent = '';
+            labStatus.className = 'lab-item-status';
+            labStatus.style.color = '';
+            labStatus.style.fontWeight = '';
+        }
+    }
+}
+
+function _attachPollAlertPill() {
+    var token = _attachStoredAdminToken();
+    if (!token) {
+        // No saved token — don't pester the operator with a prompt; the
+        // attachments panel is the canonical source of alert state for
+        // first-time visits.
+        _attachUpdateAlertPill(null);
+        return;
+    }
+    fetch('/api/admin/attachments/status', { headers: { 'X-Admin-Token': token } })
+        .then(function(r) {
+            if (!r.ok) {
+                if (r.status === 401) {
+                    try { localStorage.removeItem('amplify_admin_token'); } catch (e) {}
+                }
+                return null;
+            }
+            return r.json();
+        })
+        .then(function(data) { _attachUpdateAlertPill(data); })
+        .catch(function() { /* network blip — try again next tick */ });
+}
+
+function _attachStartAlertPolling() {
+    _attachPollAlertPill();
+    // 60s poll lines up with typical sweep cadence (default 600s) and
+    // keeps the dashboard from hammering the admin endpoint.
+    setInterval(_attachPollAlertPill, 60000);
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _attachStartAlertPolling);
+} else {
+    _attachStartAlertPolling();
 }
 
 function _attachBackfill(kind) {

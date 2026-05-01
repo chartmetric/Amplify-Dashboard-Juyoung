@@ -2119,6 +2119,25 @@ _BACKFILL_SWEEP_STATE: dict = {
     "last_totals": None,
     "next_run_at": None,
     "last_error": None,
+    # --- Failure-alert tracking (Task #108) -------------------------------
+    # We latch a visible warning once N consecutive cycles fail (any
+    # cycle with totals.errors > 0 OR a non-null last_error counts).
+    # Operators can silence the alert (silenced_until = epoch sec) or
+    # clear it outright; recovery — a clean cycle — flips it back off
+    # automatically and pings the same notification channel.
+    "alert_threshold": 0,           # cycles before we shout
+    "consecutive_failures": 0,      # incremented on any failed cycle
+    "consecutive_successes": 0,     # streak of clean cycles since last fail
+    "last_failure_at": None,        # epoch seconds of most recent failed cycle
+    "last_recovery_at": None,       # epoch seconds when we last flipped clean
+    "alert_active": False,          # latched ON once threshold tripped
+    "alert_first_seen_at": None,    # epoch seconds when alert first fired
+    "alert_last_kind_errors": None, # per-kind error counts at last failure
+    "webhook_in_incident": False,   # one firing/resolved pair per incident
+    "silenced_until": None,         # alert hidden in dashboard until this ts
+    "last_notification_at": None,   # epoch seconds of last webhook ping
+    "last_notification_kind": None, # 'firing' | 'resolved'
+    "last_notification_error": None,
 }
 
 
@@ -2144,7 +2163,164 @@ def _backfill_sweep_settings() -> dict:
             "AMPLIFY_BACKFILL_MAX_CYCLE_SECONDS", 540, 10, 24 * 3600),
         "initial_delay_seconds": _backfill_sweep_env_int(
             "AMPLIFY_BACKFILL_INITIAL_DELAY_SECONDS", 60, 0, 24 * 3600),
+        # Number of consecutive failed cycles before the dashboard
+        # surfaces a visible warning (and the optional webhook pings).
+        # Lower bound is 1 so an operator can opt into "shout on first
+        # failure" without hacking code.
+        "alert_threshold": _backfill_sweep_env_int(
+            "AMPLIFY_BACKFILL_ALERT_THRESHOLD", 2, 1, 100),
     }
+
+
+def _backfill_sweep_alert_webhook_url() -> str:
+    """Optional ops notification channel.
+
+    Set ``AMPLIFY_BACKFILL_ALERT_WEBHOOK`` to a URL that accepts
+    ``application/json`` POSTs (Slack incoming-webhook, generic ops
+    forwarder, etc.). Empty/unset means "dashboard-only alerting".
+    """
+    return (os.environ.get("AMPLIFY_BACKFILL_ALERT_WEBHOOK") or "").strip()
+
+
+def _backfill_sweep_post_webhook(payload: dict) -> None:
+    """Best-effort POST to the ops webhook. Never raises.
+
+    Designed for Slack-compatible incoming webhooks (which accept a
+    ``{"text": "..."}`` body) but also forwards the structured fields
+    so a generic receiver can react programmatically.
+    """
+    url = _backfill_sweep_alert_webhook_url()
+    if not url:
+        return
+    err = None
+    try:
+        import urllib.request as _ur
+        body = json.dumps(payload).encode("utf-8")
+        req = _ur.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with _ur.urlopen(req, timeout=5) as resp:
+            # Drain the body so the connection can be reused; we don't
+            # care about the response content from a fire-and-forget
+            # webhook beyond the status code.
+            resp.read()
+            if resp.status >= 400:
+                err = f"http_{resp.status}"
+    except Exception as e:  # noqa: BLE001 — webhook is best-effort
+        err = str(e)
+        logger.warning("[backfill-sweep] alert webhook failed: %s", err)
+    with _BACKFILL_SWEEP_LOCK:
+        _BACKFILL_SWEEP_STATE["last_notification_at"] = time.time()
+        _BACKFILL_SWEEP_STATE["last_notification_kind"] = payload.get("kind")
+        _BACKFILL_SWEEP_STATE["last_notification_error"] = err
+
+
+def _backfill_sweep_summarize_kind_errors(report: dict) -> dict:
+    """Pull per-kind error counts out of a cycle report for alert payloads."""
+    out: dict = {}
+    if not isinstance(report, dict):
+        return out
+    for kind, r in report.items():
+        if not isinstance(r, dict):
+            continue
+        n = int(r.get("errors") or 0)
+        if r.get("error"):
+            n = max(n, 1)
+        if n > 0:
+            out[kind] = n
+    return out
+
+
+def _backfill_sweep_record_outcome(
+    failed: bool,
+    last_error: str | None,
+    report: dict,
+    totals: dict,
+    finished_at: float,
+) -> tuple[str | None, dict | None]:
+    """Update failure counters and decide whether to fire/resolve.
+
+    The dashboard alert latches once ``consecutive_failures`` meets
+    ``alert_threshold`` (so a single noisy cycle doesn't trip the
+    visible warning). The webhook channel, on the other hand, pings on
+    the FIRST failed cycle of an incident — the task spec explicitly
+    asks operators to be told as soon as something goes wrong, even
+    while the dashboard is still in its grace window — and pings again
+    on recovery. The two signals share the same ``alert_active`` latch
+    for the dashboard but track ``webhook_in_incident`` separately so
+    a flapping sweep produces at most one firing/resolved pair per
+    incident.
+
+    Returns ``(notification_kind, payload)`` where ``notification_kind``
+    is ``'firing'`` / ``'resolved'`` / ``None``. The caller dispatches
+    the webhook OUTSIDE the lock so a slow webhook can't block the
+    sweep loop.
+    """
+    notify_kind: str | None = None
+    payload: dict | None = None
+    with _BACKFILL_SWEEP_LOCK:
+        threshold = max(1, int(_BACKFILL_SWEEP_STATE.get("alert_threshold") or 1))
+        kind_errors = _backfill_sweep_summarize_kind_errors(report)
+        if failed:
+            prev_failures = int(_BACKFILL_SWEEP_STATE.get("consecutive_failures") or 0)
+            new_failures = prev_failures + 1
+            _BACKFILL_SWEEP_STATE["consecutive_failures"] = new_failures
+            _BACKFILL_SWEEP_STATE["consecutive_successes"] = 0
+            _BACKFILL_SWEEP_STATE["last_failure_at"] = finished_at
+            _BACKFILL_SWEEP_STATE["alert_last_kind_errors"] = kind_errors
+            if new_failures >= threshold and not _BACKFILL_SWEEP_STATE.get("alert_active"):
+                _BACKFILL_SWEEP_STATE["alert_active"] = True
+                _BACKFILL_SWEEP_STATE["alert_first_seen_at"] = finished_at
+            # Webhook fires on the FIRST failed cycle of an incident.
+            # ``webhook_in_incident`` flips on with the first ping and
+            # only resets on a clean cycle, so subsequent failures in
+            # the same incident don't spam ops channels.
+            if prev_failures == 0 and not _BACKFILL_SWEEP_STATE.get("webhook_in_incident"):
+                _BACKFILL_SWEEP_STATE["webhook_in_incident"] = True
+                notify_kind = "firing"
+                payload = {
+                    "kind": "firing",
+                    "text": (
+                        ":rotating_light: Amplify attachment auto-migration "
+                        "failed a sweep cycle."
+                    ),
+                    "consecutive_failures": new_failures,
+                    "threshold": threshold,
+                    "last_error": last_error,
+                    "totals": dict(totals or {}),
+                    "kind_errors": dict(kind_errors),
+                    "first_seen_at": finished_at,
+                }
+        else:
+            _BACKFILL_SWEEP_STATE["consecutive_successes"] = (
+                int(_BACKFILL_SWEEP_STATE.get("consecutive_successes") or 0) + 1
+            )
+            was_failing_alert = bool(_BACKFILL_SWEEP_STATE.get("alert_active"))
+            was_in_incident = bool(_BACKFILL_SWEEP_STATE.get("webhook_in_incident"))
+            _BACKFILL_SWEEP_STATE["consecutive_failures"] = 0
+            if was_failing_alert:
+                _BACKFILL_SWEEP_STATE["alert_active"] = False
+                _BACKFILL_SWEEP_STATE["alert_first_seen_at"] = None
+                _BACKFILL_SWEEP_STATE["alert_last_kind_errors"] = None
+                _BACKFILL_SWEEP_STATE["last_recovery_at"] = finished_at
+                # A manual silence becomes meaningless once we recover,
+                # so drop it — operators expect "alert clear" to mean
+                # "I'll hear about the next failure".
+                _BACKFILL_SWEEP_STATE["silenced_until"] = None
+            if was_in_incident:
+                _BACKFILL_SWEEP_STATE["webhook_in_incident"] = False
+                _BACKFILL_SWEEP_STATE["last_recovery_at"] = finished_at
+                notify_kind = "resolved"
+                payload = {
+                    "kind": "resolved",
+                    "text": ":white_check_mark: Amplify attachment auto-migration recovered.",
+                    "totals": dict(totals or {}),
+                    "recovered_at": finished_at,
+                }
+    return notify_kind, payload
 
 
 def _backfill_sweep_auto_enabled() -> bool:
@@ -2233,12 +2409,14 @@ def _backfill_sweep_loop() -> None:
                 _BACKFILL_SWEEP_STATE["last_error"] = None
             t0 = time.time()
             deadline = t0 + max_cycle
+            cycle_error: str | None = None
             try:
                 result = _run_backfill_sweep_cycle(batch_size, deadline)
             except Exception as e:
                 logger.exception("[backfill-sweep] cycle crashed")
+                cycle_error = str(e)
                 with _BACKFILL_SWEEP_LOCK:
-                    _BACKFILL_SWEEP_STATE["last_error"] = str(e)
+                    _BACKFILL_SWEEP_STATE["last_error"] = cycle_error
                 result = {"report": {}, "totals": {"scanned": 0, "uploaded": 0, "errors": 1}}
             t1 = time.time()
             totals = result["totals"]
@@ -2254,6 +2432,27 @@ def _backfill_sweep_loop() -> None:
                 _BACKFILL_SWEEP_STATE["last_totals"] = totals
                 _BACKFILL_SWEEP_STATE["cycle_count"] += 1
                 _BACKFILL_SWEEP_STATE["next_run_at"] = t1 + interval
+                last_error_for_alert = _BACKFILL_SWEEP_STATE.get("last_error")
+            # The task spec defines "failed cycle" as errors > 0 OR any
+            # non-null last_error, so include both — the latter catches
+            # outer-loop crashes where totals is the synthetic stub.
+            failed = (
+                bool(cycle_error)
+                or int(totals.get("errors") or 0) > 0
+                or bool(last_error_for_alert)
+            )
+            notify_kind, payload = _backfill_sweep_record_outcome(
+                failed=failed,
+                last_error=last_error_for_alert,
+                report=result["report"],
+                totals=totals,
+                finished_at=t1,
+            )
+            if notify_kind and payload:
+                # Fire-and-forget, but in this same daemon thread so we
+                # don't accidentally spawn a thread per cycle. The
+                # webhook helper is bounded by a 5s timeout.
+                _backfill_sweep_post_webhook(payload)
         except Exception as e:
             # The outer try keeps the daemon alive across any surprises.
             logger.exception("[backfill-sweep] loop iteration failed")
@@ -2309,9 +2508,128 @@ def _start_background_attachment_backfill() -> bool:
 
 
 def _backfill_sweep_status_snapshot() -> dict:
-    """Lock-protected copy of the sweep state for the admin status panel."""
+    """Lock-protected copy of the sweep state for the admin status panel.
+
+    Adds a derived ``alert`` sub-object so the dashboard JS doesn't have
+    to re-implement the "is the alert visible right now?" rules: the
+    alert is visible when ``alert_active`` is set and we're not inside
+    an active silence window.
+    """
     with _BACKFILL_SWEEP_LOCK:
-        return dict(_BACKFILL_SWEEP_STATE)
+        snap = dict(_BACKFILL_SWEEP_STATE)
+    now = time.time()
+    silenced_until = snap.get("silenced_until")
+    silenced = bool(silenced_until and silenced_until > now)
+    if silenced_until and silenced_until <= now:
+        # Silence expired. Surface a clean status so the UI shows the
+        # alert again instead of a stale "Silenced until ..." line.
+        with _BACKFILL_SWEEP_LOCK:
+            if (
+                _BACKFILL_SWEEP_STATE.get("silenced_until")
+                and _BACKFILL_SWEEP_STATE["silenced_until"] <= now
+            ):
+                _BACKFILL_SWEEP_STATE["silenced_until"] = None
+        snap["silenced_until"] = None
+        silenced = False
+    active = bool(snap.get("alert_active"))
+    snap["alert"] = {
+        "active": active,
+        "visible": active and not silenced,
+        "silenced": silenced,
+        "silenced_until": snap.get("silenced_until"),
+        "threshold": int(snap.get("alert_threshold") or 0),
+        "consecutive_failures": int(snap.get("consecutive_failures") or 0),
+        "consecutive_successes": int(snap.get("consecutive_successes") or 0),
+        "first_seen_at": snap.get("alert_first_seen_at"),
+        "last_failure_at": snap.get("last_failure_at"),
+        "last_recovery_at": snap.get("last_recovery_at"),
+        "last_error": snap.get("last_error"),
+        "kind_errors": dict(snap.get("alert_last_kind_errors") or {}),
+        "webhook_configured": bool(_backfill_sweep_alert_webhook_url()),
+        "webhook_in_incident": bool(snap.get("webhook_in_incident")),
+        "last_notification_at": snap.get("last_notification_at"),
+        "last_notification_kind": snap.get("last_notification_kind"),
+        "last_notification_error": snap.get("last_notification_error"),
+    }
+    return snap
+
+
+@app.route("/api/admin/attachments/sweep/silence", methods=["POST"])
+def attachments_sweep_silence_endpoint():
+    """Silence the auto-migration failure alert for a fixed window.
+
+    Category: Admin (gated by AMPLIFY_ADMIN_TOKEN)
+
+    Body/query params:
+    - minutes (int, default 60, max 24*60): how long to suppress the
+      dashboard warning. The underlying failure counters keep ticking
+      so when the window expires (or recovery happens) operators see
+      the up-to-date state.
+    - admin_token: passed via header X-Admin-Token, query, or body.
+
+    Response: ``{success: True, silenced_until: <epoch_seconds>}``.
+    """
+    auth_err = _check_admin_auth()
+    if auth_err is not None:
+        return auth_err
+    body = request.get_json(silent=True) or {}
+    raw_minutes = body.get("minutes")
+    if raw_minutes is None:
+        raw_minutes = request.args.get("minutes")
+    if raw_minutes is None or raw_minutes == "":
+        raw_minutes = 60
+    try:
+        # Cast through float first so "30.0" / "30" both work, then int()
+        # so we always store whole minutes.
+        minutes = int(float(raw_minutes))
+    except Exception:
+        minutes = 60
+    minutes = max(1, min(minutes, 24 * 60))
+    until_ts = time.time() + minutes * 60
+    with _BACKFILL_SWEEP_LOCK:
+        _BACKFILL_SWEEP_STATE["silenced_until"] = until_ts
+    logger.info(
+        "[backfill-sweep] alert silenced for %d minute(s) (until %s)",
+        minutes, datetime.fromtimestamp(until_ts, tz=timezone.utc).isoformat(),
+    )
+    return jsonify({
+        "success": True,
+        "silenced_until": until_ts,
+        "minutes": minutes,
+    })
+
+
+@app.route("/api/admin/attachments/sweep/clear", methods=["POST"])
+def attachments_sweep_clear_endpoint():
+    """Manually clear the failure-alert state.
+
+    Category: Admin (gated by AMPLIFY_ADMIN_TOKEN)
+
+    Resets ``consecutive_failures``, drops any active silence, and
+    flips the alert OFF without waiting for a clean cycle. Useful when
+    operators have already confirmed the underlying issue is resolved
+    and don't want to wait the full sweep interval for the dashboard
+    badge to disappear. Does NOT clear ``last_error``/``last_report``;
+    those reflect the most recent cycle and are useful diagnostics.
+
+    Response: ``{success: True, cleared: True}``.
+    """
+    auth_err = _check_admin_auth()
+    if auth_err is not None:
+        return auth_err
+    with _BACKFILL_SWEEP_LOCK:
+        was_active = bool(_BACKFILL_SWEEP_STATE.get("alert_active"))
+        _BACKFILL_SWEEP_STATE["alert_active"] = False
+        _BACKFILL_SWEEP_STATE["alert_first_seen_at"] = None
+        _BACKFILL_SWEEP_STATE["alert_last_kind_errors"] = None
+        _BACKFILL_SWEEP_STATE["consecutive_failures"] = 0
+        _BACKFILL_SWEEP_STATE["silenced_until"] = None
+        # Reset the webhook incident flag too so a follow-up failure
+        # produces a fresh "firing" ping rather than being silently
+        # treated as a continuation of the cleared incident.
+        _BACKFILL_SWEEP_STATE["webhook_in_incident"] = False
+    logger.info("[backfill-sweep] alert cleared by operator (was_active=%s)", was_active)
+    return jsonify({"success": True, "cleared": True, "was_active": was_active})
 
 
 @app.route("/api/admin/attachments/status", methods=["GET"])
@@ -2332,7 +2650,16 @@ def attachments_status_endpoint():
                            interval_seconds, batch_size, max_cycle_seconds,
                            last_started_at, last_finished_at,
                            last_duration_seconds, last_totals, last_report,
-                           next_run_at, last_error}
+                           next_run_at, last_error,
+                           consecutive_failures, consecutive_successes,
+                           silenced_until,
+                           alert: {active, visible, silenced, threshold,
+                                   consecutive_failures, first_seen_at,
+                                   last_failure_at, last_recovery_at,
+                                   last_error, kind_errors,
+                                   webhook_configured,
+                                   last_notification_at, last_notification_kind,
+                                   last_notification_error}}
         }
     """
     auth_err = _check_admin_auth()
