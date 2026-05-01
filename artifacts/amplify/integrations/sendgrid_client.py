@@ -362,15 +362,15 @@ def _render_footer_links_html(view_url: str = None, unsubscribe_placeholder: str
         # the final HTML.
         unsub_html = (
             '&nbsp;&middot;&nbsp;'
-            f'<a href="{unsubscribe_placeholder}" class="amplify-footer-link" target="_blank" rel="noopener noreferrer" '
+            f'<a href="{unsubscribe_placeholder}" target="_blank" rel="noopener noreferrer" '
             'style="color:#999999;text-decoration:underline;">Unsubscribe</a>'
         )
     return (
-        '<p class="amplify-footer-meta" style="margin:0 0 6px 0;color:#999999;font-size:12px;line-height:1.6;">'
-        f'<a href="{safe_view}" class="amplify-footer-link" target="_blank" rel="noopener noreferrer" '
+        '<p style="margin:0 0 6px 0;color:#999999;font-size:12px;line-height:1.6;">'
+        f'<a href="{safe_view}" target="_blank" rel="noopener noreferrer" '
         'style="color:#999999;text-decoration:underline;">View in browser</a>'
         '&nbsp;&middot;&nbsp;'
-        '<a href="https://chartmetric.com/privacy-policy" class="amplify-footer-link" target="_blank" '
+        '<a href="https://chartmetric.com/privacy-policy" target="_blank" '
         'rel="noopener noreferrer" style="color:#999999;text-decoration:underline;">Privacy Policy</a>'
         f'{unsub_html}'
         '</p>'
@@ -1502,67 +1502,29 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
     safe_banner_title = _esc(banner_title)
     safe_banner_month = _esc(banner_month)
 
-    # Dark-mode support: we declare `color-scheme` so iOS Mail / Apple Mail
-    # don't apply their aggressive auto-invert (which was turning the white
-    # banner text into illegible mud against the dark gradient). We then
-    # provide explicit overrides under both `prefers-color-scheme: dark`
-    # (for real recipients on dark-mode clients) and a `.amplify-force-dark`
-    # wrapper class (so the in-app Live Preview's Dark toggle can simulate
-    # the same rendering even when the user's OS is in light mode).
-    dark_mode_style_block = """<style>
-@media (prefers-color-scheme: dark) {
-  .amplify-outer-bg { background:#0f1115 !important; }
-  .amplify-body-card { background:#1a1d23 !important; }
-  .amplify-body-card p, .amplify-body-card li { color:#e5e7eb !important; }
-  .amplify-body-card h1, .amplify-body-card h2, .amplify-body-card h3 { color:#ffffff !important; }
-  .amplify-body-card hr { border-top-color:#2d3138 !important; }
-  .amplify-body-card a { color:#5eead4 !important; }
-  .amplify-footer-meta { color:#a0a4ad !important; }
-  .amplify-footer-link { color:#a0a4ad !important; }
-  .amplify-banner-title { color:#ffffff !important; }
-  .amplify-banner-month { color:#9ae6d4 !important; }
-}
-.amplify-force-dark .amplify-outer-bg { background:#0f1115 !important; }
-.amplify-force-dark .amplify-body-card { background:#1a1d23 !important; }
-.amplify-force-dark .amplify-body-card p, .amplify-force-dark .amplify-body-card li { color:#e5e7eb !important; }
-.amplify-force-dark .amplify-body-card h1, .amplify-force-dark .amplify-body-card h2, .amplify-force-dark .amplify-body-card h3 { color:#ffffff !important; }
-.amplify-force-dark .amplify-body-card hr { border-top-color:#2d3138 !important; }
-.amplify-force-dark .amplify-body-card a { color:#5eead4 !important; }
-.amplify-force-dark .amplify-footer-meta { color:#a0a4ad !important; }
-.amplify-force-dark .amplify-footer-link { color:#a0a4ad !important; }
-.amplify-force-dark .amplify-banner-title { color:#ffffff !important; }
-.amplify-force-dark .amplify-banner-month { color:#9ae6d4 !important; }
-</style>"""
-
     banner_row = f"""<tr><td style="background:linear-gradient(135deg,#0f172a 0%,#1a1d23 60%,#0b3b33 100%);padding:32px;border-bottom:3px solid #00C9A7;">
-<div class="amplify-banner-month" style="color:#9ae6d4;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px;">{safe_banner_month}</div>
-<div class="amplify-banner-title" style="color:#ffffff;font-size:26px;font-weight:800;letter-spacing:-0.5px;line-height:1.2;">{safe_banner_title}</div>
+<div style="color:#9ae6d4;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px;">{safe_banner_month}</div>
+<div style="color:#ffffff;font-size:26px;font-weight:800;letter-spacing:-0.5px;line-height:1.2;">{safe_banner_title}</div>
 </td></tr>""" if has_banner else ""
     header_radius = "8px 8px 0 0" if has_banner else "8px 8px 0 0"
     body_radius = "0 0 8px 8px"
 
     final_html = f"""<!DOCTYPE html>
 <html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="color-scheme" content="light dark">
-<meta name="supported-color-schemes" content="light dark">
-{dark_mode_style_block}
-</head>
-<body class="amplify-outer-bg" style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" class="amplify-outer-bg" style="background:#f4f4f7;padding:24px 0;">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:24px 0;">
 <tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 <tr><td style="background:#1a1d23;padding:18px 32px;border-radius:{header_radius};">
 <span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">Chartmetric</span>
 </td></tr>
 {banner_row}
-<tr><td class="amplify-body-card" style="background:#ffffff;padding:32px;border-radius:{body_radius};">
+<tr><td style="background:#ffffff;padding:32px;border-radius:{body_radius};">
 {body_html}
 <hr style="border:none;border-top:1px solid #e8e8eb;margin:28px 0 16px 0;">
 {_render_footer_links_html(view_url, unsubscribe_placeholder)}
-<p class="amplify-footer-meta" style="margin:0;color:#999999;font-size:12px;line-height:1.6;">&copy; {_current_year()} Chartmetric, Inc.</p>
+<p style="margin:0;color:#999999;font-size:12px;line-height:1.6;">&copy; {_current_year()} Chartmetric, Inc.</p>
 </td></tr>
 </table>
 </td></tr>

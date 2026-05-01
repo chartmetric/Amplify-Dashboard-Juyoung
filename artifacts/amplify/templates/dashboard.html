@@ -763,66 +763,6 @@
             .btn-add-manual { padding: 6px 10px; font-size: 11px; }
             .manual-modal { max-width: 100%; }
         }
-
-        /* Email-sent confirmation modal. Mirrors the manual-modal
-           shell so it lines up with the rest of the dashboard, with a
-           green success treatment in the body. */
-        .email-sent-modal-overlay {
-            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 9999;
-            display: none; align-items: center; justify-content: center; padding: 20px;
-            animation: manualOverlayIn 0.15s ease-out;
-        }
-        .email-sent-modal-overlay.open { display: flex; }
-        .email-sent-modal {
-            background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
-            width: 100%; max-width: 460px; max-height: calc(100vh - 40px); display: flex; flex-direction: column;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-            animation: manualModalIn 0.2s cubic-bezier(.2,.9,.3,1);
-        }
-        .email-sent-modal-header {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 16px 20px; border-bottom: 1px solid var(--border);
-        }
-        .email-sent-modal-header h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); }
-        .email-sent-modal-close {
-            background: transparent; border: 0; color: var(--text-muted); font-size: 22px; line-height: 1;
-            cursor: pointer; padding: 0 4px; border-radius: 4px;
-        }
-        .email-sent-modal-close:hover { color: var(--text-primary); }
-        .email-sent-modal-body {
-            padding: 22px 24px 18px; overflow-y: auto;
-            display: flex; flex-direction: column; align-items: center; text-align: center;
-        }
-        .email-sent-modal-check {
-            width: 56px; height: 56px; border-radius: 50%;
-            background: var(--accent-bg-strong); color: var(--accent);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 30px; font-weight: 700; line-height: 1;
-            margin-bottom: 14px;
-            border: 1px solid rgba(0,201,167,0.35);
-        }
-        .email-sent-modal-recipient {
-            font-size: 14px; color: var(--text-body);
-            margin: 0 0 4px; word-break: break-word;
-        }
-        .email-sent-modal-detail {
-            font-size: 12px; color: var(--text-muted);
-            margin: 4px 0 0; word-break: break-word; line-height: 1.45;
-        }
-        .email-sent-modal-footer {
-            display: flex; justify-content: flex-end; gap: 10px;
-            padding: 14px 20px 18px; border-top: 1px solid var(--border);
-        }
-        .btn-email-sent-done {
-            border: 0; border-radius: 6px; padding: 9px 22px; font-size: 13px; font-weight: 600;
-            font-family: inherit; cursor: pointer; transition: opacity 0.15s, background-color 0.15s;
-            background: var(--accent); color: #0a1f1a;
-        }
-        .btn-email-sent-done:hover { opacity: 0.9; }
-        @media (max-width: 600px) {
-            .email-sent-modal { max-width: 100%; }
-        }
-
         @keyframes cardHighlight {
             0% { box-shadow: 0 0 0 2px rgba(0,201,167,0.6), 0 0 20px rgba(0,201,167,0.3); }
             100% { box-shadow: none; }
@@ -1877,12 +1817,6 @@
             <span class="subtitle">Product Marketing Autopilot</span>
         </div>
         <div class="topbar-right">
-            <button id="sweep-alert-pill" onclick="labOpenAttachmentsPanel()"
-                    title="Attachment auto-migration is failing — click for details"
-                    style="display:none;align-items:center;gap:6px;background:#fef2f2;color:#b91c1c;border:1px solid #fca5a5;padding:6px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;">
-                <span style="font-size:14px;">&#9888;</span>
-                <span id="sweep-alert-pill-label">Attachment sweep failing</span>
-            </button>
             <div class="lab-wrapper">
                 <button class="btn-lab" id="btn-lab" onclick="toggleLabDropdown()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v5.586a1 1 0 0 0 .293.707l5.414 5.414a2 2 0 0 1 .586 1.414V19a2 2 0 0 1-2 2H4.707a2 2 0 0 1-2-2v-2.879a2 2 0 0 1 .586-1.414l5.414-5.414A1 1 0 0 0 9 8.586V3z"/><line x1="9" y1="3" x2="15" y2="3"/></svg>
@@ -2122,24 +2056,6 @@
                         These features were silently downgraded by the input-quality guardrail (e.g. titles like ',etc.', '[Duplicate] ...', 'tbd', 'v16 -&gt; v17') so they don't pollute marketing output. If a real feature was caught here, click "Re-classify anyway" to bypass the guardrail and force a fresh AI classification for that one feature.
                     </p>
                     <div id="low-signal-list"></div>
-                </div>
-            </div>
-        </div>
-
-        <div id="email-sent-modal" class="email-sent-modal-overlay" onclick="onEmailSentModalOverlayClick(event)">
-            <div class="email-sent-modal" role="dialog" aria-labelledby="email-sent-modal-title" aria-modal="true">
-                <div class="email-sent-modal-header">
-                    <h2 id="email-sent-modal-title">Email sent</h2>
-                    <button type="button" class="email-sent-modal-close" onclick="closeEmailSentModal()" aria-label="Close">&times;</button>
-                </div>
-                <div class="email-sent-modal-body">
-                    <div class="email-sent-modal-check" aria-hidden="true">&#10003;</div>
-                    <p class="email-sent-modal-recipient" id="email-sent-modal-recipient"></p>
-                    <p class="email-sent-modal-detail" id="email-sent-modal-bcc" style="display:none;"></p>
-                    <p class="email-sent-modal-detail" id="email-sent-modal-features" style="display:none;"></p>
-                </div>
-                <div class="email-sent-modal-footer">
-                    <button type="button" class="btn-email-sent-done" onclick="closeEmailSentModal()">Done</button>
                 </div>
             </div>
         </div>
@@ -10089,17 +10005,22 @@ function doPublishToChannel(chKey) {
             trackPublish(fid2, chKey, 'posted');
             updateChannelStatus(chKey);
             var sentCount = data.count || 1;
-            // Show a deliberate confirmation modal (Task #123) instead
-            // of the auto-dismissing toast so the marketer can read the
-            // recipient + BCC details before dismissing.
-            var recipientLabel = sentCount > 2
-                ? sentCount + ' recipients'
-                : (data.to ? data.to : '');
-            showEmailSentModal({
-                recipientLabel: recipientLabel,
-                bccList: data.bcc || '',
-                bccCount: data.bcc_count || 0
-            });
+            var toastMsg = sentCount > 2
+                ? 'Email sent to ' + sentCount + ' recipients \u2705'
+                : (data.to ? 'Email sent to ' + data.to + ' \u2705' : 'Email sent successfully! \u2705');
+            // Append BCC info so the marketer can confirm at a glance
+            // exactly who was copied. Show the actual addresses when the
+            // list is short; collapse to a count for larger blasts.
+            var _bccCount = data.bcc_count || 0;
+            var _bccList = (data.bcc || '').trim();
+            if (_bccCount > 0 && _bccList) {
+                if (_bccCount <= 3) {
+                    toastMsg += ' (BCC: ' + _bccList + ')';
+                } else {
+                    toastMsg += ' (BCC: ' + _bccCount + ' recipients)';
+                }
+            }
+            showToast(toastMsg);
             if (data.skipped_videos && data.skipped_videos.length) {
                 showSkippedVideosNotice(data.skipped_videos);
             }
@@ -11213,43 +11134,22 @@ function saveCombinedAsDraft() {
     if (name === null) return;
     name = (name || '').trim() || defaultName;
     var snapshot = _collectCombinedDraftSnapshot();
-    // If the marketer opened this composer from an already-sent artifact
-    // (status='published'), clicking "Save as Draft" forks the content
-    // into a NEW draft row rather than demoting the original. That way
-    // the original sent artifact stays in My Content > Sent (preserving
-    // send history) and the marketer's edits land in My Content > Drafts
-    // where the Save-as-Draft button promised they'd appear.
-    var isFork = (window._currentDraftStatus === 'published');
-    var idToSend = isFork ? null : (window._currentDraftId || null);
     var btn = document.querySelector('.btn-save-draft');
     var originalText = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = 'Saving...'; }
     fetch('/api/email-drafts', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            name: name,
-            snapshot: snapshot,
-            id: idToSend,
-            // Always pin to 'draft' so the row lands in the Drafts bar /
-            // Drafts tab. For an existing draft this is a no-op; for a
-            // fork from a published artifact it ensures the new row
-            // starts as a draft.
-            status: 'draft'
-        })
+        body: JSON.stringify({ name: name, snapshot: snapshot, id: window._currentDraftId || null })
     })
     .then(function(r) { return r.json(); })
     .then(function(resp) {
         if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
         if (resp.error) { showToast('Save failed: ' + resp.error, 'error'); return; }
         window._currentDraftId = resp.id;
-        window._currentDraftStatus = 'draft';
         _setArtifactUrl(resp.id);
         refreshMyArtifactsCount();
-        var msg = isFork
-            ? ('Saved as new draft: ' + name + '. The original sent email is still in My Content > Sent. \u2705')
-            : ('Draft saved: ' + name + ' \u2705');
-        showToast(msg);
+        showToast('Draft saved: ' + name + ' \u2705');
     })
     .catch(function(err) {
         if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
@@ -11751,61 +11651,8 @@ function loadEmailDraft(id) {
         // Now jump to step 4 — renderCombinedPreview will see the populated list.
         prepGoToStep(4);
         setTimeout(_applyRestoredCombinedFields, 80);
-        // Server-side image rehydration: every locally uploaded image has
-        // already been POSTed to /api/publish/image keyed by feature_id
-        // at attach time, so we can fetch it back here when the snapshot
-        // didn't carry the dataUrl (which happens when the snapshot was
-        // saved before the upload completed, when the snapshot exceeded
-        // the size cap, or when the user uploaded after the last save).
-        // Without this fallback the [image: filename.png] marker survives
-        // in the body but renders as a broken image because prepBatchImages
-        // is empty after a hard refresh.
-        _rehydrateBatchImagesFromServer();
     })
     .catch(function(err) { showToast('Load failed: ' + err.message, 'error'); });
-}
-
-function _rehydrateBatchImagesFromServer() {
-    var results = prepBatchResults || [];
-    if (!results.length) return;
-    var pending = 0;
-    var landed = 0;
-    for (var i = 0; i < results.length; i++) {
-        var r = results[i] || {};
-        var fid = r.feature_id;
-        if (!fid) continue;
-        if (window.prepBatchImages && window.prepBatchImages[i]) continue;
-        (function(idx, featureId) {
-            pending++;
-            fetch('/api/publish/image/meta/' + encodeURIComponent(featureId))
-                .then(function(r) {
-                    if (r.status === 404) return null;
-                    if (!r.ok) return null;
-                    return r.json();
-                })
-                .then(function(meta) {
-                    if (!meta || !meta.exists || !meta.dataUrl) return;
-                    if (window.prepBatchImages && window.prepBatchImages[idx]) return;
-                    window.prepBatchImages = window.prepBatchImages || {};
-                    window.prepBatchImages[idx] = {
-                        name: meta.name || 'image',
-                        dataUrl: meta.dataUrl,
-                        size: 0,
-                        isGif: !!meta.isGif
-                    };
-                    landed++;
-                })
-                .catch(function() {})
-                .then(function() {
-                    pending--;
-                    // Refresh the live preview once everything has settled
-                    // so the iframe re-renders with the rehydrated images.
-                    if (pending === 0 && landed > 0 && typeof refreshCombinedEmailLivePreview === 'function') {
-                        refreshCombinedEmailLivePreview(true);
-                    }
-                });
-        })(i, fid);
-    }
 }
 
 function _applyRestoredCombinedFields() {
@@ -13659,25 +13506,6 @@ var _combinedEmailPreviewTimer = null;
 var _combinedEmailPreviewSeq = 0;
 var _combinedEmailPreviewView = 'desktop';
 
-// Apply or remove the `.amplify-force-dark` class on the rendered email
-// inside the live-preview iframe so the Dark toggle simulates what
-// dark-mode email clients (iOS Mail, Apple Mail, Outlook.com dark) show
-// recipients. The same overrides are also keyed off
-// `@media (prefers-color-scheme: dark)` in the email's <style> block, so
-// real recipients get the same rendering automatically.
-function _applyDarkClassToPreviewIframe() {
-    var iframe = document.getElementById('combined-email-live-preview');
-    if (!iframe) return;
-    var doc;
-    try { doc = iframe.contentDocument; } catch (_e) { return; }
-    if (!doc || !doc.documentElement) return;
-    if (_combinedEmailPreviewView === 'dark') {
-        doc.documentElement.classList.add('amplify-force-dark');
-    } else {
-        doc.documentElement.classList.remove('amplify-force-dark');
-    }
-}
-
 function setCombinedEmailPreviewView(mode) {
     if (mode !== 'desktop' && mode !== 'mobile' && mode !== 'dark') mode = 'desktop';
     _combinedEmailPreviewView = mode;
@@ -13686,14 +13514,6 @@ function setCombinedEmailPreviewView(mode) {
     var toggles = document.getElementById('combined-email-preview-toggles');
     if (iframe) {
         iframe.style.maxWidth = (mode === 'mobile') ? '375px' : '640px';
-        // Bind once: each new srcdoc replaces the iframe document, so we
-        // re-apply whichever mode is active after every load.
-        if (!iframe._amplifyDarkBound) {
-            iframe.addEventListener('load', _applyDarkClassToPreviewIframe);
-            iframe._amplifyDarkBound = true;
-        }
-        // Apply immediately for instant toggle without waiting for a re-render.
-        _applyDarkClassToPreviewIframe();
     }
     if (frame) {
         frame.style.background = (mode === 'dark') ? '#1a1a1a' : '#f1f3f5';
@@ -14309,12 +14129,6 @@ function downloadCombinedEmail() {
 }
 
 var combinedEmailPublishInFlight = false;
-// Tracks whether the combined email has been successfully sent at least
-// once during this Step 4 session, so the Publish button can flip to
-// "Republish Email" (enabled) instead of being permanently disabled
-// after the first successful send. Reset on each fresh navigation to
-// Step 4 (matches today's per-channel "Resend Email" recovery path).
-var combinedEmailPublishedOnce = false;
 
 function publishCombinedEmail() {
     if (combinedEmailPublishInFlight) { showToast('Already sending... please wait', 'warning'); return; }
@@ -14452,12 +14266,6 @@ function publishCombinedEmail() {
         combinedEmailPublishInFlight = true;
         var btn = document.querySelector('.btn-publish-combined-email');
         if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
-        // Idle/recovery label depends on whether this combined email was
-        // already sent at least once in this session — matches the
-        // per-channel "Resend Email" pattern (Task #127).
-        var idleLabel = combinedEmailPublishedOnce
-            ? 'Republish Email \uD83D\uDCE7'
-            : 'Publish Email \uD83D\uDCE7';
         fetch('/api/publish/email', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -14466,7 +14274,7 @@ function publishCombinedEmail() {
         .then(function(r) { return r.json(); })
         .then(function(resp) {
             combinedEmailPublishInFlight = false;
-            if (btn) { btn.disabled = false; btn.textContent = idleLabel; }
+            if (btn) { btn.disabled = false; btn.textContent = 'Publish Email \uD83D\uDCE7'; }
             if (!resp.success) {
                 if ((resp.missing_images && resp.missing_images.length) ||
                     (resp.missing_videos && resp.missing_videos.length)) {
@@ -14507,10 +14315,9 @@ function publishCombinedEmail() {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ name: name, snapshot: snapshot, id: window._currentDraftId || null, status: 'published' })
                 })
-                .then(function(r) { return r.json().then(function(j) { return {ok: r.ok, j: j}; }); })
-                .then(function(res) {
-                    var s = res.j || {};
-                    if (res.ok && s.id) {
+                .then(function(r) { return r.json(); })
+                .then(function(s) {
+                    if (s && s.id) {
                         window._currentDraftId = s.id;
                         _setArtifactUrl(s.id);
                         fetch('/api/email-drafts/' + encodeURIComponent(s.id) + '/mark-published', {
@@ -14518,43 +14325,35 @@ function publishCombinedEmail() {
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({ recipient_count: resp.count || 0 })
                         }).then(function() { refreshMyArtifactsCount(); }).catch(function() {});
-                    } else if (s.error) {
-                        // Snapshot save failed (e.g. 413 oversized). The email
-                        // already sent, but the published artifact's saved
-                        // snapshot may be stale, so its inline screenshots
-                        // could appear broken on later page refresh.
-                        showToast('Email sent, but saving the artifact failed: ' + s.error
-                            + '. Inline screenshots may not appear when reopening this artifact.', 'warning');
                     }
                 })
                 .catch(function() {});
             })();
             var sentCount = resp.count || 1;
-            // Same deliberate confirmation modal as the per-channel
-            // send path (Task #123). The "N features marked published"
-            // detail rides along on its own line instead of being
-            // appended to the recipient string.
-            var recipientLabel2 = sentCount > 2
-                ? sentCount + ' recipients'
-                : (resp.to ? resp.to : '');
-            showEmailSentModal({
-                recipientLabel: recipientLabel2,
-                bccList: resp.bcc || '',
-                bccCount: resp.bcc_count || 0,
-                featuresMarkedCount: items.length
-            });
+            var _featSuffix = ' (' + items.length + ' features marked published)';
+            var toastMsg = sentCount > 2
+                ? 'Email sent to ' + sentCount + ' recipients \u2705' + _featSuffix
+                : (resp.to ? 'Email sent to ' + resp.to + ' \u2705' + _featSuffix : 'Email sent! \u2705' + _featSuffix);
+            // Same BCC surfacing as the per-channel send path: list the
+            // BCCs when small enough to read, otherwise just the count.
+            var _bccCount2 = resp.bcc_count || 0;
+            var _bccList2 = (resp.bcc || '').trim();
+            if (_bccCount2 > 0 && _bccList2) {
+                if (_bccCount2 <= 3) {
+                    toastMsg += ' (BCC: ' + _bccList2 + ')';
+                } else {
+                    toastMsg += ' (BCC: ' + _bccCount2 + ' recipients)';
+                }
+            }
+            showToast(toastMsg);
             if (resp.skipped_videos && resp.skipped_videos.length) {
                 showSkippedVideosNotice(resp.skipped_videos);
             }
-            // Successful send — flip the button to "Republish Email"
-            // (still enabled) so the marketer can fire the same combined
-            // send again without bouncing back through Step 3 (Task #127).
-            combinedEmailPublishedOnce = true;
-            if (btn) { btn.textContent = 'Republish Email \uD83D\uDCE7'; btn.disabled = false; }
+            if (btn) { btn.textContent = 'Published \u2705'; btn.disabled = true; }
         })
         .catch(function(err) {
             combinedEmailPublishInFlight = false;
-            if (btn) { btn.disabled = false; btn.textContent = idleLabel; }
+            if (btn) { btn.disabled = false; btn.textContent = 'Publish Email \uD83D\uDCE7'; }
             showToast('Error sending email: ' + err.message, 'error');
         });
     }, { title: 'Send Combined Email', icon: '\uD83D\uDCE7', confirmText: 'Yes, send it', isHtml: true });
@@ -15411,87 +15210,6 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// Modal shown after a successful email send (single-channel
-// `doPublishToChannel` and combined `publishCombinedEmail`). Replaces
-// the previous auto-dismissing success toast so the marketer can read
-// the recipient/BCC details and dismiss deliberately. Other toasts
-// (errors, warnings, classification updates, etc.) are unchanged.
-//
-// opts:
-//   recipientLabel (string, required) - rendered as "Sent to <label>".
-//                                       e.g. "juyoung@chartmetric.com"
-//                                       or "5 recipients".
-//   bccList (string, optional)        - comma-separated BCC addresses.
-//   bccCount (number, optional)       - number of BCC recipients. When
-//                                       <= 3 the list is shown verbatim,
-//                                       otherwise we collapse to a count
-//                                       (matches the old toast format).
-//   featuresMarkedCount (number, opt) - combined-send only. Renders the
-//                                       "N features marked published"
-//                                       line on its own.
-function showEmailSentModal(opts) {
-    opts = opts || {};
-    var modal = document.getElementById('email-sent-modal');
-    if (!modal) return;
-
-    var recipientEl = document.getElementById('email-sent-modal-recipient');
-    var bccEl = document.getElementById('email-sent-modal-bcc');
-    var featEl = document.getElementById('email-sent-modal-features');
-
-    var recipientLabel = opts.recipientLabel || '';
-    if (recipientEl) {
-        recipientEl.textContent = recipientLabel ? ('Sent to ' + recipientLabel) : 'Email sent successfully';
-    }
-
-    var bccCount = opts.bccCount || 0;
-    var bccList = (opts.bccList || '').trim();
-    if (bccEl) {
-        if (bccCount > 0 && bccList) {
-            if (bccCount <= 3) {
-                bccEl.textContent = 'BCC: ' + bccList;
-            } else {
-                bccEl.textContent = 'BCC: ' + bccCount + ' recipients';
-            }
-            bccEl.style.display = '';
-        } else {
-            bccEl.textContent = '';
-            bccEl.style.display = 'none';
-        }
-    }
-
-    var featCount = opts.featuresMarkedCount || 0;
-    if (featEl) {
-        if (featCount > 0) {
-            featEl.textContent = featCount + ' feature' + (featCount === 1 ? '' : 's') + ' marked published';
-            featEl.style.display = '';
-        } else {
-            featEl.textContent = '';
-            featEl.style.display = 'none';
-        }
-    }
-
-    modal.classList.add('open');
-    var doneBtn = modal.querySelector('.btn-email-sent-done');
-    setTimeout(function() { if (doneBtn) doneBtn.focus(); }, 60);
-}
-
-function closeEmailSentModal() {
-    var modal = document.getElementById('email-sent-modal');
-    if (modal) modal.classList.remove('open');
-}
-
-function onEmailSentModalOverlayClick(e) {
-    if (e.target && e.target.id === 'email-sent-modal') {
-        closeEmailSentModal();
-    }
-}
-
-document.addEventListener('keydown', function(e) {
-    var modal = document.getElementById('email-sent-modal');
-    if (!modal || !modal.classList.contains('open')) return;
-    if (e.key === 'Escape') { e.preventDefault(); closeEmailSentModal(); }
-});
-
 function showToast(msg, typeOrWarning) {
     var type = 'success';
     if (typeOrWarning === true || typeOrWarning === 'warning') type = 'warning';
@@ -15926,76 +15644,7 @@ function _attachRender(data) {
     var secrets = data.secrets_present || {};
     var pending = data.pending || {};
     var recent = data.recent || [];
-    var sweep = data.auto_sweep || {};
-    var alert = sweep.alert || {};
     var html = '';
-
-    // Auto-migration alert banner — sits above everything else so a
-    // failing sweep can't be missed even if the operator was just
-    // looking up pending counts.
-    if (alert.active || alert.silenced) {
-        var bannerColor = alert.silenced ? '#fffbeb' : '#fef2f2';
-        var bannerBorder = alert.silenced ? '#fcd34d' : '#fca5a5';
-        var bannerText = alert.silenced ? '#92400e' : '#991b1b';
-        var icon = alert.silenced ? '&#128263;' : '&#9888;';
-        var headline = alert.silenced
-            ? 'Auto-migration alert silenced'
-            : 'Auto-migration is failing';
-        var failures = alert.consecutive_failures || 0;
-        var threshold = alert.threshold || 0;
-        var detail = failures + ' consecutive failed cycle' + (failures === 1 ? '' : 's')
-            + (threshold ? ' (threshold ' + threshold + ')' : '');
-        var lastErr = alert.last_error || sweep.last_error || '';
-        var kindErrs = alert.kind_errors || {};
-        var kindList = Object.keys(kindErrs);
-        html += '<div style="margin-bottom:14px;padding:12px 14px;border:1px solid ' + bannerBorder
-            + ';border-radius:8px;background:' + bannerColor + ';color:' + bannerText + ';">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">';
-        html += '<div>';
-        html += '<div style="font-weight:700;font-size:14px;margin-bottom:4px;">' + icon + ' ' + headline + '</div>';
-        html += '<div style="font-size:12px;line-height:1.5;">' + detail;
-        if (alert.first_seen_at) {
-            try {
-                html += ' &middot; first seen ' + new Date(alert.first_seen_at * 1000).toLocaleString();
-            } catch (e) {}
-        }
-        html += '</div>';
-        if (lastErr) {
-            html += '<div style="margin-top:6px;font-size:12px;font-family:ui-monospace,monospace;word-break:break-word;"><b>Last error:</b> '
-                + (lastErr + '').replace(/</g, '&lt;') + '</div>';
-        }
-        if (kindList.length) {
-            var parts = [];
-            for (var ki = 0; ki < kindList.length; ki++) {
-                parts.push(kindList[ki] + '=' + kindErrs[kindList[ki]]);
-            }
-            html += '<div style="margin-top:6px;font-size:12px;"><b>Affected kinds:</b> ' + parts.join(', ') + '</div>';
-        }
-        if (alert.silenced && alert.silenced_until) {
-            try {
-                html += '<div style="margin-top:6px;font-size:12px;">Silenced until '
-                    + new Date(alert.silenced_until * 1000).toLocaleString() + '.</div>';
-            } catch (e) {}
-        }
-        if (alert.webhook_configured) {
-            var notif = alert.last_notification_kind
-                ? ('last ping: ' + alert.last_notification_kind
-                   + (alert.last_notification_error ? ' (failed: ' + alert.last_notification_error + ')' : ' (ok)'))
-                : 'no pings yet this process';
-            html += '<div style="margin-top:6px;font-size:11px;opacity:0.8;">Ops webhook configured &middot; ' + notif + '.</div>';
-        }
-        html += '</div>';
-        html += '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">';
-        if (!alert.silenced) {
-            html += '<button id="sweep-silence-btn" style="padding:5px 10px;border-radius:6px;border:1px solid ' + bannerBorder
-                + ';background:#fff;color:' + bannerText + ';cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;">Silence 1h</button>';
-        }
-        html += '<button id="sweep-clear-btn" style="padding:5px 10px;border-radius:6px;border:1px solid ' + bannerBorder
-            + ';background:#fff;color:' + bannerText + ';cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;">Clear alert</button>';
-        html += '</div>';
-        html += '</div></div>';
-    }
-
     html += '<div style="margin-bottom:14px;padding:10px 12px;border:1px solid var(--border,#e5e5e5);border-radius:8px;">';
     html += '<div><b>Backend:</b> ' + (data.backend || 'local');
     html += ' &nbsp; <b>S3 enabled:</b> ' + (data.s3_enabled ? '<span style="color:#0a8a3a;">yes</span>' : '<span style="color:#b54;">no</span>');
@@ -16055,121 +15704,6 @@ function _attachRender(data) {
     for (var b = 0; b < btns.length; b++) {
         btns[b].onclick = function(ev) { _attachBackfill(ev.currentTarget.getAttribute('data-kind')); };
     }
-    var silenceBtn = document.getElementById('sweep-silence-btn');
-    if (silenceBtn) silenceBtn.onclick = function() { _attachSweepSilence(60); };
-    var clearBtn = document.getElementById('sweep-clear-btn');
-    if (clearBtn) clearBtn.onclick = function() { _attachSweepClear(); };
-
-    // Refresh the topbar pill state in case the panel was the trigger
-    // for the operator's first visit since the alert latched.
-    _attachUpdateAlertPill(data);
-}
-
-function _attachSweepSilence(minutes) {
-    var token = _attachAdminToken();
-    if (!token) return;
-    fetch('/api/admin/attachments/sweep/silence', {
-        method: 'POST',
-        headers: { 'X-Admin-Token': token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ minutes: minutes })
-    })
-        .then(function(r) { return r.json(); })
-        .then(function() { _attachLoadStatus(); _attachPollAlertPill(); })
-        .catch(function(e) { window.alert('Silence failed: ' + (e.message || e)); });
-}
-
-function _attachSweepClear() {
-    var token = _attachAdminToken();
-    if (!token) return;
-    fetch('/api/admin/attachments/sweep/clear', {
-        method: 'POST',
-        headers: { 'X-Admin-Token': token, 'Content-Type': 'application/json' },
-        body: '{}'
-    })
-        .then(function(r) { return r.json(); })
-        .then(function() { _attachLoadStatus(); _attachPollAlertPill(); })
-        .catch(function(e) { window.alert('Clear failed: ' + (e.message || e)); });
-}
-
-// ----------------------------------------------------------------------
-// Topbar warning pill — polls /api/admin/attachments/status only when
-// the operator has already entered the admin token (we never want to
-// pop a token-prompt on dashboard load just to drive a tiny indicator).
-// ----------------------------------------------------------------------
-function _attachStoredAdminToken() {
-    try { return localStorage.getItem('amplify_admin_token') || ''; } catch (e) { return ''; }
-}
-
-function _attachUpdateAlertPill(data) {
-    var pill = document.getElementById('sweep-alert-pill');
-    var labStatus = document.getElementById('lab-attachments-status');
-    var alert = (data && data.auto_sweep && data.auto_sweep.alert) || null;
-    if (pill) {
-        if (alert && alert.visible) {
-            pill.style.display = 'inline-flex';
-            var failures = alert.consecutive_failures || 0;
-            var label = document.getElementById('sweep-alert-pill-label');
-            if (label) {
-                label.textContent = 'Sweep failing (' + failures + ')';
-            }
-        } else {
-            pill.style.display = 'none';
-        }
-    }
-    if (labStatus) {
-        if (alert && alert.visible) {
-            labStatus.textContent = 'ALERT';
-            labStatus.className = 'lab-item-status';
-            labStatus.style.color = '#b91c1c';
-            labStatus.style.fontWeight = '700';
-        } else if (alert && alert.silenced) {
-            labStatus.textContent = 'silenced';
-            labStatus.className = 'lab-item-status';
-            labStatus.style.color = '#92400e';
-            labStatus.style.fontWeight = '600';
-        } else {
-            labStatus.textContent = '';
-            labStatus.className = 'lab-item-status';
-            labStatus.style.color = '';
-            labStatus.style.fontWeight = '';
-        }
-    }
-}
-
-function _attachPollAlertPill() {
-    var token = _attachStoredAdminToken();
-    if (!token) {
-        // No saved token — don't pester the operator with a prompt; the
-        // attachments panel is the canonical source of alert state for
-        // first-time visits.
-        _attachUpdateAlertPill(null);
-        return;
-    }
-    fetch('/api/admin/attachments/status', { headers: { 'X-Admin-Token': token } })
-        .then(function(r) {
-            if (!r.ok) {
-                if (r.status === 401) {
-                    try { localStorage.removeItem('amplify_admin_token'); } catch (e) {}
-                }
-                return null;
-            }
-            return r.json();
-        })
-        .then(function(data) { _attachUpdateAlertPill(data); })
-        .catch(function() { /* network blip — try again next tick */ });
-}
-
-function _attachStartAlertPolling() {
-    _attachPollAlertPill();
-    // 60s poll lines up with typical sweep cadence (default 600s) and
-    // keeps the dashboard from hammering the admin endpoint.
-    setInterval(_attachPollAlertPill, 60000);
-}
-
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', _attachStartAlertPolling);
-} else {
-    _attachStartAlertPolling();
 }
 
 function _attachBackfill(kind) {
