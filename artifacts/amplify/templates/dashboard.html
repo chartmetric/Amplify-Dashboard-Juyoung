@@ -763,6 +763,66 @@
             .btn-add-manual { padding: 6px 10px; font-size: 11px; }
             .manual-modal { max-width: 100%; }
         }
+
+        /* Email-sent confirmation modal. Mirrors the manual-modal
+           shell so it lines up with the rest of the dashboard, with a
+           green success treatment in the body. */
+        .email-sent-modal-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 9999;
+            display: none; align-items: center; justify-content: center; padding: 20px;
+            animation: manualOverlayIn 0.15s ease-out;
+        }
+        .email-sent-modal-overlay.open { display: flex; }
+        .email-sent-modal {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+            width: 100%; max-width: 460px; max-height: calc(100vh - 40px); display: flex; flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: manualModalIn 0.2s cubic-bezier(.2,.9,.3,1);
+        }
+        .email-sent-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; border-bottom: 1px solid var(--border);
+        }
+        .email-sent-modal-header h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); }
+        .email-sent-modal-close {
+            background: transparent; border: 0; color: var(--text-muted); font-size: 22px; line-height: 1;
+            cursor: pointer; padding: 0 4px; border-radius: 4px;
+        }
+        .email-sent-modal-close:hover { color: var(--text-primary); }
+        .email-sent-modal-body {
+            padding: 22px 24px 18px; overflow-y: auto;
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+        }
+        .email-sent-modal-check {
+            width: 56px; height: 56px; border-radius: 50%;
+            background: var(--accent-bg-strong); color: var(--accent);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 30px; font-weight: 700; line-height: 1;
+            margin-bottom: 14px;
+            border: 1px solid rgba(0,201,167,0.35);
+        }
+        .email-sent-modal-recipient {
+            font-size: 14px; color: var(--text-body);
+            margin: 0 0 4px; word-break: break-word;
+        }
+        .email-sent-modal-detail {
+            font-size: 12px; color: var(--text-muted);
+            margin: 4px 0 0; word-break: break-word; line-height: 1.45;
+        }
+        .email-sent-modal-footer {
+            display: flex; justify-content: flex-end; gap: 10px;
+            padding: 14px 20px 18px; border-top: 1px solid var(--border);
+        }
+        .btn-email-sent-done {
+            border: 0; border-radius: 6px; padding: 9px 22px; font-size: 13px; font-weight: 600;
+            font-family: inherit; cursor: pointer; transition: opacity 0.15s, background-color 0.15s;
+            background: var(--accent); color: #0a1f1a;
+        }
+        .btn-email-sent-done:hover { opacity: 0.9; }
+        @media (max-width: 600px) {
+            .email-sent-modal { max-width: 100%; }
+        }
+
         @keyframes cardHighlight {
             0% { box-shadow: 0 0 0 2px rgba(0,201,167,0.6), 0 0 20px rgba(0,201,167,0.3); }
             100% { box-shadow: none; }
@@ -2062,6 +2122,24 @@
                         These features were silently downgraded by the input-quality guardrail (e.g. titles like ',etc.', '[Duplicate] ...', 'tbd', 'v16 -&gt; v17') so they don't pollute marketing output. If a real feature was caught here, click "Re-classify anyway" to bypass the guardrail and force a fresh AI classification for that one feature.
                     </p>
                     <div id="low-signal-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="email-sent-modal" class="email-sent-modal-overlay" onclick="onEmailSentModalOverlayClick(event)">
+            <div class="email-sent-modal" role="dialog" aria-labelledby="email-sent-modal-title" aria-modal="true">
+                <div class="email-sent-modal-header">
+                    <h2 id="email-sent-modal-title">Email sent</h2>
+                    <button type="button" class="email-sent-modal-close" onclick="closeEmailSentModal()" aria-label="Close">&times;</button>
+                </div>
+                <div class="email-sent-modal-body">
+                    <div class="email-sent-modal-check" aria-hidden="true">&#10003;</div>
+                    <p class="email-sent-modal-recipient" id="email-sent-modal-recipient"></p>
+                    <p class="email-sent-modal-detail" id="email-sent-modal-bcc" style="display:none;"></p>
+                    <p class="email-sent-modal-detail" id="email-sent-modal-features" style="display:none;"></p>
+                </div>
+                <div class="email-sent-modal-footer">
+                    <button type="button" class="btn-email-sent-done" onclick="closeEmailSentModal()">Done</button>
                 </div>
             </div>
         </div>
@@ -10011,22 +10089,17 @@ function doPublishToChannel(chKey) {
             trackPublish(fid2, chKey, 'posted');
             updateChannelStatus(chKey);
             var sentCount = data.count || 1;
-            var toastMsg = sentCount > 2
-                ? 'Email sent to ' + sentCount + ' recipients \u2705'
-                : (data.to ? 'Email sent to ' + data.to + ' \u2705' : 'Email sent successfully! \u2705');
-            // Append BCC info so the marketer can confirm at a glance
-            // exactly who was copied. Show the actual addresses when the
-            // list is short; collapse to a count for larger blasts.
-            var _bccCount = data.bcc_count || 0;
-            var _bccList = (data.bcc || '').trim();
-            if (_bccCount > 0 && _bccList) {
-                if (_bccCount <= 3) {
-                    toastMsg += ' (BCC: ' + _bccList + ')';
-                } else {
-                    toastMsg += ' (BCC: ' + _bccCount + ' recipients)';
-                }
-            }
-            showToast(toastMsg);
+            // Show a deliberate confirmation modal (Task #123) instead
+            // of the auto-dismissing toast so the marketer can read the
+            // recipient + BCC details before dismissing.
+            var recipientLabel = sentCount > 2
+                ? sentCount + ' recipients'
+                : (data.to ? data.to : '');
+            showEmailSentModal({
+                recipientLabel: recipientLabel,
+                bccList: data.bcc || '',
+                bccCount: data.bcc_count || 0
+            });
             if (data.skipped_videos && data.skipped_videos.length) {
                 showSkippedVideosNotice(data.skipped_videos);
             }
@@ -14363,22 +14436,19 @@ function publishCombinedEmail() {
                 .catch(function() {});
             })();
             var sentCount = resp.count || 1;
-            var _featSuffix = ' (' + items.length + ' features marked published)';
-            var toastMsg = sentCount > 2
-                ? 'Email sent to ' + sentCount + ' recipients \u2705' + _featSuffix
-                : (resp.to ? 'Email sent to ' + resp.to + ' \u2705' + _featSuffix : 'Email sent! \u2705' + _featSuffix);
-            // Same BCC surfacing as the per-channel send path: list the
-            // BCCs when small enough to read, otherwise just the count.
-            var _bccCount2 = resp.bcc_count || 0;
-            var _bccList2 = (resp.bcc || '').trim();
-            if (_bccCount2 > 0 && _bccList2) {
-                if (_bccCount2 <= 3) {
-                    toastMsg += ' (BCC: ' + _bccList2 + ')';
-                } else {
-                    toastMsg += ' (BCC: ' + _bccCount2 + ' recipients)';
-                }
-            }
-            showToast(toastMsg);
+            // Same deliberate confirmation modal as the per-channel
+            // send path (Task #123). The "N features marked published"
+            // detail rides along on its own line instead of being
+            // appended to the recipient string.
+            var recipientLabel2 = sentCount > 2
+                ? sentCount + ' recipients'
+                : (resp.to ? resp.to : '');
+            showEmailSentModal({
+                recipientLabel: recipientLabel2,
+                bccList: resp.bcc || '',
+                bccCount: resp.bcc_count || 0,
+                featuresMarkedCount: items.length
+            });
             if (resp.skipped_videos && resp.skipped_videos.length) {
                 showSkippedVideosNotice(resp.skipped_videos);
             }
@@ -15241,6 +15311,87 @@ document.addEventListener('click', function(e) {
     if (!e.target.closest('.custom-dropdown')) {
         document.querySelectorAll('.custom-dropdown-menu.open').forEach(function(m) { m.classList.remove('open'); });
     }
+});
+
+// Modal shown after a successful email send (single-channel
+// `doPublishToChannel` and combined `publishCombinedEmail`). Replaces
+// the previous auto-dismissing success toast so the marketer can read
+// the recipient/BCC details and dismiss deliberately. Other toasts
+// (errors, warnings, classification updates, etc.) are unchanged.
+//
+// opts:
+//   recipientLabel (string, required) - rendered as "Sent to <label>".
+//                                       e.g. "juyoung@chartmetric.com"
+//                                       or "5 recipients".
+//   bccList (string, optional)        - comma-separated BCC addresses.
+//   bccCount (number, optional)       - number of BCC recipients. When
+//                                       <= 3 the list is shown verbatim,
+//                                       otherwise we collapse to a count
+//                                       (matches the old toast format).
+//   featuresMarkedCount (number, opt) - combined-send only. Renders the
+//                                       "N features marked published"
+//                                       line on its own.
+function showEmailSentModal(opts) {
+    opts = opts || {};
+    var modal = document.getElementById('email-sent-modal');
+    if (!modal) return;
+
+    var recipientEl = document.getElementById('email-sent-modal-recipient');
+    var bccEl = document.getElementById('email-sent-modal-bcc');
+    var featEl = document.getElementById('email-sent-modal-features');
+
+    var recipientLabel = opts.recipientLabel || '';
+    if (recipientEl) {
+        recipientEl.textContent = recipientLabel ? ('Sent to ' + recipientLabel) : 'Email sent successfully';
+    }
+
+    var bccCount = opts.bccCount || 0;
+    var bccList = (opts.bccList || '').trim();
+    if (bccEl) {
+        if (bccCount > 0 && bccList) {
+            if (bccCount <= 3) {
+                bccEl.textContent = 'BCC: ' + bccList;
+            } else {
+                bccEl.textContent = 'BCC: ' + bccCount + ' recipients';
+            }
+            bccEl.style.display = '';
+        } else {
+            bccEl.textContent = '';
+            bccEl.style.display = 'none';
+        }
+    }
+
+    var featCount = opts.featuresMarkedCount || 0;
+    if (featEl) {
+        if (featCount > 0) {
+            featEl.textContent = featCount + ' feature' + (featCount === 1 ? '' : 's') + ' marked published';
+            featEl.style.display = '';
+        } else {
+            featEl.textContent = '';
+            featEl.style.display = 'none';
+        }
+    }
+
+    modal.classList.add('open');
+    var doneBtn = modal.querySelector('.btn-email-sent-done');
+    setTimeout(function() { if (doneBtn) doneBtn.focus(); }, 60);
+}
+
+function closeEmailSentModal() {
+    var modal = document.getElementById('email-sent-modal');
+    if (modal) modal.classList.remove('open');
+}
+
+function onEmailSentModalOverlayClick(e) {
+    if (e.target && e.target.id === 'email-sent-modal') {
+        closeEmailSentModal();
+    }
+}
+
+document.addEventListener('keydown', function(e) {
+    var modal = document.getElementById('email-sent-modal');
+    if (!modal || !modal.classList.contains('open')) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeEmailSentModal(); }
 });
 
 function showToast(msg, typeOrWarning) {
