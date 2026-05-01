@@ -14309,6 +14309,12 @@ function downloadCombinedEmail() {
 }
 
 var combinedEmailPublishInFlight = false;
+// Tracks whether the combined email has been successfully sent at least
+// once during this Step 4 session, so the Publish button can flip to
+// "Republish Email" (enabled) instead of being permanently disabled
+// after the first successful send. Reset on each fresh navigation to
+// Step 4 (matches today's per-channel "Resend Email" recovery path).
+var combinedEmailPublishedOnce = false;
 
 function publishCombinedEmail() {
     if (combinedEmailPublishInFlight) { showToast('Already sending... please wait', 'warning'); return; }
@@ -14446,6 +14452,12 @@ function publishCombinedEmail() {
         combinedEmailPublishInFlight = true;
         var btn = document.querySelector('.btn-publish-combined-email');
         if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+        // Idle/recovery label depends on whether this combined email was
+        // already sent at least once in this session — matches the
+        // per-channel "Resend Email" pattern (Task #127).
+        var idleLabel = combinedEmailPublishedOnce
+            ? 'Republish Email \uD83D\uDCE7'
+            : 'Publish Email \uD83D\uDCE7';
         fetch('/api/publish/email', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -14454,7 +14466,7 @@ function publishCombinedEmail() {
         .then(function(r) { return r.json(); })
         .then(function(resp) {
             combinedEmailPublishInFlight = false;
-            if (btn) { btn.disabled = false; btn.textContent = 'Publish Email \uD83D\uDCE7'; }
+            if (btn) { btn.disabled = false; btn.textContent = idleLabel; }
             if (!resp.success) {
                 if ((resp.missing_images && resp.missing_images.length) ||
                     (resp.missing_videos && resp.missing_videos.length)) {
@@ -14534,11 +14546,15 @@ function publishCombinedEmail() {
             if (resp.skipped_videos && resp.skipped_videos.length) {
                 showSkippedVideosNotice(resp.skipped_videos);
             }
-            if (btn) { btn.textContent = 'Published \u2705'; btn.disabled = true; }
+            // Successful send — flip the button to "Republish Email"
+            // (still enabled) so the marketer can fire the same combined
+            // send again without bouncing back through Step 3 (Task #127).
+            combinedEmailPublishedOnce = true;
+            if (btn) { btn.textContent = 'Republish Email \uD83D\uDCE7'; btn.disabled = false; }
         })
         .catch(function(err) {
             combinedEmailPublishInFlight = false;
-            if (btn) { btn.disabled = false; btn.textContent = 'Publish Email \uD83D\uDCE7'; }
+            if (btn) { btn.disabled = false; btn.textContent = idleLabel; }
             showToast('Error sending email: ' + err.message, 'error');
         });
     }, { title: 'Send Combined Email', icon: '\uD83D\uDCE7', confirmText: 'Yes, send it', isHtml: true });
