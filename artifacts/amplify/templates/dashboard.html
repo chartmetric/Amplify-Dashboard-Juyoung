@@ -2453,7 +2453,8 @@
                 <button onclick="closeMyArtifacts()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;">&#10005;</button>
             </div>
             <div style="padding:14px 22px 8px;display:flex;gap:8px;align-items:center;">
-                <button id="my-art-tab-draft" class="cat-filter-pill active" onclick="setMyArtifactsTab('draft')" style="cursor:pointer;">Drafts <span id="my-art-count-draft" style="margin-left:4px;color:var(--text-muted);"></span></button>
+                <button id="my-art-tab-all" class="cat-filter-pill active" onclick="setMyArtifactsTab('all')" style="cursor:pointer;">All <span id="my-art-count-all" style="margin-left:4px;color:var(--text-muted);"></span></button>
+                <button id="my-art-tab-draft" class="cat-filter-pill" onclick="setMyArtifactsTab('draft')" style="cursor:pointer;">Drafts <span id="my-art-count-draft" style="margin-left:4px;color:var(--text-muted);"></span></button>
                 <button id="my-art-tab-published" class="cat-filter-pill" onclick="setMyArtifactsTab('published')" style="cursor:pointer;">Artifacts <span id="my-art-count-published" style="margin-left:4px;color:var(--text-muted);"></span></button>
                 <button id="my-art-tab-downloaded" class="cat-filter-pill" onclick="setMyArtifactsTab('downloaded')" style="cursor:pointer;">Downloaded <span id="my-art-count-downloaded" style="margin-left:4px;color:var(--text-muted);"></span></button>
             </div>
@@ -11294,9 +11295,10 @@ function openMyArtifacts() {
     var modal = document.getElementById('my-artifacts-modal');
     if (!modal) return;
     modal.style.display = 'flex';
-    // Always re-open on Drafts (in-progress work) per the My Content
-    // contract, regardless of which tab the user last left active.
-    setMyArtifactsTab('draft');
+    // Always re-open on the combined "All" view (artifacts on top,
+    // drafts below) per the My Content contract, regardless of which
+    // tab the user last left active.
+    setMyArtifactsTab('all');
     fetch('/api/email-drafts').then(function(r) { return r.json(); }).then(function(data) {
         window._myArtifactsCache = (data && data.drafts) || [];
         renderMyArtifactsList();
@@ -11309,9 +11311,9 @@ function closeMyArtifacts() {
 }
 
 function setMyArtifactsTab(tab) {
-    if (tab !== 'draft' && tab !== 'published' && tab !== 'downloaded') tab = 'draft';
+    if (tab !== 'all' && tab !== 'draft' && tab !== 'published' && tab !== 'downloaded') tab = 'all';
     window._myArtifactsTab = tab;
-    ['draft','published','downloaded'].forEach(function(t) {
+    ['all','draft','published','downloaded'].forEach(function(t) {
         var el = document.getElementById('my-art-tab-' + t);
         if (el) {
             if (t === tab) el.classList.add('active'); else el.classList.remove('active');
@@ -11461,12 +11463,14 @@ function renderMyArtifactsList() {
         if (s === 'published') counts.published++; else counts.draft++;
         if (all[i].downloaded_ts) counts.downloaded++;
     }
-    ['draft','published','downloaded'].forEach(function(t) {
+    ['all','draft','published','downloaded'].forEach(function(t) {
         var c = document.getElementById('my-art-count-' + t);
-        if (c) c.textContent = '(' + counts[t] + ')';
+        if (!c) return;
+        if (t === 'all') c.textContent = '(' + (counts.draft + counts.published) + ')';
+        else c.textContent = '(' + counts[t] + ')';
     });
-    var tab = window._myArtifactsTab || 'draft';
-    if (tab !== 'draft' && tab !== 'published' && tab !== 'downloaded') tab = 'draft';
+    var tab = window._myArtifactsTab || 'all';
+    if (tab !== 'all' && tab !== 'draft' && tab !== 'published' && tab !== 'downloaded') tab = 'all';
     var items;
     if (tab === 'downloaded') {
         // Sort by most recent download (falling back to save ts if a row
@@ -11475,13 +11479,19 @@ function renderMyArtifactsList() {
         items.sort(function(a, b) {
             return (b.downloaded_ts || b.ts || 0) - (a.downloaded_ts || a.ts || 0);
         });
+    } else if (tab === 'all') {
+        // Combined view: render two sections (artifacts on top, drafts
+        // below) using the same per-status renderers as the focused
+        // tabs. We intentionally don't filter `all` — the section split
+        // happens inside the renderer below.
+        items = all.slice();
     } else {
         items = all.filter(function(d) {
             var s = d.status || 'draft';
             return s === tab;
         });
     }
-    if (!items.length) {
+    if (tab !== 'all' && !items.length) {
         var emptyMsg;
         if (tab === 'published') emptyMsg = 'No artifacts yet. Emails you send will show up here.';
         else if (tab === 'downloaded') emptyMsg = 'No downloads yet. Emails you save as HTML will show up here.';
@@ -11494,7 +11504,32 @@ function renderMyArtifactsList() {
     // delegation rather than inline onclick to defang any future bypass.
     var ID_RE = /^[A-Za-z0-9]{1,64}$/;
     var html = '';
-    if (tab === 'draft') {
+    if (tab === 'all') {
+        // Split the combined list back into the two status buckets.
+        // Preserve the API's ts-DESC ordering so each section matches
+        // exactly what the focused tab renders today. Empty sections
+        // render no header at all per the spec.
+        var artifactItems = items.filter(function(d) { return (d.status || 'draft') === 'published'; });
+        var draftItems = items.filter(function(d) { return (d.status || 'draft') !== 'published'; });
+        if (!artifactItems.length && !draftItems.length) {
+            list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text-muted);font-size:13px;">No content yet. Drafts you save and emails you send will show up here.</div>';
+            return;
+        }
+        if (artifactItems.length) {
+            html += '<div style="margin:6px 0 6px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">'
+                + 'Artifacts <span style="color:var(--text-muted);font-weight:500;">(' + artifactItems.length + ')</span></div>';
+            for (var ai = 0; ai < artifactItems.length; ai++) {
+                html += _renderArtifactRow(artifactItems[ai], ID_RE);
+            }
+        }
+        if (draftItems.length) {
+            html += '<div style="margin:' + (artifactItems.length ? '14px' : '6px') + ' 0 6px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">'
+                + 'Drafts <span style="color:var(--text-muted);font-weight:500;">(' + draftItems.length + ')</span></div>';
+            for (var dj = 0; dj < draftItems.length; dj++) {
+                html += _renderDraftRow(draftItems[dj], ID_RE);
+            }
+        }
+    } else if (tab === 'draft') {
         // Drafts go through a small grouping seam so a follow-up can split
         // by channel / category without touching the renderer. Today there
         // is exactly one group, so we render its items as a flat list and
@@ -12110,7 +12145,7 @@ function renderDraftsBar(containerId) {
     // so marketers don't lose their filter when the list refreshes.
     var existingSearch = document.getElementById('drafts-bar-search');
     var preservedQuery = existingSearch ? existingSearch.value : '';
-    bar.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:6px 0;">Loading saved drafts...</div>';
+    bar.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:6px 0;">Loading saved drafts &amp; artifacts...</div>';
     fetch('/api/email-drafts')
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -12119,35 +12154,39 @@ function renderDraftsBar(containerId) {
         // we don't repaint a now-inactive container.
         if (myToken !== _draftsBarRenderToken) return;
         if (containerId !== _draftsBarActiveContainer) return;
-        // Only show actual unsent drafts. The /api/email-drafts endpoint
-        // returns every saved row regardless of status, but published
-        // (already-sent) artifacts belong under "My Content -> Artifacts",
-        // not the resume-a-draft bar. Without this filter the bar count
-        // (e.g. "Saved drafts (10)") wouldn't match what marketers see in
-        // the My Content -> Drafts tab.
-        var drafts = ((data && data.drafts) || []).filter(function(d) {
-            return (d.status || 'draft') === 'draft';
+        // The bar surfaces both unsent drafts and already-sent
+        // artifacts so marketers can grab a recent send and iterate
+        // on it without first hopping to My Content. The /api/email-drafts
+        // endpoint already returns every saved row regardless of status,
+        // so we just keep them all and let the renderer split into
+        // Artifacts (top) + Drafts (below) sections.
+        var rows = ((data && data.drafts) || []).filter(function(d) {
+            var s = d.status || 'draft';
+            return s === 'draft' || s === 'published';
         });
-        window._savedDrafts = drafts;
-        if (!drafts.length) { bar.innerHTML = ''; _draftsBarSelectedIds = {}; return; }
-        // Preserve selection only for ids still present.
+        window._savedDrafts = rows;
+        if (!rows.length) { bar.innerHTML = ''; _draftsBarSelectedIds = {}; return; }
+        // Preserve selection only for ids still present (and only for
+        // drafts — the merge flow is draft-only).
         var stillPresent = {};
-        for (var k = 0; k < drafts.length; k++) stillPresent[drafts[k].id] = true;
+        for (var k = 0; k < rows.length; k++) {
+            if ((rows[k].status || 'draft') === 'draft') stillPresent[rows[k].id] = true;
+        }
         Object.keys(_draftsBarSelectedIds).forEach(function(sid) {
             if (!stillPresent[sid]) delete _draftsBarSelectedIds[sid];
         });
         bar.innerHTML = '<div style="background:var(--bg-elev,rgba(167,139,250,0.04));border:1px solid rgba(167,139,250,0.25);border-radius:8px;padding:12px 14px;">'
             + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap;">'
-            + '<div id="drafts-bar-count" style="font-weight:600;color:var(--text-body);font-size:14px;">\uD83D\uDCBE Saved drafts (' + drafts.length + ')</div>'
+            + '<div id="drafts-bar-count" style="font-weight:600;color:var(--text-body);font-size:14px;">\uD83D\uDCBE Saved Drafts &amp; Artifacts (' + rows.length + ')</div>'
             + '<div style="display:flex;align-items:center;gap:10px;">'
             + '<button id="drafts-bar-merge-btn" onclick="mergeSelectedDrafts()" style="display:none;background:#a78bfa;color:#fff;border:none;padding:5px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">Merge selected (0)</button>'
             + '<div style="font-size:11px;color:var(--text-muted);">Click "Resume" to reopen</div>'
             + '</div>'
             + '</div>'
             + '<div style="margin-bottom:8px;">'
-            + '<input id="drafts-bar-search" type="search" placeholder="Search drafts by name or subject..." autocomplete="off" oninput="filterDraftsBar(this.value)" style="width:100%;box-sizing:border-box;background:var(--bg-card);color:var(--text-body);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;outline:none;" />'
+            + '<input id="drafts-bar-search" type="search" placeholder="Search drafts &amp; artifacts by name or subject..." autocomplete="off" oninput="filterDraftsBar(this.value)" style="width:100%;box-sizing:border-box;background:var(--bg-card);color:var(--text-body);border:1px solid var(--border);border-radius:5px;padding:6px 10px;font-size:12px;outline:none;" />'
             + '</div>'
-            + '<div style="max-height:200px;overflow-y:auto;padding-right:4px;"><div id="drafts-bar-rows" style="display:flex;flex-direction:column;gap:6px;"></div></div>'
+            + '<div style="max-height:240px;overflow-y:auto;padding-right:4px;"><div id="drafts-bar-rows" style="display:flex;flex-direction:column;gap:6px;"></div></div>'
             + '</div>';
         var input = document.getElementById('drafts-bar-search');
         if (input && preservedQuery) input.value = preservedQuery;
@@ -12163,65 +12202,151 @@ function renderDraftsBar(containerId) {
     });
 }
 
+// Render a single saved-bar row. `isArtifact=true` skips the merge
+// checkbox (artifacts are excluded from the bulk-merge flow), shows a
+// green "✓ Sent" badge instead of the purple "Draft" badge, and routes
+// the Delete action through the artifact-flavored confirm + handler.
+// Both row types still hit the same /api/email-drafts endpoints under
+// the hood — the differences are visual + the wording of the confirm.
+function _renderDraftsBarRow(d, isArtifact, currentId) {
+    var when = new Date((d.ts || 0) * 1000).toLocaleString();
+    var meta = (d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's');
+    if (d.channel) meta += ' \u00b7 ' + d.channel.replace(/_/g, ' ');
+    if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
+    meta += ' \u00b7 ' + when;
+    var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic;">' + escHtml(d.subject) + '</div>' : '';
+    var statusBadge = isArtifact
+        ? '<span style="display:inline-block;color:#4ade80;font-size:10px;font-weight:700;border:1px solid rgba(74,222,128,0.45);background:rgba(74,222,128,0.10);border-radius:10px;padding:1px 7px;letter-spacing:0.3px;flex-shrink:0;">\u2713 Sent</span>'
+        : '<span style="display:inline-block;color:#a78bfa;font-size:10px;font-weight:700;border:1px solid rgba(167,139,250,0.45);background:rgba(167,139,250,0.10);border-radius:10px;padding:1px 7px;letter-spacing:0.3px;flex-shrink:0;">Draft</span>';
+    var isCurrent = (currentId && d.id === currentId);
+    var rowClass = isCurrent ? 'draft-row drafts-bar-row draft-row-current' : 'draft-row drafts-bar-row';
+    var currentBadge = isCurrent ? '<span class="draft-row-current-badge" title="This is the draft you currently have open in the prep flow.">Currently editing</span>' : '';
+    var safeId = String(d.id);
+    var deleteCall = isArtifact
+        ? 'deleteArtifactFromBar(\'' + safeId + '\')'
+        : 'deleteEmailDraft(\'' + safeId + '\')';
+    var deleteTitle = isArtifact ? 'Delete artifact' : 'Delete draft';
+    // Drafts get the merge checkbox; artifacts get a same-width
+    // spacer so both row variants line up visually. We also keep the
+    // checkbox `id` paired to the label `for=` for drafts so clicking
+    // anywhere on the draft row's text still toggles selection (the
+    // pre-task UX). Artifacts have no checkbox and so no `for=`.
+    var leadingControl;
+    var labelFor = '';
+    if (isArtifact) {
+        leadingControl = '<span aria-hidden="true" style="display:inline-block;width:16px;flex-shrink:0;"></span>';
+    } else {
+        var isChecked = _draftsBarSelectedIds[d.id] ? ' checked' : '';
+        var cbId = 'draft-merge-cb-' + d.id;
+        labelFor = ' for="' + cbId + '"';
+        leadingControl = '<input type="checkbox" id="' + cbId + '" aria-label="Select draft for merge" '
+            + 'onclick="event.stopPropagation();" '
+            + 'onchange="_onDraftsBarCheckboxToggle(this, \'' + d.id + '\')"'
+            + isChecked
+            + ' style="cursor:pointer;width:16px;height:16px;flex-shrink:0;accent-color:#a78bfa;">';
+    }
+    var resumeBg = isArtifact ? '#4ade80' : '#a78bfa';
+    var resumeCall = isArtifact
+        ? 'openArtifactFromBar(\'' + safeId + '\')'
+        : 'loadEmailDraft(\'' + safeId + '\')';
+    return '<div class="' + rowClass + '" data-draft-id="' + escAttr(safeId) + '" style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);">'
+        + leadingControl
+        + '<label' + labelFor + ' style="flex:1;min-width:0;cursor:pointer;" onclick="event.stopPropagation();">'
+        + '<div style="display:flex;align-items:center;gap:8px;min-width:0;">'
+        + statusBadge
+        + '<div style="color:var(--text-body);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">' + escHtml(d.name || 'Untitled') + '</div>'
+        + currentBadge
+        + '</div>'
+        + subjLine
+        + '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(meta) + '</div>'
+        + '</label>'
+        + '<button onclick="' + resumeCall + '" style="background:' + resumeBg + ';color:#fff;border:none;padding:6px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">Resume</button>'
+        + '<button onclick="' + deleteCall + '" title="' + deleteTitle + '" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">\u2715</button>'
+        + '</div>';
+}
+
+// Open an already-sent artifact from the prep-page bar. Mirrors the
+// "open published artifact" path the My Content > Artifacts tab uses
+// today (`_openArtifactFromList`): clears any stale republish intent
+// before handing off to loadEmailDraft so a plain Resume never
+// accidentally retriggers a previously-armed Republish flow.
+function openArtifactFromBar(id) {
+    window._republishAfterLoad = false;
+    loadEmailDraft(id);
+}
+
+// Delete an artifact from the prep-page Saved Drafts & Artifacts bar.
+// Mirrors `_deleteArtifactFromList` (the My Content > Artifacts tab
+// handler): same DELETE endpoint, same confirm wording, same cache
+// + status-pill cleanup, and a re-render of the bar so the row goes
+// away immediately.
+function deleteArtifactFromBar(id) {
+    if (!confirm('Delete this artifact? This cannot be undone.')) return;
+    fetch('/api/email-drafts/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+        if (resp && resp.error) { showToast('Delete failed: ' + resp.error, 'error'); return; }
+        // Keep the My Content cache + toolbar badge in sync so the user
+        // doesn't have to reopen My Content to see the row vanish there.
+        if (Array.isArray(window._myArtifactsCache)) {
+            window._myArtifactsCache = window._myArtifactsCache.filter(function(d) { return d.id !== id; });
+        }
+        if (window._currentDraftId === id) {
+            window._currentDraftId = null;
+            window._currentDraftStatus = null;
+            window._currentDraftName = null;
+            window._currentDraftLastSavedTs = null;
+            try { _updateDraftStatusPill(); } catch (_e) {}
+        }
+        showToast('Deleted');
+        renderDraftsBar();
+        try { refreshMyArtifactsCount(); } catch (_e) {}
+    })
+    .catch(function(err) { showToast('Delete failed: ' + err.message, 'error'); });
+}
+
 function filterDraftsBar(query) {
     var rowsEl = document.getElementById('drafts-bar-rows');
     var countEl = document.getElementById('drafts-bar-count');
     if (!rowsEl) return;
-    var drafts = window._savedDrafts || [];
+    var all = window._savedDrafts || [];
     var q = (query || '').trim().toLowerCase();
     var filtered = q
-        ? drafts.filter(function(d) {
+        ? all.filter(function(d) {
             var name = (d.name || '').toLowerCase();
             var subject = (d.subject || '').toLowerCase();
             return name.indexOf(q) !== -1 || subject.indexOf(q) !== -1;
         })
-        : drafts;
+        : all;
     if (countEl) {
         countEl.innerHTML = q
-            ? '\uD83D\uDCBE Saved drafts (' + filtered.length + ' of ' + drafts.length + ')'
-            : '\uD83D\uDCBE Saved drafts (' + drafts.length + ')';
+            ? '\uD83D\uDCBE Saved Drafts &amp; Artifacts (' + filtered.length + ' of ' + all.length + ')'
+            : '\uD83D\uDCBE Saved Drafts &amp; Artifacts (' + all.length + ')';
     }
     if (!filtered.length) {
-        rowsEl.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 4px;">No drafts match</div>';
+        rowsEl.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px 4px;">No matches</div>';
         return;
     }
-    var rows = '';
+    var artifactRows = filtered.filter(function(d) { return (d.status || 'draft') === 'published'; });
+    var draftRows = filtered.filter(function(d) { return (d.status || 'draft') !== 'published'; });
     var currentId = window._currentDraftId || null;
-    for (var i = 0; i < filtered.length; i++) {
-        var d = filtered[i];
-        var when = new Date((d.ts || 0) * 1000).toLocaleString();
-        var meta = (d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's');
-        if (d.channel) meta += ' \u00b7 ' + d.channel.replace(/_/g, ' ');
-        if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
-        meta += ' \u00b7 ' + when;
-        var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic;">' + escHtml(d.subject) + '</div>' : '';
-        var isChecked = _draftsBarSelectedIds[d.id] ? ' checked' : '';
-        var cbId = 'draft-merge-cb-' + d.id;
-        // Subtle highlight + "Currently editing" badge for the row whose
-        // id matches what's loaded in the prep flow, so after a save the
-        // marketer can immediately see which row was updated.
-        var isCurrent = (currentId && d.id === currentId);
-        var rowClass = isCurrent ? 'draft-row drafts-bar-row draft-row-current' : 'draft-row drafts-bar-row';
-        var currentBadge = isCurrent ? '<span class="draft-row-current-badge" title="This is the draft you currently have open in the prep flow.">Currently editing</span>' : '';
-        rows += '<div class="' + rowClass + '" data-draft-id="' + escAttr(d.id) + '" style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);">'
-            + '<input type="checkbox" id="' + cbId + '" aria-label="Select draft for merge" '
-            + 'onclick="event.stopPropagation();" '
-            + 'onchange="_onDraftsBarCheckboxToggle(this, \'' + d.id + '\')"'
-            + isChecked
-            + ' style="cursor:pointer;width:16px;height:16px;flex-shrink:0;accent-color:#a78bfa;">'
-            + '<label for="' + cbId + '" style="flex:1;min-width:0;cursor:pointer;" onclick="event.stopPropagation();">'
-            + '<div style="display:flex;align-items:center;gap:8px;min-width:0;">'
-            + '<div style="color:var(--text-body);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">' + escHtml(d.name || 'Untitled') + '</div>'
-            + currentBadge
-            + '</div>'
-            + subjLine
-            + '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(meta) + '</div>'
-            + '</label>'
-            + '<button onclick="loadEmailDraft(\'' + d.id + '\')" style="background:#a78bfa;color:#fff;border:none;padding:6px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">Resume</button>'
-            + '<button onclick="deleteEmailDraft(\'' + d.id + '\')" title="Delete draft" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">\u2715</button>'
-            + '</div>';
+    var html = '';
+    if (artifactRows.length) {
+        html += '<div style="margin:2px 2px 4px;color:var(--text-muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;">Artifacts <span style="font-weight:500;">(' + artifactRows.length + ')</span></div>';
+        for (var ai = 0; ai < artifactRows.length; ai++) {
+            html += _renderDraftsBarRow(artifactRows[ai], true, currentId);
+        }
     }
-    rowsEl.innerHTML = rows;
+    if (draftRows.length) {
+        if (artifactRows.length) {
+            html += '<div style="height:1px;background:var(--border);margin:8px 2px 6px;"></div>';
+        }
+        html += '<div style="margin:2px 2px 4px;color:var(--text-muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;">Drafts <span style="font-weight:500;">(' + draftRows.length + ')</span></div>';
+        for (var di = 0; di < draftRows.length; di++) {
+            html += _renderDraftsBarRow(draftRows[di], false, currentId);
+        }
+    }
+    rowsEl.innerHTML = html;
 }
 
 function mergeSelectedDrafts() {
