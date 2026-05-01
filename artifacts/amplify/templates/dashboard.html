@@ -1709,6 +1709,58 @@
         .toast-item.toast-warning { border-left-color: #facc15; }
         .toast-item.toast-info { border-left-color: #38bdf8; }
 
+        /* "What am I editing?" pill shown next to Save as Draft on the
+           publish page so a marketer can always tell whether the next save
+           will update an existing draft or create a brand-new row. */
+        .draft-status-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 10px; border-radius: 99px; font-size: 11px; font-weight: 600;
+            border: 1px solid var(--border); color: var(--text-muted);
+            background: var(--bg-card); line-height: 1.2; max-width: 320px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .draft-status-pill .pill-dot {
+            width: 7px; height: 7px; border-radius: 50%; background: #6b7280; flex-shrink: 0;
+        }
+        .draft-status-pill.pill-new { color: #6b7280; }
+        .draft-status-pill.pill-new .pill-dot { background: #6b7280; }
+        .draft-status-pill.pill-editing { color: #a78bfa; border-color: rgba(167,139,250,0.4); background: rgba(167,139,250,0.08); }
+        .draft-status-pill.pill-editing .pill-dot { background: #a78bfa; }
+        .draft-status-pill.pill-fork { color: #38bdf8; border-color: rgba(56,189,248,0.4); background: rgba(56,189,248,0.08); }
+        .draft-status-pill.pill-fork .pill-dot { background: #38bdf8; }
+
+        /* Sticky failure state for the Save as Draft button. Stays in the
+           failed look (with a Dismiss affordance) until the marketer either
+           retries or dismisses, so the previous "transient toast then back
+           to normal" path can no longer hide a real failure. */
+        .btn-save-draft.save-failed {
+            background: rgba(239,68,68,0.1) !important;
+            color: #ef4444 !important;
+            border-color: #ef4444 !important;
+        }
+        .save-fail-detail {
+            display: block; margin-top: 6px; font-size: 11px; color: #ef4444; font-weight: 500;
+            max-width: 360px; line-height: 1.3;
+        }
+        .save-fail-dismiss {
+            margin-left: 6px; background: transparent; color: #ef4444; border: none;
+            font-size: 11px; text-decoration: underline; cursor: pointer; padding: 0;
+        }
+
+        /* Highlight the row in the Saved Drafts bar whose id matches
+           window._currentDraftId, so after a save the marketer can see
+           at-a-glance which row was updated. */
+        .draft-row-current {
+            border-color: #a78bfa !important;
+            background: rgba(167,139,250,0.08) !important;
+            box-shadow: 0 0 0 1px rgba(167,139,250,0.4) inset;
+        }
+        .draft-row-current-badge {
+            font-size: 10px; padding: 2px 7px; border-radius: 99px; font-weight: 700;
+            background: rgba(167,139,250,0.18); color: #a78bfa; flex-shrink: 0;
+            text-transform: uppercase; letter-spacing: 0.4px;
+        }
+
         .empty-state-large { text-align: center; padding: 80px 20px; }
         .empty-state-large .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.6; }
         .empty-state-large h3 { color: var(--text-primary); font-size: 18px; margin-bottom: 8px; }
@@ -2377,7 +2429,13 @@
                     </div>
                 </div>
                 <button class="btn-copy-all" onclick="copyAllCombined()">Copy All Combined</button>
-                <button class="btn-save-draft" onclick="saveCombinedAsDraft()" style="background:transparent;color:#a78bfa;border:1.5px solid #a78bfa;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">&#128190; Save as Draft</button>
+                <div class="save-draft-cluster" style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:6px;">
+                    <div style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <button class="btn-save-draft" onclick="saveCombinedAsDraft()" style="background:transparent;color:#a78bfa;border:1.5px solid #a78bfa;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">&#128190; Save as Draft</button>
+                        <button class="btn-save-new-draft" onclick="saveCombinedAsNewDraft()" title="Always create a brand-new draft row, even if you're editing one already" style="background:transparent;color:#a78bfa;border:1px dashed #a78bfa;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">+ Save as new draft</button>
+                        <span id="draft-status-pill" class="draft-status-pill pill-new" aria-live="polite"><span class="pill-dot"></span><span id="draft-status-pill-text">New draft (unsaved)</span></span>
+                    </div>
+                </div>
                 <button class="btn-done" onclick="exitPrepWorkflow()">Done - Back to Dashboard</button>
             </div>
         </div>
@@ -11151,8 +11209,14 @@ function _resetPrepState() {
     window.prepBatchChannel = null;
     window._currentDraftId = null;
     window._currentDraftStatus = null;
+    window._currentDraftName = null;
+    window._currentDraftLastSavedTs = null;
     window._restoredCombined = null;
     _draftsBarSelectedIds = {};
+    // Reset the publish-page indicator + clear any sticky save-failure
+    // state so a brand-new prep flow starts clean.
+    try { _clearSaveDraftFailureState(); } catch (_e) {}
+    try { _updateDraftStatusPill(); } catch (_e) {}
 }
 
 function startPrepWorkflow() {
@@ -11505,7 +11569,13 @@ function _deleteArtifactFromList(id) {
     .then(function(resp) {
         if (resp.error) { showToast('Delete failed: ' + resp.error, 'error'); return; }
         window._myArtifactsCache = (window._myArtifactsCache || []).filter(function(d) { return d.id !== id; });
-        if (window._currentDraftId === id) window._currentDraftId = null;
+        if (window._currentDraftId === id) {
+            window._currentDraftId = null;
+            window._currentDraftStatus = null;
+            window._currentDraftName = null;
+            window._currentDraftLastSavedTs = null;
+            try { _updateDraftStatusPill(); } catch (_e) {}
+        }
         renderMyArtifactsList();
         refreshMyArtifactsCount();
         showToast('Deleted');
@@ -11749,41 +11819,234 @@ function _collectCombinedDraftSnapshot() {
     };
 }
 
-function saveCombinedAsDraft() {
+// Tracks the wall-clock timestamp (seconds since epoch) of the most
+// recent successful save for the currently-loaded draft. Used by the
+// status pill so marketers see "last saved 12s ago" instead of having
+// to wonder whether the click registered.
+window._currentDraftLastSavedTs = null;
+
+// Format a unix timestamp (seconds) as a short relative time. Mirrors
+// the casual "just now / 5m ago / 2h ago" style used elsewhere in the
+// dashboard so the status pill reads naturally.
+function _draftRelativeTime(ts) {
+    if (!ts) return '';
+    var now = Date.now() / 1000;
+    var diff = Math.max(0, now - ts);
+    if (diff < 10) return 'just now';
+    if (diff < 60) return Math.floor(diff) + 's ago';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return Math.floor(diff / 86400) + 'd ago';
+}
+
+// Compute the next-save outcome BEFORE the request fires, so we can
+// both seed the toast wording and decide whether the secondary "Save
+// as new draft" button should be highlighted as the safer fork option.
+//   'create' -> there's no current draft id (fresh prep flow)
+//   'update' -> editing an existing draft, save will overwrite it
+//   'fork'   -> editing a sent (published) artifact, save creates a
+//               new draft row instead of mutating the published one
+function _classifyDraftSaveMode(forceNew) {
+    if (forceNew) return 'create';
+    if (!window._currentDraftId) return 'create';
+    if (window._currentDraftStatus === 'published') return 'fork';
+    return 'update';
+}
+
+// Update the publish-page status pill from the live state. Called on
+// step 4 entry, after every successful save, after a draft is loaded
+// via /artifact/<id>, and whenever a fresh prep flow is started.
+function _updateDraftStatusPill() {
+    var pill = document.getElementById('draft-status-pill');
+    var text = document.getElementById('draft-status-pill-text');
+    if (!pill || !text) return;
+    pill.classList.remove('pill-new', 'pill-editing', 'pill-fork');
+    var mode = _classifyDraftSaveMode(false);
+    var name = window._currentDraftName || '';
+    if (mode === 'create') {
+        pill.classList.add('pill-new');
+        text.textContent = 'New draft (unsaved)';
+        pill.title = 'Save as Draft will create a new row.';
+        return;
+    }
+    if (mode === 'fork') {
+        pill.classList.add('pill-fork');
+        text.textContent = 'Editing sent artifact' + (name ? " '" + name + "'" : '') + ' (Save as Draft will fork a new copy)';
+        pill.title = 'This artifact has already been sent. Save as Draft will create a new draft row; the original stays in My Content > Sent.';
+        return;
+    }
+    pill.classList.add('pill-editing');
+    var when = _draftRelativeTime(window._currentDraftLastSavedTs);
+    text.textContent = 'Editing draft' + (name ? " '" + name + "'" : '') + (when ? ' \u2022 last saved ' + when : '');
+    pill.title = 'Save as Draft will update this row.';
+}
+
+// Show / clear the sticky failure state on the Save as Draft button.
+// Shown until the next save attempt succeeds OR the marketer clicks
+// the inline Dismiss link. The HTTP status + server message are kept
+// inline (not just in a transient toast) so production failures like
+// the 413 size guard are diagnosable from the UI.
+function _setSaveDraftFailureState(detail) {
+    var btn = document.querySelector('.btn-save-draft');
+    var cluster = document.querySelector('.save-draft-cluster');
+    if (!btn) return;
+    btn.classList.add('save-failed');
+    btn.innerHTML = '\u26A0 Save failed \u2014 retry';
+    if (cluster) {
+        var existing = cluster.querySelector('.save-fail-detail');
+        if (existing) existing.parentNode.removeChild(existing);
+        var d = document.createElement('div');
+        d.className = 'save-fail-detail';
+        d.textContent = detail || 'Save failed.';
+        var dismiss = document.createElement('button');
+        dismiss.type = 'button';
+        dismiss.className = 'save-fail-dismiss';
+        dismiss.textContent = 'Dismiss';
+        dismiss.onclick = function() { _clearSaveDraftFailureState(); };
+        d.appendChild(dismiss);
+        cluster.appendChild(d);
+    }
+}
+
+function _clearSaveDraftFailureState() {
+    var btn = document.querySelector('.btn-save-draft');
+    var cluster = document.querySelector('.save-draft-cluster');
+    if (btn) {
+        btn.classList.remove('save-failed');
+        btn.innerHTML = '\uD83D\uDCBE Save as Draft';
+    }
+    if (cluster) {
+        var d = cluster.querySelector('.save-fail-detail');
+        if (d) d.parentNode.removeChild(d);
+    }
+}
+
+// True when the editor really has nothing worth persisting: no items
+// in the combined view, no batch results, no subject, and no body.
+// Replaces the older "items.length only" check that fired the warning
+// even when the marketer had typed a subject / body but hadn't yet
+// generated features (legitimately empty -> still blockable).
+function _isCombinedDraftTrulyEmpty() {
     var items = window._combinedEmailItems || [];
-    if (!items.length && (!prepBatchResults || !prepBatchResults.length)) {
-        showToast('Nothing to save yet \u2014 generate or approve some features first', 'warning');
+    if (items.length) return false;
+    if (prepBatchResults && prepBatchResults.length) return false;
+    var subjEl = document.getElementById('combined-email-subject');
+    if (subjEl && subjEl.value && subjEl.value.trim()) return false;
+    var bodyEl = document.getElementById('combined-email-body');
+    if (bodyEl && bodyEl.value && bodyEl.value.trim()) return false;
+    return true;
+}
+
+// Shared core for the two save flows. `forceNew=true` is the "Save as
+// new draft" sibling action -- it always sends id:null so the server
+// creates a brand-new row regardless of what's currently loaded.
+function _saveCombinedDraftCore(forceNew) {
+    if (_isCombinedDraftTrulyEmpty()) {
+        // Upgraded from the easy-to-miss warning toast to a blocking
+        // alert that names the specific reason. The toast is kept too
+        // for users who dismiss the alert quickly.
+        var msg = 'Nothing to save yet.\n\nThis draft has no generated features, no subject, and no body. Pick features in step 2 and generate content (or type a subject / body) before saving.';
+        try { window.alert(msg); } catch (_e) {}
+        showToast('Nothing to save yet \u2014 add features, a subject, or a body first.', 'error');
         return;
     }
     var subjEl = document.getElementById('combined-email-subject');
     var defaultName = (subjEl && subjEl.value.trim())
         ? subjEl.value.trim().substring(0, 80)
         : ('Draft ' + new Date().toLocaleString());
-    var name = window.prompt('Name this draft:', defaultName);
+    var name = window.prompt(forceNew ? 'Name this NEW draft:' : 'Name this draft:', defaultName);
     if (name === null) return;
     name = (name || '').trim() || defaultName;
     var snapshot = _collectCombinedDraftSnapshot();
-    var btn = document.querySelector('.btn-save-draft');
+    var mode = _classifyDraftSaveMode(forceNew);
+    // Reset any previous sticky failure BEFORE we capture originalText, so
+    // a retry-after-failure doesn't end up restoring "Save failed -- retry"
+    // as the primary button's idle text. The failure (if any) is re-applied
+    // on the failure branch below.
+    _clearSaveDraftFailureState();
+    var btn = document.querySelector(forceNew ? '.btn-save-new-draft' : '.btn-save-draft');
     var originalText = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = 'Saving...'; }
+    var payload = {
+        name: name,
+        snapshot: snapshot,
+        id: forceNew ? null : (window._currentDraftId || null)
+    };
     fetch('/api/email-drafts', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ name: name, snapshot: snapshot, id: window._currentDraftId || null })
+        body: JSON.stringify(payload)
     })
-    .then(function(r) { return r.json(); })
-    .then(function(resp) {
+    .then(function(r) {
+        return r.text().then(function(text) {
+            var body = null;
+            try { body = text ? JSON.parse(text) : null; } catch (_e) { body = null; }
+            return { ok: r.ok, status: r.status, body: body, raw: text };
+        });
+    })
+    .then(function(env) {
         if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
-        if (resp.error) { showToast('Save failed: ' + resp.error, 'error'); return; }
+        if (!env.ok || !env.body || env.body.error || !env.body.id) {
+            var serverMsg = (env.body && env.body.error) || env.raw || 'Unknown error';
+            // Keep the first ~200 chars so a giant HTML error page doesn't
+            // blow out the inline detail.
+            if (serverMsg.length > 200) serverMsg = serverMsg.substring(0, 200) + '\u2026';
+            var detail = 'HTTP ' + env.status + ' \u2014 ' + serverMsg;
+            showToast('Save failed (HTTP ' + env.status + '): ' + serverMsg, 'error');
+            _setSaveDraftFailureState(detail);
+            return;
+        }
+        // Success: clear any sticky failure, latch the (possibly new)
+        // draft id, and refresh the status pill so it reads "last
+        // saved just now". Note that for the fork branch we always end
+        // up editing the new draft row from here on, so subsequent
+        // Save as Draft clicks update the fork rather than the
+        // original sent artifact.
+        _clearSaveDraftFailureState();
+        var resp = env.body;
+        var prevStatus = window._currentDraftStatus;
         window._currentDraftId = resp.id;
+        window._currentDraftStatus = 'draft';
+        window._currentDraftName = name;
+        window._currentDraftLastSavedTs = Math.floor(Date.now() / 1000);
         _setArtifactUrl(resp.id);
         refreshMyArtifactsCount();
-        showToast('Draft saved: ' + name + ' \u2705');
+        _updateDraftStatusPill();
+        var toastMsg;
+        if (mode === 'update') {
+            toastMsg = "Updated draft '" + name + "' \u2705";
+        } else if (mode === 'fork') {
+            toastMsg = "Saved as new draft '" + name + "' \u2705 (the original sent email stays in My Content > Sent)";
+        } else {
+            toastMsg = "Created new draft '" + name + "' \u2705";
+        }
+        showToast(toastMsg, 'success');
+        // Defensive: if the marketer was editing a published artifact,
+        // a successful fork means the page is now bound to the new
+        // draft row -- log it so a stale prevStatus doesn't accidentally
+        // mislead future logic. (Used only for debugging; safe to keep.)
+        if (prevStatus === 'published' && window.console) {
+            console.info('[save-draft] forked sent artifact -> new draft id', resp.id);
+        }
     })
     .catch(function(err) {
         if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
-        showToast('Save failed: ' + err.message, 'error');
+        var msg = (err && err.message) || 'Network error';
+        showToast('Save failed: ' + msg, 'error');
+        _setSaveDraftFailureState('Network error \u2014 ' + msg);
     });
+}
+
+function saveCombinedAsDraft() {
+    _saveCombinedDraftCore(false);
+}
+
+// Sibling of saveCombinedAsDraft: always creates a brand-new draft
+// row regardless of whether one is currently loaded. After it returns
+// successfully, _currentDraftId is latched to the new row so the
+// primary Save as Draft button updates the fork from then on.
+function saveCombinedAsNewDraft() {
+    _saveCombinedDraftCore(true);
 }
 
 var _draftsBarSelectedIds = {};
@@ -11923,6 +12186,7 @@ function filterDraftsBar(query) {
         return;
     }
     var rows = '';
+    var currentId = window._currentDraftId || null;
     for (var i = 0; i < filtered.length; i++) {
         var d = filtered[i];
         var when = new Date((d.ts || 0) * 1000).toLocaleString();
@@ -11933,14 +12197,23 @@ function filterDraftsBar(query) {
         var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic;">' + escHtml(d.subject) + '</div>' : '';
         var isChecked = _draftsBarSelectedIds[d.id] ? ' checked' : '';
         var cbId = 'draft-merge-cb-' + d.id;
-        rows += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);">'
+        // Subtle highlight + "Currently editing" badge for the row whose
+        // id matches what's loaded in the prep flow, so after a save the
+        // marketer can immediately see which row was updated.
+        var isCurrent = (currentId && d.id === currentId);
+        var rowClass = isCurrent ? 'draft-row drafts-bar-row draft-row-current' : 'draft-row drafts-bar-row';
+        var currentBadge = isCurrent ? '<span class="draft-row-current-badge" title="This is the draft you currently have open in the prep flow.">Currently editing</span>' : '';
+        rows += '<div class="' + rowClass + '" data-draft-id="' + escAttr(d.id) + '" style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-card);border-radius:6px;border:1px solid var(--border);">'
             + '<input type="checkbox" id="' + cbId + '" aria-label="Select draft for merge" '
             + 'onclick="event.stopPropagation();" '
             + 'onchange="_onDraftsBarCheckboxToggle(this, \'' + d.id + '\')"'
             + isChecked
             + ' style="cursor:pointer;width:16px;height:16px;flex-shrink:0;accent-color:#a78bfa;">'
             + '<label for="' + cbId + '" style="flex:1;min-width:0;cursor:pointer;" onclick="event.stopPropagation();">'
-            + '<div style="color:var(--text-body);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
+            + '<div style="display:flex;align-items:center;gap:8px;min-width:0;">'
+            + '<div style="color:var(--text-body);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">' + escHtml(d.name || 'Untitled') + '</div>'
+            + currentBadge
+            + '</div>'
             + subjLine
             + '<div style="color:var(--text-muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(meta) + '</div>'
             + '</label>'
@@ -12105,7 +12378,13 @@ function deleteEmailDraft(id) {
     .then(function(r) { return r.json(); })
     .then(function(resp) {
         if (resp.error) { showToast('Delete failed: ' + resp.error, 'error'); return; }
-        if (window._currentDraftId === id) window._currentDraftId = null;
+        if (window._currentDraftId === id) {
+            window._currentDraftId = null;
+            window._currentDraftStatus = null;
+            window._currentDraftName = null;
+            window._currentDraftLastSavedTs = null;
+            try { _updateDraftStatusPill(); } catch (_e) {}
+        }
         showToast('Draft deleted');
         renderDraftsBar();
     })
@@ -12261,8 +12540,15 @@ function loadEmailDraft(id) {
         window.prepBatchModeOverride = snap.modeOverride || null;
         window._currentDraftId = d.id;
         window._currentDraftStatus = d.status || 'draft';
+        window._currentDraftName = d.name || '';
+        // Seed the "last saved" stamp from the draft envelope so the
+        // status pill reads "last saved 5m ago" the moment the draft
+        // opens, not just after the next manual save.
+        window._currentDraftLastSavedTs = (typeof d.ts === 'number' && d.ts > 0) ? d.ts : null;
         window._restoredCombined = snap.combined || null;
         _setArtifactUrl(d.id);
+        try { _clearSaveDraftFailureState(); } catch (_e) {}
+        try { _updateDraftStatusPill(); } catch (_e) {}
         // Open the prep overlay if it isn't already (e.g. deep-link load)
         var overlay = document.getElementById('prep-overlay');
         if (overlay && overlay.style.display === 'none') {
@@ -12592,7 +12878,14 @@ function prepGoToStep(step) {
         }
         renderBatchEmailSubjectRow();
     }
-    if (step === 4) renderCombinedPreview();
+    if (step === 4) {
+        renderCombinedPreview();
+        // Pill text includes a relative "last saved Xs ago" that drifts
+        // as time passes -- recompute every time we land on step 4 so
+        // it reads correctly even when the marketer leaves the tab and
+        // comes back.
+        try { _updateDraftStatusPill(); } catch (_e) {}
+    }
 
     updatePrepBreadcrumb(step);
     window.scrollTo(0, 0);
