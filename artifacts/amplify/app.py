@@ -864,7 +864,7 @@ def _apply_feature_url_overrides(features: list) -> None:
 # performs a one-time migration from JSON -> DB on first DB write so existing
 # drafts aren't lost.
 # ---------------------------------------------------------------------------
-_email_drafts_lock = threading.Lock()
+_email_drafts_lock = threading.RLock()  # re-entrant: mark-downloaded holds it across load+_save_email_drafts (which re-acquires for the JSON write)
 _EMAIL_DRAFTS_PATH = os.path.join(_FEATURES_CACHE_DIR, ".email_drafts.json")
 _EMAIL_DRAFT_MAX_BYTES = 8 * 1024 * 1024  # 8 MB safety cap per draft
 _EMAIL_DRAFTS_TOTAL_MAX_BYTES = 64 * 1024 * 1024  # 64 MB total store cap
@@ -913,6 +913,13 @@ def _ensure_drafts_table(conn) -> bool:
             cur.execute(
                 "ALTER TABLE email_drafts ADD COLUMN IF NOT EXISTS category TEXT"
             )
+            # `downloaded_ts` records the most recent time the user clicked
+            # Download HTML for this draft. NULL when never downloaded so the
+            # Downloaded tab in the My Content modal can filter on
+            # `IS NOT NULL` cheaply.
+            cur.execute(
+                "ALTER TABLE email_drafts ADD COLUMN IF NOT EXISTS downloaded_ts DOUBLE PRECISION"
+            )
             conn.commit()
         _drafts_db_initialized = True
         # One-time migration from on-disk JSON -> DB so any drafts saved
@@ -929,10 +936,11 @@ def _ensure_drafts_table(conn) -> bool:
                     if existing == 0:
                         with conn.cursor() as cur:
                             for d in drafts:
+                                _legacy_dl_ts = d.get("downloaded_ts")
                                 cur.execute(
                                     """
-                                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category)
-                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                                     ON CONFLICT (id) DO NOTHING
                                     """,
                                     (
@@ -944,6 +952,7 @@ def _ensure_drafts_table(conn) -> bool:
                                         int(d.get("last_recipient_count") or 0),
                                         json.dumps(d.get("snapshot") or {}),
                                         d.get("category") or None,
+                                        float(_legacy_dl_ts) if _legacy_dl_ts else None,
                                     ),
                                 )
                             conn.commit()
@@ -968,9 +977,10 @@ def _row_to_draft(row) -> dict:
             snap = json.loads(snap)
         except Exception:
             snap = {}
-    # `category` may be missing on rows written before the column existed,
-    # so guard the index lookup.
+    # `category` and `downloaded_ts` may be missing on rows written before
+    # those columns existed, so guard each index lookup.
     category = row[7] if len(row) > 7 else None
+    raw_dl_ts = row[8] if len(row) > 8 else None
     return {
         "id": row[0],
         "name": row[1],
@@ -980,6 +990,7 @@ def _row_to_draft(row) -> dict:
         "last_recipient_count": int(row[5] or 0),
         "snapshot": snap or {},
         "category": category,
+        "downloaded_ts": float(raw_dl_ts) if raw_dl_ts else None,
     }
 
 
@@ -991,7 +1002,7 @@ def _load_email_drafts() -> dict:
             if _ensure_drafts_table(conn):
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category FROM email_drafts ORDER BY ts DESC"
+                        "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts FROM email_drafts ORDER BY ts DESC"
                     )
                     rows = cur.fetchall()
                 return {"drafts": [_row_to_draft(r) for r in rows]}
@@ -1008,12 +1019,14 @@ def _load_email_drafts() -> dict:
             with open(_EMAIL_DRAFTS_PATH, "r") as f:
                 data = json.load(f)
             if isinstance(data, dict) and isinstance(data.get("drafts"), list):
-                # Normalize: ensure every record exposes `category` (as
-                # null when missing) so callers don't have to special-case
-                # records that predate the column.
+                # Normalize: ensure every record exposes `category` and
+                # `downloaded_ts` (as null when missing) so callers don't
+                # have to special-case records that predate those columns.
                 for d in data["drafts"]:
                     if isinstance(d, dict) and "category" not in d:
                         d["category"] = None
+                    if isinstance(d, dict) and "downloaded_ts" not in d:
+                        d["downloaded_ts"] = None
                 return data
     except Exception as e:
         logger.warning(f"[email-drafts] JSON load failed: {e}")
@@ -1037,10 +1050,11 @@ def _save_email_drafts(data: dict) -> None:
                     else:
                         cur.execute("DELETE FROM email_drafts")
                     for d in drafts:
+                        _dl_ts = d.get("downloaded_ts")
                         cur.execute(
                             """
-                            INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                             ON CONFLICT (id) DO UPDATE SET
                                 name = EXCLUDED.name,
                                 ts = EXCLUDED.ts,
@@ -1048,7 +1062,8 @@ def _save_email_drafts(data: dict) -> None:
                                 last_published_ts = EXCLUDED.last_published_ts,
                                 last_recipient_count = EXCLUDED.last_recipient_count,
                                 snapshot = EXCLUDED.snapshot,
-                                category = EXCLUDED.category
+                                category = EXCLUDED.category,
+                                downloaded_ts = EXCLUDED.downloaded_ts
                             """,
                             (
                                 d.get("id"),
@@ -1059,6 +1074,7 @@ def _save_email_drafts(data: dict) -> None:
                                 int(d.get("last_recipient_count") or 0),
                                 json.dumps(d.get("snapshot") or {}),
                                 d.get("category") or None,
+                                float(_dl_ts) if _dl_ts else None,
                             ),
                         )
                     conn.commit()
@@ -1105,6 +1121,9 @@ def _draft_summary(d: dict) -> dict:
         "last_published_ts": d.get("last_published_ts") or 0,
         "last_recipient_count": d.get("last_recipient_count") or 0,
         "category": d.get("category") or None,
+        # Null when the user has never clicked Download HTML for this draft.
+        # The Downloaded tab in My Content filters on this being non-null.
+        "downloaded_ts": d.get("downloaded_ts") or None,
     }
 
 
@@ -1188,6 +1207,9 @@ def save_email_draft():
             "last_published_ts": prev.get("last_published_ts") or 0,
             "last_recipient_count": prev.get("last_recipient_count") or 0,
             "category": category,
+            # Carry forward any prior download stamp so re-saving an edited
+            # draft does not erase its presence in the Downloaded tab.
+            "downloaded_ts": prev.get("downloaded_ts") or None,
         }
         if existing_idx >= 0:
             drafts[existing_idx] = record
@@ -1252,6 +1274,78 @@ def mark_email_draft_published(draft_id: str):
         return jsonify({"error": "not found"}), 404
     except Exception as e:
         logger.error(f"[email-drafts] mark-published error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/email-drafts/<draft_id>/mark-downloaded", methods=["POST"])
+def mark_email_draft_downloaded(draft_id: str):
+    """Stamp `downloaded_ts` on a draft so it shows up in the Downloaded tab.
+
+    The frontend calls this after the user clicks Download HTML and the blob
+    has been delivered. Independent of `status`: a draft can be a Draft, an
+    Artifact (Sent), AND appear in Downloaded simultaneously, since each tab
+    answers a different question ("what am I working on?", "what did I send?",
+    "what did I export to a file?").
+
+    Implementation note: writes the new timestamp with a targeted single-row
+    UPDATE (Postgres) or a lock-wrapped read-modify-write (JSON fallback), so
+    a concurrent mark-published or save call can't clobber the stamp by
+    rewriting the whole store on top of stale in-memory data.
+    """
+    try:
+        now = time.time()
+        # Postgres path: single-row UPDATE -- atomic, won't race with
+        # mark-published / save_email_draft writes against the rest of the row.
+        conn = _drafts_db_conn()
+        if conn is not None:
+            try:
+                if _ensure_drafts_table(conn):
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE email_drafts SET downloaded_ts = %s WHERE id = %s",
+                            (now, draft_id),
+                        )
+                        updated = cur.rowcount
+                        conn.commit()
+                    if updated == 0:
+                        return jsonify({"error": "not found"}), 404
+                    # Return the freshly-loaded summary so the client gets
+                    # the canonical record (status, downloaded_ts, etc.)
+                    # without a second round trip.
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts FROM email_drafts WHERE id = %s",
+                            (draft_id,),
+                        )
+                        row = cur.fetchone()
+                    if row is None:
+                        return jsonify({"error": "not found"}), 404
+                    return jsonify({"success": True, "summary": _draft_summary(_row_to_draft(row))})
+            except Exception as e:
+                logger.warning(f"[email-drafts] DB mark-downloaded failed, falling back to JSON: {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        # JSON fallback: hold the existing per-store lock around the
+        # read-modify-write so concurrent writers (mark-published, save)
+        # serialize and don't lose this stamp.
+        with _email_drafts_lock:
+            data = _load_email_drafts()
+            drafts = data.get("drafts", [])
+            for d in drafts:
+                if d.get("id") == draft_id:
+                    d["downloaded_ts"] = now
+                    _save_email_drafts(data)
+                    return jsonify({"success": True, "summary": _draft_summary(d)})
+            return jsonify({"error": "not found"}), 404
+    except Exception as e:
+        logger.error(f"[email-drafts] mark-downloaded error: {e}")
         return jsonify({"error": str(e)}), 500
 
 

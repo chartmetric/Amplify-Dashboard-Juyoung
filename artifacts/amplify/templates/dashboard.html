@@ -2315,6 +2315,7 @@
             <div style="padding:14px 22px 8px;display:flex;gap:8px;align-items:center;">
                 <button id="my-art-tab-draft" class="cat-filter-pill active" onclick="setMyArtifactsTab('draft')" style="cursor:pointer;">Drafts <span id="my-art-count-draft" style="margin-left:4px;color:var(--text-muted);"></span></button>
                 <button id="my-art-tab-published" class="cat-filter-pill" onclick="setMyArtifactsTab('published')" style="cursor:pointer;">Artifacts <span id="my-art-count-published" style="margin-left:4px;color:var(--text-muted);"></span></button>
+                <button id="my-art-tab-downloaded" class="cat-filter-pill" onclick="setMyArtifactsTab('downloaded')" style="cursor:pointer;">Downloaded <span id="my-art-count-downloaded" style="margin-left:4px;color:var(--text-muted);"></span></button>
             </div>
             <div id="my-artifacts-list" style="padding:8px 22px 22px;max-height:60vh;overflow-y:auto;"></div>
         </div>
@@ -9523,6 +9524,101 @@ function _buildEmailDownloadFilename(subject) {
     return 'amplify-email-' + ymd + '-' + hm + '.html';
 }
 
+// Server-side bookkeeping after a successful Download HTML click.
+// Saves the current combined snapshot as a draft (if one isn't already
+// associated with the editor), then stamps `downloaded_ts` on it via
+// /api/email-drafts/<id>/mark-downloaded so the row shows up in the
+// My Content > Downloaded tab.
+//
+// Failure is swallowed on purpose: the user already has the file in
+// their downloads folder, and surfacing a toast here would be more
+// confusing than helpful. The local-cache count is refreshed when the
+// mark succeeds so the My Content badge updates without a page reload.
+//
+// Concurrency: a single shared promise guards the "save then stamp"
+// path so back-to-back downloads of an unsaved editor cannot create
+// two distinct drafts before the first save resolves and latches the
+// id into window._currentDraftId. The promise is cleared once it
+// settles so subsequent downloads of a fresh (unsaved) editor still
+// work normally.
+var _pendingMarkDownloadedSavePromise = null;
+
+function _markCurrentDraftDownloaded(suggestedName) {
+    try {
+        if (typeof _collectCombinedDraftSnapshot !== 'function') return;
+        var snapshot;
+        try { snapshot = _collectCombinedDraftSnapshot(); } catch (e) { return; }
+        if (!snapshot || !(snapshot.featureIds || []).length) return;
+        var name = (suggestedName || '').trim();
+        if (!name) {
+            var combined = snapshot.combined || {};
+            name = (combined.subject || '').trim().substring(0, 80) || ('Downloaded ' + new Date().toLocaleString());
+        }
+        function _stamp(id) {
+            if (!id) return;
+            fetch('/api/email-drafts/' + encodeURIComponent(id) + '/mark-downloaded', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(resp) {
+                if (resp && resp.error) {
+                    if (window.console) console.warn('[mark-downloaded] failed:', resp.error);
+                    return;
+                }
+                refreshMyArtifactsCount();
+            })
+            .catch(function(err) {
+                if (window.console) console.warn('[mark-downloaded] network error:', err && err.message);
+            });
+        }
+        var existingId = window._currentDraftId || null;
+        if (existingId) {
+            _stamp(existingId);
+            return;
+        }
+        // No draft id yet -> save first so we have something to stamp.
+        // If a save is already in flight (rapid double-download before
+        // the first save resolves), reuse its promise so we end up
+        // stamping the same draft id instead of creating a duplicate.
+        if (_pendingMarkDownloadedSavePromise) {
+            _pendingMarkDownloadedSavePromise.then(function(id) {
+                if (id) _stamp(id);
+            });
+            return;
+        }
+        _pendingMarkDownloadedSavePromise = fetch('/api/email-drafts', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name: name, snapshot: snapshot, id: null })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(resp) {
+            if (resp && resp.error) {
+                if (window.console) console.warn('[mark-downloaded save] failed:', resp.error);
+                return null;
+            }
+            if (resp && resp.id) {
+                window._currentDraftId = resp.id;
+                return resp.id;
+            }
+            return null;
+        })
+        .catch(function(err) {
+            if (window.console) console.warn('[mark-downloaded save] network error:', err && err.message);
+            return null;
+        });
+        var pending = _pendingMarkDownloadedSavePromise;
+        pending.then(function(id) {
+            // Always clear the latch once settled, regardless of outcome,
+            // so a subsequent download retries cleanly.
+            if (_pendingMarkDownloadedSavePromise === pending) {
+                _pendingMarkDownloadedSavePromise = null;
+            }
+            if (id) _stamp(id);
+        });
+    } catch (e) {
+        if (window.console) console.warn('[mark-downloaded] unexpected:', e && e.message);
+    }
+}
+
 function _triggerHtmlDownload(html, filename) {
     try {
         var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -9609,6 +9705,7 @@ function downloadEmailHtml(chKey) {
             if (!html) { showToast('Download failed: template has no HTML body', 'error'); return; }
             if (_triggerHtmlDownload(html, _buildEmailDownloadFilename(subjectInput ? subjectInput.value.trim() : ''))) {
                 showToast('Email HTML downloaded \uD83D\uDCBE');
+                _markCurrentDraftDownloaded(subjectInput ? subjectInput.value.trim() : '');
             }
         })
         .catch(function(err) {
@@ -9647,6 +9744,7 @@ function downloadEmailHtml(chKey) {
         var liveSubject = subjectInput2 ? subjectInput2.value.trim() : '';
         if (_triggerHtmlDownload(html, _buildEmailDownloadFilename(liveSubject))) {
             showToast('Email HTML downloaded \uD83D\uDCBE');
+            _markCurrentDraftDownloaded(liveSubject);
         }
     })
     .catch(function(err) {
@@ -10561,9 +10659,9 @@ function closeMyArtifacts() {
 }
 
 function setMyArtifactsTab(tab) {
-    if (tab !== 'draft' && tab !== 'published') tab = 'draft';
+    if (tab !== 'draft' && tab !== 'published' && tab !== 'downloaded') tab = 'draft';
     window._myArtifactsTab = tab;
-    ['draft','published'].forEach(function(t) {
+    ['draft','published','downloaded'].forEach(function(t) {
         var el = document.getElementById('my-art-tab-' + t);
         if (el) {
             if (t === tab) el.classList.add('active'); else el.classList.remove('active');
@@ -10650,29 +10748,73 @@ function _renderArtifactRow(d, ID_RE) {
         + '</div>';
 }
 
+// Downloaded-tab row: same shape as the artifact row but the headline
+// metadata is the most-recent download timestamp instead of the send
+// timestamp. The Open / Resend + Delete actions are kept identical so
+// marketers don't have to learn a third interaction model just because
+// they've also exported the email to a file.
+function _renderDownloadedRow(d, ID_RE) {
+    if (!d || !ID_RE.test(String(d.id || ''))) return '';
+    var safeId = String(d.id);
+    var when = new Date(((d.downloaded_ts ? d.downloaded_ts : d.ts) || 0) * 1000).toLocaleString();
+    var meta = (d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's');
+    if (d.channel) meta += ' \u00b7 ' + d.channel.replace(/_/g, ' ');
+    if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
+    var dlMeta = '<span style="color:#60a5fa;font-size:11px;font-weight:600;">\u2913 Downloaded ' + escHtml(when) + '</span>';
+    var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:12px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">' + escHtml(d.subject) + '</div>' : '';
+    return '<div data-art-id="' + safeId + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);margin-bottom:8px;">'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-weight:600;color:var(--text-body);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
+        + subjLine
+        + '<div style="margin-top:5px;color:var(--text-muted);font-size:11px;">' + escHtml(meta) + '</div>'
+        + '<div style="margin-top:3px;">' + dlMeta + '</div>'
+        + '<div style="margin-top:4px;"><a href="/artifact/' + encodeURIComponent(safeId) + '" data-art-link="' + safeId + '" style="color:var(--text-muted);font-size:10px;text-decoration:none;font-family:monospace;">/artifact/' + escHtml(safeId) + '</a></div>'
+        + '</div>'
+        + '<div style="display:flex;flex-direction:column;gap:6px;">'
+        + '<button data-art-action="open" data-art-id="' + safeId + '" style="background:#60a5fa;color:#fff;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Open / Resend</button>'
+        + '<button data-art-action="delete" data-art-id="' + safeId + '" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">Delete</button>'
+        + '</div>'
+        + '</div>';
+}
+
 function renderMyArtifactsList() {
     var list = document.getElementById('my-artifacts-list');
     if (!list) return;
     var all = window._myArtifactsCache || [];
-    var counts = { draft: 0, published: 0 };
+    // Counts are independent: a single draft can be both "published" and
+    // "downloaded" at the same time, since they answer different
+    // questions ("did I send this?" vs "did I export this to a file?").
+    var counts = { draft: 0, published: 0, downloaded: 0 };
     for (var i = 0; i < all.length; i++) {
         var s = all[i].status || 'draft';
         if (s === 'published') counts.published++; else counts.draft++;
+        if (all[i].downloaded_ts) counts.downloaded++;
     }
-    ['draft','published'].forEach(function(t) {
+    ['draft','published','downloaded'].forEach(function(t) {
         var c = document.getElementById('my-art-count-' + t);
         if (c) c.textContent = '(' + counts[t] + ')';
     });
     var tab = window._myArtifactsTab || 'draft';
-    if (tab !== 'draft' && tab !== 'published') tab = 'draft';
-    var items = all.filter(function(d) {
-        var s = d.status || 'draft';
-        return s === tab;
-    });
+    if (tab !== 'draft' && tab !== 'published' && tab !== 'downloaded') tab = 'draft';
+    var items;
+    if (tab === 'downloaded') {
+        // Sort by most recent download (falling back to save ts if a row
+        // somehow has a download stamp but no save ts).
+        items = all.filter(function(d) { return !!d.downloaded_ts; });
+        items.sort(function(a, b) {
+            return (b.downloaded_ts || b.ts || 0) - (a.downloaded_ts || a.ts || 0);
+        });
+    } else {
+        items = all.filter(function(d) {
+            var s = d.status || 'draft';
+            return s === tab;
+        });
+    }
     if (!items.length) {
-        var emptyMsg = (tab === 'published')
-            ? 'No artifacts yet. Emails you send will show up here.'
-            : 'No drafts yet. Drafts you save will show up here.';
+        var emptyMsg;
+        if (tab === 'published') emptyMsg = 'No artifacts yet. Emails you send will show up here.';
+        else if (tab === 'downloaded') emptyMsg = 'No downloads yet. Emails you save as HTML will show up here.';
+        else emptyMsg = 'No drafts yet. Drafts you save will show up here.';
         list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text-muted);font-size:13px;">' + escHtml(emptyMsg) + '</div>';
         return;
     }
@@ -10697,6 +10839,10 @@ function renderMyArtifactsList() {
             for (var ii = 0; ii < g.items.length; ii++) {
                 html += _renderDraftRow(g.items[ii], ID_RE);
             }
+        }
+    } else if (tab === 'downloaded') {
+        for (var di = 0; di < items.length; di++) {
+            html += _renderDownloadedRow(items[di], ID_RE);
         }
     } else {
         for (var i = 0; i < items.length; i++) {
@@ -13937,6 +14083,7 @@ function downloadCombinedEmail() {
             if (!html) { showToast('Download failed: template has no HTML body', 'error'); return; }
             if (_triggerHtmlDownload(html, _buildEmailDownloadFilename(data.subject))) {
                 showToast('Email HTML downloaded \uD83D\uDCBE');
+                _markCurrentDraftDownloaded(data.subject);
             }
         })
         .catch(function(err) {
@@ -13968,6 +14115,7 @@ function downloadCombinedEmail() {
         if (!html) { showToast('Download failed: empty response', 'error'); return; }
         if (_triggerHtmlDownload(html, _buildEmailDownloadFilename(data.subject))) {
             showToast('Email HTML downloaded \uD83D\uDCBE');
+            _markCurrentDraftDownloaded(data.subject);
         }
     })
     .catch(function(err) {
