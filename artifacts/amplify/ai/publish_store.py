@@ -634,6 +634,116 @@ def _load_image_files(img_path, meta_path):
         return None
 
 
+def set_publish_image_s3(feature_id, s3_key: str, s3_url: str = "", content_type: str = "") -> bool:
+    """Persist S3 metadata back onto an existing feature image's meta.json.
+
+    Used by the post-render rewrite pass when it uploads a feature image
+    on the fly (the row predates S3 being enabled). Returns True when the
+    sidecar was updated, False if the meta is missing or the write failed.
+    Failures are logged and never raised so a single bad asset can't break
+    a whole email render.
+    """
+    if not feature_id or not s3_key:
+        return False
+    try:
+        meta_path = _meta_path_feature(feature_id)
+    except ValueError:
+        return False
+    if not os.path.exists(meta_path):
+        return False
+    try:
+        with open(meta_path, "r") as f:
+            meta = json.load(f)
+    except Exception as e:
+        logger.warning(f"[attachments] feature-images set_s3 read failed for {feature_id}: {e}")
+        return False
+    meta["s3_key"] = s3_key
+    if s3_url:
+        meta["s3_url"] = s3_url
+    if content_type:
+        meta["s3_content_type"] = content_type
+    tmp = meta_path + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(meta, f)
+        os.replace(tmp, meta_path)
+        logger.info(f"[attachments] feature-images set_s3 persisted s3_key={s3_key!r} for {feature_id}")
+        return True
+    except Exception as e:
+        logger.warning(f"[attachments] feature-images set_s3 write failed for {feature_id}: {e}")
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
+        return False
+
+
+def set_video_s3_keys(
+    video_id: str,
+    s3_key: str = "",
+    s3_url: str = "",
+    s3_thumb_key: str = "",
+    s3_thumb_url: str = "",
+) -> bool:
+    """Persist S3 keys for a video back onto its meta.json + Postgres row.
+
+    Used by the post-render rewrite pass when it uploads a video body or
+    thumb on the fly. Updates whichever fields were passed in (empty
+    strings are treated as "do not change"). Returns True when at least
+    the disk meta was updated; failures are logged and never raised.
+    """
+    if not video_id:
+        return False
+    if not (s3_key or s3_url or s3_thumb_key or s3_thumb_url):
+        return False
+    try:
+        vdir = _video_dir(video_id)
+    except ValueError:
+        return False
+    meta_path = os.path.join(vdir, "meta.json")
+    meta = None
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except Exception as e:
+            logger.warning(f"[attachments] videos set_s3 read failed for {video_id}: {e}")
+            meta = None
+    if meta is None:
+        # Try DB hydration so we don't lose the keys we just uploaded.
+        meta = _hydrate_video_to_disk(video_id, want_video=False, want_thumb=False)
+        if meta is None:
+            return False
+    if s3_key:
+        meta["s3_key"] = s3_key
+    if s3_url:
+        meta["s3_url"] = s3_url
+    if s3_thumb_key:
+        meta["s3_thumb_key"] = s3_thumb_key
+    if s3_thumb_url:
+        meta["s3_thumb_url"] = s3_thumb_url
+    try:
+        os.makedirs(vdir, exist_ok=True)
+        tmp = meta_path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(meta, f)
+        os.replace(tmp, meta_path)
+    except Exception as e:
+        logger.warning(f"[attachments] videos set_s3 meta write failed for {video_id}: {e}")
+        return False
+    # Mirror to Postgres so the keys survive container recycles. Best-effort.
+    try:
+        _db_upsert_video(meta, video_bytes=None, thumb_bytes=None)
+    except Exception as e:
+        logger.warning(f"[attachments] videos set_s3 DB upsert failed for {video_id}: {e}")
+    logger.info(
+        f"[attachments] videos set_s3 persisted video_id={video_id!r} "
+        f"s3_key={meta.get('s3_key')!r} s3_thumb_key={meta.get('s3_thumb_key')!r}"
+    )
+    return True
+
+
 def get_image(feature_id, channel=None):
     img_path = _image_path_feature(feature_id)
     meta_path = _meta_path_feature(feature_id)

@@ -629,6 +629,416 @@ def _build_hosted_image_map(images: dict) -> dict:
     return hosted
 
 
+# ---------------------------------------------------------------------------
+# Direct-S3 URL rewrite for rendered email HTML (Task #115)
+# ---------------------------------------------------------------------------
+# After ``render_email_html`` builds the final HTML string, we walk every
+# ``<img src=...>`` and ``<source src=...>`` URL and rewrite anything that
+# would otherwise depend on the Replit app being up (``/api/publish/image/
+# hosted/<id>``, ``/api/publish/image/serve/<feature_id>``, ``/api/videos/
+# <id>``, ``/api/videos/<id>/thumb``, ``/api/videos/external-thumb/<key>``)
+# into the corresponding **direct, long-lived public S3 URL**.
+#
+# This makes downloaded ``.html`` files self-contained: every `<img src>`
+# in `View Source` is an ``https://<bucket>.s3.<region>.amazonaws.com/...``
+# URL that keeps working forever, even if the Replit app is offline.
+#
+# When a row already has the right ``s3_key`` recorded we just swap in the
+# public URL. When it doesn't (older content saved before S3 was enabled),
+# we upload the bytes on the fly through ``attachment_store.put`` and
+# persist the returned key onto the row so future renders skip the upload.
+#
+# Every per-asset failure is best-effort: we log loudly and leave that one
+# URL unchanged. The whole rewrite is also a no-op when ``s3_enabled()``
+# is False (local-only backend) so previews stay working without S3.
+# ---------------------------------------------------------------------------
+
+
+def _public_s3_url_for(key: str) -> str | None:
+    """Wrapper around :func:`attachment_store.s3_public_url` that warns when
+    the bucket isn't configured to serve the long-lived virtual-hosted form.
+
+    The downloaded HTML must keep working with no expiry, so we deliberately
+    do NOT fall back to a presigned URL here — that would put a TTL on the
+    file and break it the moment that TTL passes.
+    """
+    try:
+        from integrations import attachment_store as _astore
+        url = _astore.s3_public_url(key)
+        if not url:
+            logger.warning(
+                f"[rewrite-s3] s3_public_url returned None for key={key!r}; "
+                "bucket/region not set — leaving URL unchanged"
+            )
+        return url
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] s3_public_url failed for key={key!r}: {e}")
+        return None
+
+
+def _try_upload_to_s3(kind: str, key_hint: str, raw: bytes, content_type: str) -> tuple:
+    """Push bytes through the attachment seam. Returns ``(s3_key, s3_url)``
+    or ``(None, None)`` on failure. Never raises."""
+    try:
+        from integrations import attachment_store as _astore
+        result = _astore.put(
+            kind=kind, key_hint=key_hint, raw_bytes=raw, content_type=content_type
+        )
+        if result.get("backend") == "s3" and result.get("key"):
+            return result["key"], result.get("url")
+        if result.get("error"):
+            logger.warning(
+                f"[rewrite-s3] kind={kind} on-the-fly upload skipped: "
+                f"{result.get('error')}"
+            )
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] kind={kind} on-the-fly upload failed: {e}")
+    return None, None
+
+
+def _resolve_hosted_image_to_s3_url(img_id: str) -> str | None:
+    """Return a direct S3 URL for a ``/api/publish/image/hosted/<img_id>`` URL,
+    uploading on the fly if the row has no ``s3_key`` yet."""
+    try:
+        from app import _load_hosted_image_s3_meta as _meta, _load_hosted_image_db as _bytes_, \
+            _set_hosted_image_s3 as _persist
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] hosted-emails: app helpers unavailable: {e}")
+        return None
+    try:
+        s3_meta = _meta(img_id)
+    except Exception:
+        s3_meta = None
+    if s3_meta and s3_meta[0]:
+        return _public_s3_url_for(s3_meta[0])
+    db_hit = None
+    try:
+        db_hit = _bytes_(img_id)
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] hosted-emails: load bytes failed for {img_id}: {e}")
+    if not db_hit:
+        return None
+    ext, raw = db_hit
+    safe_ext = (ext or "png").lower().lstrip(".")
+    if not safe_ext.isalnum():
+        safe_ext = "png"
+    content_type = _MIME_BY_EXT.get(safe_ext, f"image/{safe_ext}")
+    s3_key, s3_url = _try_upload_to_s3(
+        kind="hosted-emails",
+        key_hint=f"{img_id}.{safe_ext}",
+        raw=raw,
+        content_type=content_type,
+    )
+    if not s3_key:
+        return None
+    try:
+        _persist(img_id, s3_key, s3_url or "")
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] hosted-emails: persist s3_key failed for {img_id}: {e}")
+    return _public_s3_url_for(s3_key)
+
+
+def _resolve_feature_image_to_s3_url(feature_id: str) -> str | None:
+    """Return a direct S3 URL for a ``/api/publish/image/serve/<feature_id>``
+    URL, uploading the stored ``dataUrl`` to S3 on the fly if needed."""
+    try:
+        from ai.publish_store import get_image as _get, set_publish_image_s3 as _persist
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] feature-images: store helpers unavailable: {e}")
+        return None
+    try:
+        img = _get(feature_id)
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] feature-images: get failed for {feature_id}: {e}")
+        return None
+    if not img:
+        return None
+    s3_key = (img.get("s3_key") or "").strip()
+    if s3_key:
+        return _public_s3_url_for(s3_key)
+    data_url = img.get("dataUrl") or ""
+    if not data_url.startswith("data:image/"):
+        return None
+    import re as _re
+    import base64 as _b64
+    m = _re.match(r"data:image/(\w+);base64,(.+)", data_url)
+    if not m:
+        return None
+    ext = m.group(1).lower()
+    try:
+        raw = _b64.b64decode(m.group(2))
+    except Exception:
+        return None
+    is_gif = bool(img.get("is_gif"))
+    content_type = "image/gif" if (is_gif or ext == "gif") else f"image/{ext}"
+    new_key, new_url = _try_upload_to_s3(
+        kind="feature-images",
+        key_hint=f"{feature_id}.{ext}",
+        raw=raw,
+        content_type=content_type,
+    )
+    if not new_key:
+        return None
+    try:
+        _persist(feature_id, new_key, new_url or "", content_type)
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] feature-images: persist failed for {feature_id}: {e}")
+    return _public_s3_url_for(new_key)
+
+
+def _resolve_video_thumb_to_s3_url(video_id: str) -> str | None:
+    """Return a direct S3 URL for a ``/api/videos/<video_id>/thumb`` URL,
+    uploading the cached thumbnail JPEG on the fly if needed."""
+    try:
+        from ai.publish_store import (
+            get_video_meta as _meta,
+            get_video_thumb_path as _thumb_path,
+            set_video_s3_keys as _persist,
+        )
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] video-thumbs: store helpers unavailable: {e}")
+        return None
+    try:
+        meta = _meta(video_id) or {}
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] video-thumbs: meta failed for {video_id}: {e}")
+        meta = {}
+    s3_thumb_key = (meta.get("s3_thumb_key") or "").strip()
+    if s3_thumb_key:
+        return _public_s3_url_for(s3_thumb_key)
+    try:
+        thumb_path = _thumb_path(video_id)
+    except Exception:
+        thumb_path = None
+    if not thumb_path:
+        return None
+    try:
+        with open(thumb_path, "rb") as f:
+            raw = f.read()
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] video-thumbs: read thumb failed for {video_id}: {e}")
+        return None
+    new_key, new_url = _try_upload_to_s3(
+        kind="video-thumbs",
+        key_hint=f"videos/{video_id}/thumb.jpg",
+        raw=raw,
+        content_type="image/jpeg",
+    )
+    if not new_key:
+        return None
+    try:
+        _persist(video_id, s3_thumb_key=new_key, s3_thumb_url=new_url or "")
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] video-thumbs: persist failed for {video_id}: {e}")
+    return _public_s3_url_for(new_key)
+
+
+def _resolve_video_body_to_s3_url(video_id: str) -> str | None:
+    """Return a direct S3 URL for a ``/api/videos/<video_id>`` URL (the
+    video body — used in ``<source src>`` tags). Uploads the file on the
+    fly if no ``s3_key`` is recorded yet."""
+    try:
+        from ai.publish_store import (
+            get_video_meta as _meta,
+            get_video_path as _path,
+            set_video_s3_keys as _persist,
+        )
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] videos: store helpers unavailable: {e}")
+        return None
+    try:
+        meta = _meta(video_id) or {}
+    except Exception:
+        meta = {}
+    s3_key = (meta.get("s3_key") or "").strip()
+    if s3_key:
+        return _public_s3_url_for(s3_key)
+    try:
+        result = _path(video_id)
+    except Exception:
+        return None
+    if not result or not result[0]:
+        return None
+    video_path, vmeta = result
+    ext = ((vmeta or {}).get("ext", ".mp4") or ".mp4").lower()
+    if not ext.startswith("."):
+        ext = "." + ext
+    try:
+        with open(video_path, "rb") as f:
+            raw = f.read()
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] videos: read body failed for {video_id}: {e}")
+        return None
+    content_type = {
+        ".mp4": "video/mp4", ".mov": "video/quicktime",
+        ".webm": "video/webm", ".avi": "video/x-msvideo",
+        ".mkv": "video/x-matroska",
+    }.get(ext, "video/mp4")
+    new_key, new_url = _try_upload_to_s3(
+        kind="videos",
+        key_hint=f"videos/{video_id}/video{ext}",
+        raw=raw,
+        content_type=content_type,
+    )
+    if not new_key:
+        return None
+    try:
+        _persist(video_id, s3_key=new_key, s3_url=new_url or "")
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] videos: persist failed for {video_id}: {e}")
+    return _public_s3_url_for(new_key)
+
+
+def _resolve_external_thumb_to_s3_url(key: str) -> str | None:
+    """Return a direct S3 URL for a ``/api/videos/external-thumb/<key>`` URL,
+    uploading the cached composited JPEG on the fly if needed."""
+    try:
+        from integrations.video_thumb import (
+            get_external_thumb_s3_key as _key_fn,
+            get_cached_external_thumb_path as _path_fn,
+            _s3_external_thumb_key as _build_key,
+        )
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] external-thumbs: helpers unavailable: {e}")
+        return None
+    try:
+        s3_key = _key_fn(key)
+    except Exception:
+        s3_key = ""
+    if s3_key:
+        return _public_s3_url_for(s3_key)
+    # Cache file may exist locally but not yet on S3 — re-upload from disk.
+    try:
+        path = _path_fn(key)
+    except Exception:
+        path = ""
+    if not path:
+        return None
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except Exception as e:
+        logger.warning(f"[rewrite-s3] external-thumbs: read failed for {key}: {e}")
+        return None
+    deterministic_key = _build_key(key)
+    new_key, _new_url = _try_upload_to_s3(
+        kind="external-thumbs",
+        key_hint=deterministic_key,
+        raw=raw,
+        content_type="image/jpeg",
+    )
+    if not new_key:
+        return None
+    return _public_s3_url_for(new_key)
+
+
+# Match an ``/api/...`` path inside a URL (with or without scheme/host),
+# stopping at the natural URL terminators. Anchored with a leading ``/``
+# so it picks up both bare paths and absolute URLs.
+import re as _re_rewrite
+
+_RE_HOSTED_IMG = _re_rewrite.compile(r'/api/publish/image/hosted/([a-fA-F0-9]+)')
+_RE_FEATURE_IMG = _re_rewrite.compile(r'/api/publish/image/serve/([A-Za-z0-9_\-]+)')
+_RE_VIDEO_THUMB = _re_rewrite.compile(r'/api/videos/([A-Za-z0-9\-]{8,})/thumb')
+_RE_EXT_THUMB = _re_rewrite.compile(r'/api/videos/external-thumb/([a-fA-F0-9]+)')
+# Video-body matcher: ``/api/videos/<id>`` NOT followed by ``/thumb`` or
+# ``/external-thumb`` (those have their own matchers). Ends at a quote,
+# whitespace, ``<``, ``?``, ``#`` or end-of-string.
+_RE_VIDEO_BODY = _re_rewrite.compile(
+    r'/api/videos/([A-Za-z0-9\-]{8,})(?=$|[?#"\'\s<>])'
+)
+
+# Match URLs that appear inside ``<img src="..."``, ``<source src="..."``,
+# or ``<video poster="...">`` attributes. We deliberately leave
+# ``<a href="...">`` unchanged — the click-through link can keep
+# pointing at the Replit app.
+#
+# The ``<video poster>`` arm is future-proofing: today no rendered email
+# emits it (we use ``<img>`` for video posters), but if a template ever
+# starts using HTML5 video posters directly, those URLs are already
+# covered by the same rewrite.
+_RE_IMG_SRC = _re_rewrite.compile(
+    r'(<(?:img|source)\b[^>]*?\bsrc=)(["\'])([^"\']+)(\2)',
+    flags=_re_rewrite.IGNORECASE,
+)
+_RE_VIDEO_POSTER = _re_rewrite.compile(
+    r'(<video\b[^>]*?\bposter=)(["\'])([^"\']+)(\2)',
+    flags=_re_rewrite.IGNORECASE,
+)
+
+
+def _rewrite_one_url(url: str) -> str:
+    """Return a direct S3 URL for ``url`` if it matches one of the
+    Replit-hosted patterns and we can resolve / upload it. Otherwise
+    return ``url`` unchanged.
+    """
+    m = _RE_HOSTED_IMG.search(url)
+    if m:
+        new = _resolve_hosted_image_to_s3_url(m.group(1))
+        return new or url
+    m = _RE_FEATURE_IMG.search(url)
+    if m:
+        new = _resolve_feature_image_to_s3_url(m.group(1))
+        return new or url
+    m = _RE_VIDEO_THUMB.search(url)
+    if m:
+        new = _resolve_video_thumb_to_s3_url(m.group(1))
+        return new or url
+    m = _RE_EXT_THUMB.search(url)
+    if m:
+        new = _resolve_external_thumb_to_s3_url(m.group(1))
+        return new or url
+    m = _RE_VIDEO_BODY.search(url)
+    if m:
+        new = _resolve_video_body_to_s3_url(m.group(1))
+        return new or url
+    return url
+
+
+def rewrite_email_html_to_direct_s3(html: str) -> str:
+    """Walk every ``<img src>`` / ``<source src>`` URL in ``html`` and
+    rewrite Replit-hosted asset URLs to direct, long-lived S3 public URLs.
+
+    Returns the (possibly modified) HTML. Always returns a string of the
+    same length-or-greater (we only swap URLs). When the S3 backend isn't
+    enabled the rewrite is a no-op so local-mode previews keep working.
+    Per-asset failures (missing rows, S3 outage, ...) leave that one URL
+    unchanged so a single bad asset never breaks the whole email render.
+    """
+    if not html:
+        return html
+    try:
+        from integrations import attachment_store as _astore
+        if not _astore.s3_enabled():
+            return html
+    except Exception:
+        return html
+
+    rewritten_count = [0]
+    skipped_count = [0]
+
+    def _replace(match):
+        prefix, quote, url, _close = match.group(1), match.group(2), match.group(3), match.group(4)
+        new_url = _rewrite_one_url(url)
+        if new_url != url:
+            rewritten_count[0] += 1
+        elif _RE_HOSTED_IMG.search(url) or _RE_FEATURE_IMG.search(url) \
+                or _RE_VIDEO_THUMB.search(url) or _RE_VIDEO_BODY.search(url) \
+                or _RE_EXT_THUMB.search(url):
+            skipped_count[0] += 1
+        return f"{prefix}{quote}{new_url}{quote}"
+
+    out = _RE_IMG_SRC.sub(_replace, html)
+    out = _RE_VIDEO_POSTER.sub(_replace, out)
+    if rewritten_count[0] or skipped_count[0]:
+        logger.info(
+            f"[rewrite-s3] direct-S3 rewrite done: rewrote={rewritten_count[0]} "
+            f"skipped={skipped_count[0]} (skipped left as-is so the in-app "
+            f"serve route still handles them)"
+        )
+    return out
+
+
 def _build_cid_attachments(images: dict) -> tuple:
     import re as _re, base64 as _b64
     cid_map = {}
@@ -1099,7 +1509,7 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
     header_radius = "8px 8px 0 0" if has_banner else "8px 8px 0 0"
     body_radius = "0 0 8px 8px"
 
-    return f"""<!DOCTYPE html>
+    final_html = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -1121,6 +1531,20 @@ def render_email_html(subject: str, body: str, images: dict = None, cid_map: dic
 </table>
 </body>
 </html>"""
+
+    # Task #115: rewrite every ``<img src>`` / ``<source src>`` URL pointing
+    # at the Replit app (``/api/publish/image/...``, ``/api/videos/...``)
+    # to the corresponding direct, long-lived public S3 URL. Makes the
+    # downloaded HTML self-contained so it keeps rendering even if the app
+    # is offline. No-op when S3 backend isn't enabled.
+    try:
+        final_html = rewrite_email_html_to_direct_s3(final_html)
+    except Exception as e:
+        logger.warning(
+            f"[email] direct-S3 rewrite raised unexpectedly; "
+            f"returning unrewritten HTML: {e}"
+        )
+    return final_html
 
 
 def _send_via_resend(subject: str, html_content: str, to_emails: list, is_test: bool, attachments: list = None, from_name: str = None, template_id: str = None, bcc_emails: list = None, audience_id: str = None, topic_id: str = None) -> dict | None:

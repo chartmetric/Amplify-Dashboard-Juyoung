@@ -640,6 +640,374 @@ class AttachmentStatusEndpointTests(unittest.TestCase):
         self.assertTrue(all(body["secrets_present"].values()))
         self.assertIn("pending", body)
         self.assertIn("recent", body)
+        # Task #115: status surfaces whether the long-lived S3 public URL
+        # form (the one the email-HTML rewrite embeds into downloaded
+        # .html files) is mintable. With bucket+region both set this is
+        # always True.
+        self.assertTrue(body["direct_s3_url_usable"])
+
+
+# ---------------------------------------------------------------------------
+# Direct-S3 rewrite of rendered email HTML (Task #115)
+# ---------------------------------------------------------------------------
+
+
+class DirectS3HtmlRewriteTests(unittest.TestCase):
+    """The rewrite pass walks every ``<img src>`` / ``<source src>`` URL in
+    the rendered email HTML and swaps Replit-hosted URLs (``/api/publish/
+    image/...``, ``/api/videos/...``) for direct, long-lived S3 public
+    URLs. These tests drive the seam end-to-end without standing up Flask
+    or talking to real S3.
+    """
+
+    def setUp(self):
+        self._env_patch = mock.patch.dict(
+            os.environ,
+            {
+                "AMPLIFY_IMAGE_STORAGE_BACKEND": "s3",
+                "S3_Bucket_name": "test-bucket",
+                "S3_Region": "us-east-1",
+                "S3_Access_Key": "AKIAFAKE",
+                "S3_Secret_Access_Key": "fake-secret",
+            },
+            clear=False,
+        )
+        self._env_patch.start()
+        from integrations import sendgrid_client
+        self._sendgrid = sendgrid_client
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    # -- noop-when-disabled --------------------------------------------------
+
+    def test_rewrite_is_noop_when_s3_backend_disabled(self):
+        html = (
+            '<img src="/api/publish/image/serve/feat-x" alt="">'
+            '<img src="/api/videos/abcdefgh1234/thumb">'
+        )
+        with mock.patch.object(
+            attachment_store, "get_backend_name", return_value="local"
+        ):
+            out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        self.assertEqual(out, html)
+
+    # -- hosted-emails -------------------------------------------------------
+
+    def test_rewrite_hosted_image_uses_existing_s3_key(self):
+        img_id = "abc123def4567890"
+        html = f'<img src="/api/publish/image/hosted/{img_id}" alt="x">'
+        with mock.patch.object(
+            amp_app, "_load_hosted_image_s3_meta",
+            return_value=("hosted-emails/" + img_id + ".png", "", "png"),
+        ):
+            out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        self.assertIn(
+            f"https://test-bucket.s3.us-east-1.amazonaws.com/hosted-emails/{img_id}.png",
+            out,
+        )
+        self.assertNotIn("/api/publish/image/hosted/", out)
+
+    def test_rewrite_hosted_image_uploads_on_the_fly_when_missing(self):
+        img_id = "ff00aa11bb22cc33"
+        html = f'<img src="/api/publish/image/hosted/{img_id}" alt="">'
+        record = []
+        fake = _fake_s3_client(record)
+        persisted = []
+        with mock.patch.object(
+            amp_app, "_load_hosted_image_s3_meta", return_value=None
+        ), mock.patch.object(
+            amp_app, "_load_hosted_image_db", return_value=("png", _PNG_BYTES)
+        ), mock.patch.object(
+            amp_app, "_set_hosted_image_s3",
+            side_effect=lambda iid, k, u: persisted.append((iid, k, u)) or True,
+        ), mock.patch.object(
+            attachment_store, "_s3_client", return_value=fake
+        ):
+            out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        self.assertEqual(len(record), 1, f"expected 1 S3 PUT, got {record!r}")
+        put_kwargs = record[0]
+        self.assertEqual(put_kwargs["Bucket"], "test-bucket")
+        self.assertTrue(
+            put_kwargs["Key"].startswith("hosted-emails/"),
+            f"unexpected key {put_kwargs['Key']!r}",
+        )
+        self.assertEqual(len(persisted), 1)
+        self.assertEqual(persisted[0][0], img_id)
+        self.assertIn("https://test-bucket.s3.us-east-1.amazonaws.com/", out)
+        self.assertNotIn(f"/api/publish/image/hosted/{img_id}", out)
+
+    # -- feature-images ------------------------------------------------------
+
+    def test_rewrite_feature_image_uses_existing_s3_key(self):
+        feat = "feat-1"
+        html = f'<img src="/api/publish/image/serve/{feat}" alt="">'
+        with mock.patch.object(
+            publish_store, "get_image",
+            return_value={
+                "s3_key": "feature-images/feat-1.png",
+                "s3_url": "",
+                "dataUrl": "",
+                "name": "x.png",
+            },
+        ):
+            out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        self.assertIn(
+            "https://test-bucket.s3.us-east-1.amazonaws.com/feature-images/feat-1.png",
+            out,
+        )
+
+    def test_rewrite_feature_image_uploads_on_the_fly_when_missing(self):
+        feat = "feat-2"
+        html = f'<img src="/api/publish/image/serve/{feat}">'
+        record = []
+        persisted = []
+        fake = _fake_s3_client(record)
+        with mock.patch.object(
+            publish_store, "get_image",
+            return_value={
+                "s3_key": "",
+                "s3_url": "",
+                "dataUrl": _PNG_DATA_URL,
+                "name": "x.png",
+                "is_gif": False,
+            },
+        ), mock.patch.object(
+            publish_store, "set_publish_image_s3",
+            side_effect=lambda fid, k, u, ct: persisted.append((fid, k, u, ct)) or True,
+        ), mock.patch.object(
+            attachment_store, "_s3_client", return_value=fake
+        ):
+            out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        self.assertEqual(len(record), 1, f"expected 1 S3 PUT, got {record!r}")
+        self.assertTrue(record[0]["Key"].startswith("feature-images/"))
+        self.assertEqual(len(persisted), 1)
+        self.assertEqual(persisted[0][0], feat)
+        self.assertIn("https://test-bucket.s3.us-east-1.amazonaws.com/feature-images/", out)
+
+    # -- video-thumbs --------------------------------------------------------
+
+    def test_rewrite_video_thumb_uses_existing_s3_thumb_key(self):
+        vid = "abcdefgh1234"
+        html = f'<img src="/api/videos/{vid}/thumb" alt="">'
+        with mock.patch.object(
+            publish_store, "get_video_meta",
+            return_value={
+                "s3_thumb_key": f"videos/{vid}/thumb.jpg",
+                "s3_thumb_url": "",
+                "ext": ".mp4",
+            },
+        ):
+            out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        self.assertIn(
+            f"https://test-bucket.s3.us-east-1.amazonaws.com/videos/{vid}/thumb.jpg",
+            out,
+        )
+        self.assertNotIn(f"/api/videos/{vid}/thumb", out)
+
+    def test_rewrite_video_thumb_uploads_on_the_fly_when_missing(self):
+        vid = "qrstuvwx9999"
+        html = f'<img src="/api/videos/{vid}/thumb">'
+        with tempfile.TemporaryDirectory() as tmp:
+            thumb_path = os.path.join(tmp, "thumb.jpg")
+            with open(thumb_path, "wb") as f:
+                f.write(_PNG_BYTES)
+            record = []
+            persisted = []
+            fake = _fake_s3_client(record)
+            with mock.patch.object(
+                publish_store, "get_video_meta",
+                return_value={"s3_thumb_key": "", "s3_thumb_url": "", "ext": ".mp4"},
+            ), mock.patch.object(
+                publish_store, "get_video_thumb_path", return_value=thumb_path
+            ), mock.patch.object(
+                publish_store, "set_video_s3_keys",
+                side_effect=lambda vid, **kw: persisted.append((vid, kw)) or True,
+            ), mock.patch.object(
+                attachment_store, "_s3_client", return_value=fake
+            ):
+                out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        self.assertEqual(len(record), 1)
+        self.assertTrue(record[0]["Key"].startswith("videos/"))
+        self.assertIn("https://test-bucket.s3.us-east-1.amazonaws.com/videos/", out)
+        self.assertEqual(persisted[0][0], vid)
+        self.assertIn("s3_thumb_key", persisted[0][1])
+
+    # -- external-thumbs -----------------------------------------------------
+
+    def test_rewrite_external_thumb_uses_existing_s3_key(self):
+        ext_key = "deadbeef"
+        html = f'<img src="/api/videos/external-thumb/{ext_key}" alt="">'
+        s3_key = f"external-thumbs/{ext_key}.jpg"
+        with mock.patch.object(
+            video_thumb, "get_external_thumb_s3_key", return_value=s3_key
+        ):
+            out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        self.assertIn(
+            f"https://test-bucket.s3.us-east-1.amazonaws.com/{s3_key}",
+            out,
+        )
+
+    # -- graceful per-asset fallback ----------------------------------------
+
+    def test_rewrite_leaves_url_unchanged_when_resolution_fails(self):
+        # Hosted image with no s3 meta and no DB row — nothing the rewrite
+        # can do. The URL should be left untouched and the rest of the
+        # HTML (including a successful sibling rewrite) should still
+        # work, proving one bad asset doesn't break the whole render.
+        bad = "1111111111111111"
+        good = "2222222222222222"
+        html = (
+            f'<img src="/api/publish/image/hosted/{bad}" alt="bad">'
+            f'<img src="/api/publish/image/hosted/{good}" alt="good">'
+        )
+        def _meta(iid):
+            if iid == good:
+                return ("hosted-emails/" + good + ".png", "", "png")
+            return None
+        def _bytes(iid):
+            return None  # simulate "no recoverable bytes" for `bad`
+        with mock.patch.object(
+            amp_app, "_load_hosted_image_s3_meta", side_effect=_meta
+        ), mock.patch.object(
+            amp_app, "_load_hosted_image_db", side_effect=_bytes
+        ):
+            out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        # Bad URL preserved verbatim:
+        self.assertIn(f"/api/publish/image/hosted/{bad}", out)
+        # Good URL rewritten:
+        self.assertIn(
+            f"https://test-bucket.s3.us-east-1.amazonaws.com/hosted-emails/{good}.png",
+            out,
+        )
+
+    # -- video bodies (<source src="/api/videos/<id>">) ---------------------
+
+    def test_rewrite_video_body_uses_existing_s3_key(self):
+        vid = "videoid12345"
+        # Both <video src=...> and <source src=...> patterns must be rewritten.
+        html = (
+            f'<video src="/api/videos/{vid}" controls></video>'
+            f'<source src="/api/videos/{vid}" type="video/mp4">'
+        )
+        with mock.patch.object(
+            publish_store, "get_video_meta",
+            return_value={
+                "s3_key": f"videos/{vid}/video.mp4",
+                "s3_url": "",
+                "ext": ".mp4",
+            },
+        ):
+            out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        # The <source src=...> match must be rewritten — that's the one the
+        # email actually uses. (The non-img/non-source <video src> form is
+        # not in our regex, so it stays unchanged; that's fine because no
+        # rendered email emits it.)
+        self.assertIn(
+            f'<source src="https://test-bucket.s3.us-east-1.amazonaws.com/videos/{vid}/video.mp4"',
+            out,
+        )
+
+    def test_rewrite_video_body_uploads_on_the_fly_when_missing(self):
+        vid = "videoid67890"
+        html = f'<source src="/api/videos/{vid}" type="video/mp4">'
+        with tempfile.TemporaryDirectory() as tmp:
+            video_path = os.path.join(tmp, "video.mp4")
+            with open(video_path, "wb") as f:
+                f.write(b"fake-mp4-bytes")
+            record = []
+            persisted = []
+            fake = _fake_s3_client(record)
+            with mock.patch.object(
+                publish_store, "get_video_meta",
+                return_value={"s3_key": "", "s3_url": "", "ext": ".mp4"},
+            ), mock.patch.object(
+                publish_store, "get_video_path",
+                return_value=(video_path, {"ext": ".mp4"}),
+            ), mock.patch.object(
+                publish_store, "set_video_s3_keys",
+                side_effect=lambda vid, **kw: persisted.append((vid, kw)) or True,
+            ), mock.patch.object(
+                attachment_store, "_s3_client", return_value=fake
+            ):
+                out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        self.assertEqual(len(record), 1)
+        self.assertTrue(record[0]["Key"].startswith("videos/"))
+        self.assertEqual(record[0]["ContentType"], "video/mp4")
+        self.assertEqual(persisted[0][0], vid)
+        self.assertIn("s3_key", persisted[0][1])
+        self.assertIn("https://test-bucket.s3.us-east-1.amazonaws.com/videos/", out)
+
+    # -- explicit S3 upload failure fallback --------------------------------
+
+    def test_rewrite_leaves_url_unchanged_when_s3_upload_raises(self):
+        # Lock in graceful-degradation: when the S3 client itself fails on
+        # PUT, the rewrite must NOT raise and must NOT corrupt the URL —
+        # it leaves the original /api/... URL in place so the in-app
+        # serve route still handles it for the recipient.
+        feat = "feat-fail"
+        html = f'<img src="/api/publish/image/serve/{feat}">'
+        record = []
+        # raise_on_put=True makes the fake S3 client raise BotoCoreError
+        # inside attachment_store.put — exercising the seam's except branch.
+        fake = _fake_s3_client(record, raise_on_put=True)
+        persist_calls = []
+        with mock.patch.object(
+            publish_store, "get_image",
+            return_value={
+                "s3_key": "",
+                "s3_url": "",
+                "dataUrl": _PNG_DATA_URL,
+                "name": "x.png",
+                "is_gif": False,
+            },
+        ), mock.patch.object(
+            publish_store, "set_publish_image_s3",
+            side_effect=lambda *a, **kw: persist_calls.append((a, kw)) or True,
+        ), mock.patch.object(
+            attachment_store, "_s3_client", return_value=fake
+        ):
+            out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        # PUT was attempted and failed:
+        self.assertEqual(len(record), 1)
+        # No persist call — we never got an S3 key back:
+        self.assertEqual(persist_calls, [])
+        # URL preserved verbatim — the in-app serve route still handles it:
+        self.assertIn(f"/api/publish/image/serve/{feat}", out)
+        self.assertNotIn("test-bucket.s3.us-east-1.amazonaws.com", out)
+
+    # -- <video poster="..."> future-proofing -------------------------------
+
+    def test_rewrite_video_poster_attribute(self):
+        # No rendered email emits <video poster=...> today (we use <img>),
+        # but the matcher covers it so any future template addition is
+        # already self-contained without another release.
+        vid = "abcdefgh1234"
+        html = f'<video poster="/api/videos/{vid}/thumb" controls></video>'
+        with mock.patch.object(
+            publish_store, "get_video_meta",
+            return_value={
+                "s3_thumb_key": f"videos/{vid}/thumb.jpg",
+                "s3_thumb_url": "",
+                "ext": ".mp4",
+            },
+        ):
+            out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        self.assertIn(
+            f'poster="https://test-bucket.s3.us-east-1.amazonaws.com/videos/{vid}/thumb.jpg"',
+            out,
+        )
+
+    # -- non-target URLs left alone -----------------------------------------
+
+    def test_rewrite_does_not_touch_unrelated_urls(self):
+        html = (
+            '<img src="https://img.youtube.com/vi/abc/hqdefault.jpg">'
+            '<a href="/api/videos/something1234">click</a>'
+            '<img src="https://test-bucket.s3.us-east-1.amazonaws.com/already.png">'
+        )
+        out = self._sendgrid.rewrite_email_html_to_direct_s3(html)
+        self.assertEqual(out, html)
 
 
 if __name__ == "__main__":

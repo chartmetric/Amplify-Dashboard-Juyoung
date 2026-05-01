@@ -2245,11 +2245,21 @@ def attachments_status_endpoint():
     if auth_err is not None:
         return auth_err
     from integrations import attachment_store as _astore
+    # ``direct_s3_url_usable`` reports whether ``s3_public_url`` can mint
+    # the long-lived virtual-hosted-style URL the email-HTML rewrite
+    # (Task #115) embeds into downloaded ``.html`` files. It's a cheap
+    # config-only probe — bucket + region must both be set, otherwise
+    # the rewrite has nothing to rewrite TO and silently leaves
+    # /api/... URLs in place. Surfacing this lets ops notice "S3 is on
+    # but downloads are still going through the app" without grepping
+    # logs for the rewrite-s3 warnings.
+    probe_url = _astore.s3_public_url("status-probe-key")
     return jsonify({
         "success": True,
         "backend": _astore.get_backend_name(),
         "s3_enabled": _astore.s3_enabled(),
         "secrets_present": _astore.secrets_present(),
+        "direct_s3_url_usable": bool(probe_url),
         "pending": _attachments_pending_counts(),
         "recent": _astore.recent_uploads(limit=25),
         "auto_sweep": _backfill_sweep_status_snapshot(),
