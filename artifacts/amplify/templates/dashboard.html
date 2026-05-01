@@ -11213,22 +11213,43 @@ function saveCombinedAsDraft() {
     if (name === null) return;
     name = (name || '').trim() || defaultName;
     var snapshot = _collectCombinedDraftSnapshot();
+    // If the marketer opened this composer from an already-sent artifact
+    // (status='published'), clicking "Save as Draft" forks the content
+    // into a NEW draft row rather than demoting the original. That way
+    // the original sent artifact stays in My Content > Sent (preserving
+    // send history) and the marketer's edits land in My Content > Drafts
+    // where the Save-as-Draft button promised they'd appear.
+    var isFork = (window._currentDraftStatus === 'published');
+    var idToSend = isFork ? null : (window._currentDraftId || null);
     var btn = document.querySelector('.btn-save-draft');
     var originalText = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = 'Saving...'; }
     fetch('/api/email-drafts', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ name: name, snapshot: snapshot, id: window._currentDraftId || null })
+        body: JSON.stringify({
+            name: name,
+            snapshot: snapshot,
+            id: idToSend,
+            // Always pin to 'draft' so the row lands in the Drafts bar /
+            // Drafts tab. For an existing draft this is a no-op; for a
+            // fork from a published artifact it ensures the new row
+            // starts as a draft.
+            status: 'draft'
+        })
     })
     .then(function(r) { return r.json(); })
     .then(function(resp) {
         if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
         if (resp.error) { showToast('Save failed: ' + resp.error, 'error'); return; }
         window._currentDraftId = resp.id;
+        window._currentDraftStatus = 'draft';
         _setArtifactUrl(resp.id);
         refreshMyArtifactsCount();
-        showToast('Draft saved: ' + name + ' \u2705');
+        var msg = isFork
+            ? ('Saved as new draft: ' + name + '. The original sent email is still in My Content > Sent. \u2705')
+            : ('Draft saved: ' + name + ' \u2705');
+        showToast(msg);
     })
     .catch(function(err) {
         if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
