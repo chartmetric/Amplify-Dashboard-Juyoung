@@ -121,6 +121,93 @@ def recent_uploads(limit: int = 25) -> list:
 
 
 # ---------------------------------------------------------------------------
+# Per-item outcome ring buffer (Task #112).
+#
+# This is the "why did this item not land in S3?" trail surfaced in the
+# admin Attachment Storage panel. Every backfill helper records one
+# entry per item it visits: ``uploaded`` (success), ``skipped`` (with a
+# categorical reason like ``already-mirrored``), or ``error`` (with the
+# exception message). The buffer is bounded and in-memory only — no new
+# database tables, by design.
+#
+# The skip vocabulary is intentionally small so the UI can render reasons
+# consistently and operators can tell healthy skips ("already-mirrored")
+# from ones that need attention ("source-missing").
+# ---------------------------------------------------------------------------
+
+SKIP_REASONS = (
+    "already-mirrored",   # item already has an S3 key — nothing to do
+    "source-missing",     # the local source bytes are gone
+    "unsupported-kind",   # the item shape doesn't match what the helper expects
+    "precondition-failed",  # caller-supplied gate (e.g. data URL malformed)
+    "empty-bytes",        # payload was zero-length
+)
+
+# Skip reasons that are healthy and should be omitted from the admin
+# "issues" lists by default.
+HEALTHY_SKIP_REASONS = ("already-mirrored",)
+
+_OUTCOMES: "deque[dict]" = deque(maxlen=400)
+_OUTCOMES_LOCK = threading.Lock()
+
+
+def record_outcome(
+    kind: str,
+    item_id: str,
+    outcome: str,
+    reason: str = "",
+    **extra,
+) -> None:
+    """Record a per-item backfill outcome in the bounded ring buffer.
+
+    ``outcome`` must be one of ``uploaded``, ``skipped``, ``error``.
+    For skips, ``reason`` should be one of :data:`SKIP_REASONS`.
+    For errors, ``reason`` should be the exception message / repr.
+    Extra fields (``key``, ``bytes``, etc.) are merged into the entry.
+    """
+    entry = {
+        "ts": time.time(),
+        "kind": kind,
+        "item_id": item_id or "",
+        "outcome": outcome,
+        "reason": reason or "",
+    }
+    if extra:
+        entry.update(extra)
+    with _OUTCOMES_LOCK:
+        _OUTCOMES.appendleft(entry)
+
+
+def recent_outcomes(
+    kind: Optional[str] = None,
+    outcomes: Optional[tuple] = None,
+    exclude_reasons: tuple = (),
+    item_id: Optional[str] = None,
+    limit: int = 50,
+) -> list:
+    """Return recent per-item outcomes, newest first, filtered as requested."""
+    with _OUTCOMES_LOCK:
+        items = list(_OUTCOMES)
+    if kind:
+        items = [i for i in items if i.get("kind") == kind]
+    if outcomes:
+        items = [i for i in items if i.get("outcome") in outcomes]
+    if exclude_reasons:
+        items = [i for i in items if i.get("reason") not in exclude_reasons]
+    if item_id is not None:
+        items = [i for i in items if i.get("item_id") == item_id]
+    if limit and limit > 0:
+        items = items[: int(limit)]
+    return items
+
+
+def latest_outcome_for(kind: str, item_id: str) -> Optional[dict]:
+    """Return the most recent outcome recorded for a given (kind, item_id)."""
+    matches = recent_outcomes(kind=kind, item_id=item_id, limit=1)
+    return matches[0] if matches else None
+
+
+# ---------------------------------------------------------------------------
 # S3 helpers
 # ---------------------------------------------------------------------------
 

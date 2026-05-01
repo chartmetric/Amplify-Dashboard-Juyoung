@@ -2539,6 +2539,27 @@ def _backfill_runners() -> dict:
     }
 
 
+def _backfill_one_item(kind: str, item_id: str) -> dict:
+    """Re-run the relevant backfill helper scoped to a single item.
+
+    Reuses the existing per-kind helpers (no duplicate upload logic) by
+    passing the ``only_id`` filter. Returns the helper's report dict.
+    """
+    if kind == "feature-images":
+        return _backfill_feature_images(1, only_id=item_id)
+    if kind == "videos":
+        return _backfill_videos(1, want_thumbs=False, only_id=item_id)
+    if kind == "video-thumbs":
+        return _backfill_videos(1, want_thumbs=True, only_id=item_id)
+    if kind == "external-thumbs":
+        return _backfill_external_thumbs(1, only_id=item_id)
+    if kind == "hosted-emails":
+        return _backfill_hosted_emails(1, only_id=item_id)
+    if kind == "announcements":
+        return _backfill_announcements(1, only_id=item_id)
+    raise ValueError(f"unknown kind: {kind}")
+
+
 def _run_backfill_sweep_cycle(batch_size: int, deadline_ts: float) -> dict:
     """Walk every kind once, honouring the ``deadline_ts`` between kinds.
 
@@ -2686,6 +2707,39 @@ def _backfill_sweep_status_snapshot() -> dict:
         return dict(_BACKFILL_SWEEP_STATE)
 
 
+_ATTACHMENT_KINDS = (
+    "feature-images", "videos", "video-thumbs",
+    "external-thumbs", "hosted-emails", "announcements",
+)
+
+
+def _attachment_issue_lists(per_kind_limit: int = 25) -> dict:
+    """Group recent per-item outcomes into ``failures`` and ``skips`` per kind.
+
+    "Healthy" skip reasons (currently just ``already-mirrored``) are
+    omitted from the skips list so admins only see items that need
+    attention. The returned shape is::
+
+        {kind: {"failures": [outcome, ...], "skips": [outcome, ...]}}
+
+    Both lists are newest-first and capped at ``per_kind_limit``.
+    """
+    from integrations import attachment_store as _astore
+    out: dict = {}
+    for kind in _ATTACHMENT_KINDS:
+        out[kind] = {
+            "failures": _astore.recent_outcomes(
+                kind=kind, outcomes=("error",), limit=per_kind_limit,
+            ),
+            "skips": _astore.recent_outcomes(
+                kind=kind, outcomes=("skipped",),
+                exclude_reasons=_astore.HEALTHY_SKIP_REASONS,
+                limit=per_kind_limit,
+            ),
+        }
+    return out
+
+
 @app.route("/api/admin/attachments/status", methods=["GET"])
 def attachments_status_endpoint():
     """Return the current attachment-storage configuration + per-kind pending counts.
@@ -2700,6 +2754,15 @@ def attachments_status_endpoint():
             "secrets_present": {S3_Bucket_name: bool, ...},
             "pending": {feature-images: N, videos: N, ...},
             "recent": [{ts, backend, kind, key, bytes, ok, error}, ...],
+            # Task #112 — per-item diagnostics: every backfill helper
+            # now records a structured outcome (uploaded / skipped /
+            # error) for each item it visits. ``issues`` exposes recent
+            # failures and non-healthy skips per kind so admins can
+            # diagnose without opening server logs. Healthy skips
+            # (``already-mirrored``) are omitted from this list.
+            "issues": {kind: {"failures": [{ts, item_id, reason, ...}],
+                              "skips": [{ts, item_id, reason, ...}]}},
+            "skip_reasons": [...],   # the categorical vocabulary
             "auto_sweep": {started, enabled, running, cycle_count,
                            interval_seconds, batch_size, max_cycle_seconds,
                            last_started_at, last_finished_at,
@@ -2728,11 +2791,13 @@ def attachments_status_endpoint():
         "direct_s3_url_usable": bool(probe_url),
         "pending": _attachments_pending_counts(),
         "recent": _astore.recent_uploads(limit=25),
+        "issues": _attachment_issue_lists(per_kind_limit=25),
+        "skip_reasons": list(_astore.SKIP_REASONS),
         "auto_sweep": _backfill_sweep_status_snapshot(),
     })
 
 
-def _backfill_feature_images(limit: int) -> dict:
+def _backfill_feature_images(limit: int, only_id: str = "") -> dict:
     """Upload local feature image bytes to S3 for rows missing s3_key.
 
     Feature images live as flat ``<feature_id>.img`` (data URL) +
@@ -2740,6 +2805,9 @@ def _backfill_feature_images(limit: int) -> dict:
     URL, push the raw bytes via the attachment seam, and persist the
     resulting S3 key back into the meta JSON so the serve endpoint can
     302-redirect on subsequent reads.
+
+    When ``only_id`` is supplied, only that single feature id is processed
+    (used by the per-item retry endpoint).
     """
     import base64 as _b64
     import re as _re
@@ -2753,20 +2821,35 @@ def _backfill_feature_images(limit: int) -> dict:
             break
         if not fn.endswith(".meta.json"):
             continue
+        feature_id = fn[: -len(".meta.json")]
+        if only_id and feature_id != only_id:
+            continue
         meta_path = os.path.join(_IMG_DIR, fn)
         if not os.path.isfile(meta_path):
             continue
         try:
             with open(meta_path) as f:
                 meta = json.load(f)
-        except Exception:
+        except Exception as e:
+            _astore.record_outcome(
+                "feature-images", feature_id, "error",
+                reason=f"meta-read-failed: {e}",
+            )
+            errors += 1
             continue
         scanned += 1
         if meta.get("s3_key"):
+            _astore.record_outcome(
+                "feature-images", feature_id, "skipped",
+                reason="already-mirrored", key=meta.get("s3_key"),
+            )
             continue
-        feature_id = fn[: -len(".meta.json")]
         img_path = os.path.join(_IMG_DIR, feature_id + ".img")
         if not os.path.exists(img_path):
+            _astore.record_outcome(
+                "feature-images", feature_id, "skipped",
+                reason="source-missing",
+            )
             continue
         try:
             with open(img_path) as f:
@@ -2774,6 +2857,10 @@ def _backfill_feature_images(limit: int) -> dict:
             m = _re.match(r"data:image/(\w+);base64,(.+)", data_url, _re.DOTALL)
             if not m:
                 logger.warning(f"[backfill] feature-images {feature_id} not a data URL")
+                _astore.record_outcome(
+                    "feature-images", feature_id, "error",
+                    reason="not-a-data-url",
+                )
                 errors += 1
                 continue
             ext = m.group(1).lower()
@@ -2794,23 +2881,40 @@ def _backfill_feature_images(limit: int) -> dict:
                     json.dump(meta, f)
                 os.replace(tmp, meta_path)
                 uploaded += 1
+                _astore.record_outcome(
+                    "feature-images", feature_id, "uploaded",
+                    key=res["key"], bytes=len(raw),
+                )
             else:
                 errors += 1
+                _astore.record_outcome(
+                    "feature-images", feature_id, "error",
+                    reason=res.get("error") or "s3-put-failed",
+                )
         except Exception as e:
             logger.warning(f"[backfill] feature-images {feature_id} failed: {e}")
             errors += 1
+            _astore.record_outcome(
+                "feature-images", feature_id, "error", reason=repr(e),
+            )
     return {"scanned": scanned, "uploaded": uploaded, "errors": errors}
 
 
-def _backfill_videos(limit: int, want_thumbs: bool = True) -> dict:
+def _backfill_videos(limit: int, want_thumbs: bool = True, only_id: str = "") -> dict:
     from ai.publish_store import VIDEOS_DIR as _V_DIR
     from integrations import attachment_store as _astore
+    # The kind label used for outcome recording when ``want_thumbs`` is
+    # the only thing being processed (the dispatch table maps the
+    # ``video-thumbs`` kind to a thumbs-only run); for the combined
+    # videos run we still tag video-bytes outcomes as ``videos``.
     scanned = uploaded = thumbs_uploaded = errors = 0
     if not os.path.isdir(_V_DIR):
         return {"scanned": 0, "uploaded": 0, "thumbs_uploaded": 0, "errors": 0}
     for fn in os.listdir(_V_DIR):
         if uploaded + thumbs_uploaded >= limit:
             break
+        if only_id and fn != only_id:
+            continue
         vdir = os.path.join(_V_DIR, fn)
         if not os.path.isdir(vdir) or fn.startswith("_"):
             continue
@@ -2820,15 +2924,31 @@ def _backfill_videos(limit: int, want_thumbs: bool = True) -> dict:
         try:
             with open(meta_path) as f:
                 meta = json.load(f)
-        except Exception:
+        except Exception as e:
+            _astore.record_outcome(
+                "videos" if not want_thumbs else "video-thumbs",
+                fn, "error", reason=f"meta-read-failed: {e}",
+            )
+            errors += 1
             continue
         scanned += 1
         meta_changed = False
-        # Video bytes
-        if not meta.get("s3_key"):
+        # Video bytes (always attempted — the dispatch table also calls
+        # us with want_thumbs=True for ``video-thumbs``, but historically
+        # that path also picked up missing video bytes; preserved here).
+        if meta.get("s3_key"):
+            _astore.record_outcome(
+                "videos", fn, "skipped",
+                reason="already-mirrored", key=meta.get("s3_key"),
+            )
+        else:
             ext = meta.get("ext") or ".mp4"
             video_path = os.path.join(vdir, "video" + ext)
-            if os.path.exists(video_path):
+            if not os.path.exists(video_path):
+                _astore.record_outcome(
+                    "videos", fn, "skipped", reason="source-missing",
+                )
+            else:
                 try:
                     with open(video_path, "rb") as f:
                         raw = f.read()
@@ -2848,34 +2968,66 @@ def _backfill_videos(limit: int, want_thumbs: bool = True) -> dict:
                         meta["s3_content_type"] = ctype
                         meta_changed = True
                         uploaded += 1
+                        _astore.record_outcome(
+                            "videos", fn, "uploaded",
+                            key=res["key"], bytes=len(raw),
+                        )
                     else:
                         errors += 1
+                        _astore.record_outcome(
+                            "videos", fn, "error",
+                            reason=res.get("error") or "s3-put-failed",
+                        )
                 except Exception as e:
                     logger.warning(f"[backfill] videos {fn} failed: {e}")
                     errors += 1
-        # Thumb
-        if want_thumbs and not meta.get("s3_thumb_key"):
-            thumb_path = os.path.join(vdir, "thumb.jpg")
-            if os.path.exists(thumb_path):
-                try:
-                    with open(thumb_path, "rb") as f:
-                        raw = f.read()
-                    res = _astore.put(
-                        kind="video-thumbs",
-                        key_hint=f"videos/{fn}/thumb.jpg",
-                        raw_bytes=raw,
-                        content_type="image/jpeg",
+                    _astore.record_outcome(
+                        "videos", fn, "error", reason=repr(e),
                     )
-                    if res.get("backend") == "s3" and res.get("key"):
-                        meta["s3_thumb_key"] = res["key"]
-                        meta["s3_thumb_url"] = res.get("url") or ""
-                        meta_changed = True
-                        thumbs_uploaded += 1
-                    else:
+        # Thumb
+        if want_thumbs:
+            if meta.get("s3_thumb_key"):
+                _astore.record_outcome(
+                    "video-thumbs", fn, "skipped",
+                    reason="already-mirrored", key=meta.get("s3_thumb_key"),
+                )
+            else:
+                thumb_path = os.path.join(vdir, "thumb.jpg")
+                if not os.path.exists(thumb_path):
+                    _astore.record_outcome(
+                        "video-thumbs", fn, "skipped", reason="source-missing",
+                    )
+                else:
+                    try:
+                        with open(thumb_path, "rb") as f:
+                            raw = f.read()
+                        res = _astore.put(
+                            kind="video-thumbs",
+                            key_hint=f"videos/{fn}/thumb.jpg",
+                            raw_bytes=raw,
+                            content_type="image/jpeg",
+                        )
+                        if res.get("backend") == "s3" and res.get("key"):
+                            meta["s3_thumb_key"] = res["key"]
+                            meta["s3_thumb_url"] = res.get("url") or ""
+                            meta_changed = True
+                            thumbs_uploaded += 1
+                            _astore.record_outcome(
+                                "video-thumbs", fn, "uploaded",
+                                key=res["key"], bytes=len(raw),
+                            )
+                        else:
+                            errors += 1
+                            _astore.record_outcome(
+                                "video-thumbs", fn, "error",
+                                reason=res.get("error") or "s3-put-failed",
+                            )
+                    except Exception as e:
+                        logger.warning(f"[backfill] video-thumbs {fn} failed: {e}")
                         errors += 1
-                except Exception as e:
-                    logger.warning(f"[backfill] video-thumbs {fn} failed: {e}")
-                    errors += 1
+                        _astore.record_outcome(
+                            "video-thumbs", fn, "error", reason=repr(e),
+                        )
         if meta_changed:
             try:
                 tmp = meta_path + ".tmp"
@@ -2894,7 +3046,7 @@ def _backfill_videos(limit: int, want_thumbs: bool = True) -> dict:
             "thumbs_uploaded": thumbs_uploaded, "errors": errors}
 
 
-def _backfill_hosted_emails(limit: int) -> dict:
+def _backfill_hosted_emails(limit: int, only_id: str = "") -> dict:
     """Mirror hosted-email images from Postgres + ``_hosted_*`` disk fallback to S3."""
     import base64 as _b64
     import re as _re
@@ -2906,20 +3058,34 @@ def _backfill_hosted_emails(limit: int) -> dict:
         try:
             if _ensure_hosted_images_table(conn):
                 with conn.cursor() as cur:
-                    cur.execute(
-                        """SELECT id, ext, name, data FROM email_hosted_images
-                           WHERE s3_key IS NULL OR s3_key = ''
-                           ORDER BY created_at DESC LIMIT %s""",
-                        (int(limit),),
-                    )
+                    if only_id:
+                        cur.execute(
+                            """SELECT id, ext, name, data FROM email_hosted_images
+                               WHERE id = %s""",
+                            (only_id,),
+                        )
+                    else:
+                        cur.execute(
+                            """SELECT id, ext, name, data FROM email_hosted_images
+                               WHERE s3_key IS NULL OR s3_key = ''
+                               ORDER BY created_at DESC LIMIT %s""",
+                            (int(limit),),
+                        )
                     rows = cur.fetchall() or []
                 for row in rows:
                     if uploaded >= limit:
                         break
                     scanned += 1
                     img_id, ext, name, data = row[0], row[1], row[2], row[3]
+                    item_id = str(img_id)
                     if hasattr(data, "tobytes"):
                         data = data.tobytes()
+                    if not data:
+                        _astore.record_outcome(
+                            "hosted-emails", item_id, "skipped",
+                            reason="source-missing",
+                        )
+                        continue
                     ext_clean = (ext or "png").lstrip(".").lower() or "png"
                     ctype = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
                              "gif": "image/gif", "webp": "image/webp"}.get(ext_clean, "image/png")
@@ -2933,16 +3099,35 @@ def _backfill_hosted_emails(limit: int) -> dict:
                         if res.get("backend") == "s3" and res.get("key"):
                             if _set_hosted_image_s3(str(img_id), res["key"], res.get("url") or ""):
                                 uploaded += 1
+                                _astore.record_outcome(
+                                    "hosted-emails", item_id, "uploaded",
+                                    key=res["key"], bytes=len(bytes(data)),
+                                )
                             else:
                                 errors += 1
+                                _astore.record_outcome(
+                                    "hosted-emails", item_id, "error",
+                                    reason="db-update-failed", key=res["key"],
+                                )
                         else:
                             errors += 1
+                            _astore.record_outcome(
+                                "hosted-emails", item_id, "error",
+                                reason=res.get("error") or "s3-put-failed",
+                            )
                     except Exception as e:
                         logger.warning(f"[backfill] hosted-emails db {img_id} failed: {e}")
                         errors += 1
+                        _astore.record_outcome(
+                            "hosted-emails", item_id, "error", reason=repr(e),
+                        )
         except Exception as e:
             logger.warning(f"[backfill] hosted-emails query failed: {e}")
             errors += 1
+            _astore.record_outcome(
+                "hosted-emails", only_id or "(query)", "error",
+                reason=f"db-query-failed: {e}",
+            )
         finally:
             try:
                 conn.close()
@@ -2958,15 +3143,26 @@ def _backfill_hosted_emails(limit: int) -> dict:
                     break
                 if not fn.startswith("_hosted_"):
                     continue
+                disk_id = fn[len("_hosted_"):]
+                if only_id and only_id not in (fn, disk_id):
+                    continue
                 fdir = os.path.join(_IMG_DIR, fn)
                 if not os.path.isdir(fdir):
                     continue
                 marker = os.path.join(fdir, ".s3")
                 if os.path.isfile(marker):
+                    _astore.record_outcome(
+                        "hosted-emails", disk_id, "skipped",
+                        reason="already-mirrored",
+                    )
                     continue
                 meta_path = os.path.join(fdir, "meta.json")
                 data_path = os.path.join(fdir, "image.dat")
                 if not (os.path.exists(meta_path) and os.path.exists(data_path)):
+                    _astore.record_outcome(
+                        "hosted-emails", disk_id, "skipped",
+                        reason="source-missing",
+                    )
                     continue
                 scanned += 1
                 try:
@@ -2977,12 +3173,16 @@ def _backfill_hosted_emails(limit: int) -> dict:
                     m = _re.match(r"data:image/(\w+);base64,(.+)", data_url, _re.DOTALL)
                     if not m:
                         errors += 1
+                        _astore.record_outcome(
+                            "hosted-emails", disk_id, "error",
+                            reason="not-a-data-url",
+                        )
                         continue
                     ext = m.group(1).lower()
                     raw = _b64.b64decode(m.group(2), validate=False)
                     ctype = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
                              "gif": "image/gif", "webp": "image/webp"}.get(ext, f"image/{ext}")
-                    img_id = (meta.get("id") or fn[len("_hosted_"):])
+                    img_id = (meta.get("id") or disk_id)
                     res = _astore.put(
                         kind="hosted-emails",
                         key_hint=f"hosted-emails/{img_id}.{ext}",
@@ -2998,17 +3198,28 @@ def _backfill_hosted_emails(limit: int) -> dict:
                         except Exception:
                             pass
                         uploaded += 1
+                        _astore.record_outcome(
+                            "hosted-emails", str(img_id), "uploaded",
+                            key=res["key"], bytes=len(raw),
+                        )
                     else:
                         errors += 1
+                        _astore.record_outcome(
+                            "hosted-emails", str(img_id), "error",
+                            reason=res.get("error") or "s3-put-failed",
+                        )
                 except Exception as e:
                     logger.warning(f"[backfill] hosted-emails disk {fn} failed: {e}")
                     errors += 1
+                    _astore.record_outcome(
+                        "hosted-emails", disk_id, "error", reason=repr(e),
+                    )
     except Exception:
         pass
     return {"scanned": scanned, "uploaded": uploaded, "errors": errors}
 
 
-def _backfill_announcements(limit: int) -> dict:
+def _backfill_announcements(limit: int, only_id: str = "") -> dict:
     from announcements_routes import UPLOAD_DIR as _ANN_DIR
     from integrations import attachment_store as _astore
     scanned = uploaded = errors = 0
@@ -3019,10 +3230,19 @@ def _backfill_announcements(limit: int) -> dict:
             break
         if fn.endswith(".s3"):
             continue
+        if only_id and fn != only_id:
+            continue
         full = os.path.join(_ANN_DIR, fn)
         if not os.path.isfile(full):
+            if only_id:
+                _astore.record_outcome(
+                    "announcements", fn, "skipped", reason="source-missing",
+                )
             continue
         if os.path.isfile(full + ".s3"):
+            _astore.record_outcome(
+                "announcements", fn, "skipped", reason="already-mirrored",
+            )
             continue
         scanned += 1
         try:
@@ -3041,18 +3261,34 @@ def _backfill_announcements(limit: int) -> dict:
                     with open(full + ".s3", "w") as sc:
                         sc.write(f"{res['key']}\n{res.get('url') or ''}\n")
                     uploaded += 1
+                    _astore.record_outcome(
+                        "announcements", fn, "uploaded",
+                        key=res["key"], bytes=len(raw),
+                    )
                 except Exception as e:
                     logger.warning(f"[backfill] announcements sidecar write {fn} failed: {e}")
                     errors += 1
+                    _astore.record_outcome(
+                        "announcements", fn, "error",
+                        reason=f"sidecar-write-failed: {e}",
+                        key=res.get("key"),
+                    )
             else:
                 errors += 1
+                _astore.record_outcome(
+                    "announcements", fn, "error",
+                    reason=res.get("error") or "s3-put-failed",
+                )
         except Exception as e:
             logger.warning(f"[backfill] announcements {fn} failed: {e}")
             errors += 1
+            _astore.record_outcome(
+                "announcements", fn, "error", reason=repr(e),
+            )
     return {"scanned": scanned, "uploaded": uploaded, "errors": errors}
 
 
-def _backfill_external_thumbs(limit: int) -> dict:
+def _backfill_external_thumbs(limit: int, only_id: str = "") -> dict:
     from integrations.video_thumb import _CACHE_DIR as _XT_DIR  # type: ignore
     from integrations import attachment_store as _astore
     scanned = uploaded = errors = 0
@@ -3063,12 +3299,21 @@ def _backfill_external_thumbs(limit: int) -> dict:
             break
         if not fn.endswith(".jpg"):
             continue
+        if only_id and fn != only_id:
+            continue
         full = os.path.join(_XT_DIR, fn)
         if not os.path.isfile(full):
+            if only_id:
+                _astore.record_outcome(
+                    "external-thumbs", fn, "skipped", reason="source-missing",
+                )
             continue
         # Sidecar marker so the auto-sweep doesn't re-upload bytes we've
         # already mirrored. Mirrors the announcements pattern.
         if os.path.isfile(full + ".s3"):
+            _astore.record_outcome(
+                "external-thumbs", fn, "skipped", reason="already-mirrored",
+            )
             continue
         scanned += 1
         try:
@@ -3090,14 +3335,30 @@ def _backfill_external_thumbs(limit: int) -> dict:
                     with open(full + ".s3", "w") as sc:
                         sc.write(f"{res['key']}\n{res.get('url') or ''}\n")
                     uploaded += 1
+                    _astore.record_outcome(
+                        "external-thumbs", fn, "uploaded",
+                        key=res["key"], bytes=len(raw),
+                    )
                 except Exception as e:
                     logger.warning(f"[backfill] external-thumbs sidecar write {fn} failed: {e}")
                     errors += 1
+                    _astore.record_outcome(
+                        "external-thumbs", fn, "error",
+                        reason=f"sidecar-write-failed: {e}",
+                        key=res.get("key"),
+                    )
             else:
                 errors += 1
+                _astore.record_outcome(
+                    "external-thumbs", fn, "error",
+                    reason=res.get("error") or "s3-put-failed",
+                )
         except Exception as e:
             logger.warning(f"[backfill] external-thumbs {fn} failed: {e}")
             errors += 1
+            _astore.record_outcome(
+                "external-thumbs", fn, "error", reason=repr(e),
+            )
     return {"scanned": scanned, "uploaded": uploaded, "errors": errors}
 
 
@@ -3164,6 +3425,69 @@ def attachments_backfill_endpoint():
         logger.exception(f"[backfill] kind={kind} crashed")
         return jsonify({"success": False, "kind": kind, "error": str(e)}), 500
     return jsonify({"success": True, "kind": kind, **report})
+
+
+@app.route("/api/admin/attachments/retry", methods=["POST"])
+def attachments_retry_endpoint():
+    """Re-run the per-kind backfill helper for a single item (Task #112).
+
+    Category: Admin (gated by AMPLIFY_ADMIN_TOKEN)
+
+    Body / query params:
+    - ``kind``: one of feature-images, videos, video-thumbs,
+      external-thumbs, hosted-emails, announcements.
+    - ``item_id``: the item identifier as it appears in the issues list
+      (feature_id, video folder name, hosted-image id, filename, etc).
+
+    Returns the helper's report plus the freshest recorded outcome for
+    that (kind, item_id) so the dashboard can update the row in place::
+
+        {"success": true, "kind": ..., "item_id": ...,
+         "report": {scanned, uploaded, errors, ...},
+         "outcome": {ts, outcome, reason, key?, ...} | null}
+    """
+    auth_err = _check_admin_auth()
+    if auth_err is not None:
+        return auth_err
+    body = request.get_json(silent=True) or {}
+    kind = (body.get("kind") or request.args.get("kind") or "").strip().lower()
+    item_id = (body.get("item_id") or request.args.get("item_id") or "").strip()
+    if not kind or kind not in _ATTACHMENT_KINDS:
+        return jsonify({
+            "success": False,
+            "error": "unknown_kind",
+            "kind": kind,
+            "valid": list(_ATTACHMENT_KINDS),
+        }), 400
+    if not item_id:
+        return jsonify({"success": False, "error": "missing_item_id"}), 400
+
+    from integrations import attachment_store as _astore
+    if not _astore.s3_enabled():
+        return jsonify({
+            "success": False,
+            "error": "s3_disabled",
+            "message": "Set AMPLIFY_IMAGE_STORAGE_BACKEND=s3 and the four S3_* secrets first.",
+            "secrets_present": _astore.secrets_present(),
+        }), 503
+
+    try:
+        report = _backfill_one_item(kind, item_id)
+    except Exception as e:
+        logger.exception(f"[backfill-retry] kind={kind} item={item_id} crashed")
+        _astore.record_outcome(kind, item_id, "error", reason=repr(e))
+        return jsonify({
+            "success": False, "kind": kind, "item_id": item_id,
+            "error": str(e),
+            "outcome": _astore.latest_outcome_for(kind, item_id),
+        }), 500
+    return jsonify({
+        "success": True,
+        "kind": kind,
+        "item_id": item_id,
+        "report": report,
+        "outcome": _astore.latest_outcome_for(kind, item_id),
+    })
 
 
 @app.route("/api/classifications/cache")

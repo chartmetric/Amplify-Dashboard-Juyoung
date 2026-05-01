@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 pnpm install --frozen-lockfile
-pnpm --filter db push
+pnpm --filter @workspace/db run push-force
 
 if [ -f artifacts/amplify/requirements.txt ]; then
   echo "[post-merge] Installing Python dependencies..."
