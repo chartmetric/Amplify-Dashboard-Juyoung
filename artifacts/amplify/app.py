@@ -1012,14 +1012,72 @@ def _row_to_draft(row) -> dict:
     }
 
 
+def _list_existing_drafts_snapshots() -> list:
+    """Return on-disk snapshot filenames sorted newest-first (YYYYMMDD).
+
+    Snapshot filenames embed the date in `YYYYMMDD` form, which sorts
+    the same lexicographically and chronologically. We use this both
+    for snapshot-based recovery and for retention pruning.
+    """
+    try:
+        existing = [
+            fn for fn in os.listdir(_FEATURES_CACHE_DIR)
+            if fn.startswith(_EMAIL_DRAFTS_SNAPSHOT_PREFIX) and fn.endswith(".json")
+        ]
+    except Exception:
+        return []
+    existing.sort(reverse=True)
+    return existing
+
+
+def _read_drafts_snapshot_file(fn: str) -> list:
+    """Best-effort read of one snapshot file. Returns the drafts list or []."""
+    try:
+        path = os.path.join(_FEATURES_CACHE_DIR, fn)
+        with open(path, "r") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and isinstance(data.get("drafts"), list):
+            return data["drafts"]
+    except Exception as e:
+        logger.warning(f"[email-drafts] snapshot read failed for {fn}: {e}")
+    return []
+
+
+def _find_latest_nonempty_snapshot() -> tuple:
+    """Return `(filename, drafts_list)` for the newest on-disk snapshot
+    that actually contains drafts, or `(None, [])` if none exist.
+
+    This is the recovery source when Postgres comes back with zero rows
+    after an accidental wipe (drizzle push --force, manual TRUNCATE,
+    botched migration, etc.) — see `_load_email_drafts` below.
+    """
+    for fn in _list_existing_drafts_snapshots():
+        drafts = _read_drafts_snapshot_file(fn)
+        if drafts:
+            return fn, drafts
+    return None, []
+
+
 def _maybe_write_daily_drafts_snapshot(data: dict) -> None:
-    """Write today's full-table drafts snapshot to disk if not already done.
+    """Write today's full-table drafts snapshot to disk if it is safe to do so.
 
     Lazy trigger on the first successful `_load_email_drafts()` of the day.
     Best-effort: failures are logged but never propagate to the caller (we
     must not block a normal load on snapshot I/O). Older snapshot files
     beyond `_EMAIL_DRAFTS_SNAPSHOT_RETENTION_DAYS` are pruned in the same
     pass so disk usage stays bounded.
+
+    Refusal rules (the original wipe was made unrecoverable by writing an
+    empty same-day snapshot RIGHT AFTER the table got dropped, poisoning
+    the only on-disk recovery source):
+
+    1. Never overwrite a non-empty same-day snapshot with an empty one.
+    2. Never write the very first snapshot of the day if the payload is
+       empty AND any prior non-empty snapshot exists on disk — that
+       would leave a stale poison-pill snapshot tomorrow once the older
+       ones get pruned.
+    3. Writing an empty snapshot is fine when there is genuinely no
+       prior data anywhere (fresh install).
     """
     try:
         from datetime import datetime, timezone
@@ -1027,14 +1085,55 @@ def _maybe_write_daily_drafts_snapshot(data: dict) -> None:
         snap_path = os.path.join(
             _FEATURES_CACHE_DIR, f"{_EMAIL_DRAFTS_SNAPSHOT_PREFIX}{date_str}.json"
         )
+        new_drafts = (data or {}).get("drafts") or []
         if os.path.exists(snap_path):
-            return
+            existing_drafts = _read_drafts_snapshot_file(
+                os.path.basename(snap_path)
+            )
+            # Rule 1a: never replace a non-empty same-day snapshot with
+            # an empty payload (this is exactly how the original wipe
+            # destroyed the only on-disk recovery source).
+            if existing_drafts and not new_drafts:
+                logger.warning(
+                    "[email-drafts] refusing to overwrite non-empty same-day "
+                    "snapshot with empty payload"
+                )
+                return
+            # Rule 1b: same-day file already captures non-empty data and
+            # the new payload is also non-empty -- preserve the existing
+            # one. The daily file is meant to capture the first
+            # successful load of the day; subsequent loads don't need to
+            # rewrite it (and `_upsert_email_draft` already keeps
+            # Postgres up to date for individual changes).
+            if existing_drafts and new_drafts:
+                return
+            # Rule 1c: existing snapshot is empty AND new payload is
+            # also empty -- nothing to do. Refusing here also avoids a
+            # pointless I/O round-trip.
+            if not existing_drafts and not new_drafts:
+                return
+            # Fall through: existing snapshot is the empty poison-pill
+            # left over from a previous load that ran while the table
+            # was wiped, AND we now have real drafts. Overwrite it so
+            # tomorrow's recovery has something to read from.
+        # Rule 2: don't write today's empty snapshot when older non-empty
+        # snapshots exist; if we did, retention pruning could eventually
+        # leave only empty snapshots and break recovery.
+        if not new_drafts:
+            for fn in _list_existing_drafts_snapshots():
+                if _read_drafts_snapshot_file(fn):
+                    logger.warning(
+                        "[email-drafts] refusing to write empty snapshot "
+                        "while older non-empty snapshot %s still exists",
+                        fn,
+                    )
+                    return
         try:
             os.makedirs(_FEATURES_CACHE_DIR, exist_ok=True)
         except Exception:
             pass
         import uuid as _uuid
-        payload = {"drafts": (data or {}).get("drafts") or []}
+        payload = {"drafts": new_drafts}
         tmp = snap_path + f".{_uuid.uuid4().hex[:8]}.tmp"
         with open(tmp, "w") as f:
             json.dump(payload, f, separators=(",", ":"))
@@ -1043,11 +1142,7 @@ def _maybe_write_daily_drafts_snapshot(data: dict) -> None:
         # lexicographically the same way they sort by date because we use
         # YYYYMMDD, so a reverse sort puts the newest first.
         try:
-            existing = [
-                fn for fn in os.listdir(_FEATURES_CACHE_DIR)
-                if fn.startswith(_EMAIL_DRAFTS_SNAPSHOT_PREFIX) and fn.endswith(".json")
-            ]
-            existing.sort(reverse=True)
+            existing = _list_existing_drafts_snapshots()
             for old_fn in existing[_EMAIL_DRAFTS_SNAPSHOT_RETENTION_DAYS:]:
                 try:
                     os.unlink(os.path.join(_FEATURES_CACHE_DIR, old_fn))
@@ -1059,6 +1154,68 @@ def _maybe_write_daily_drafts_snapshot(data: dict) -> None:
         logger.warning(f"[email-drafts] snapshot write skipped: {e}")
 
 
+def _restore_drafts_from_snapshot(snap_drafts: list) -> list:
+    """Re-insert snapshot drafts into Postgres after an accidental wipe.
+
+    Uses `ON CONFLICT (id) DO NOTHING` so we never clobber a row that
+    was legitimately re-saved between the wipe and this recovery (e.g.
+    the user created a brand-new draft on a fresh table before the
+    snapshot read fired). Returns the resulting full draft list (newest
+    first) on success, or the in-memory snapshot list on failure so the
+    caller can still render something instead of a blank My Content.
+    """
+    if not snap_drafts:
+        return []
+    conn = _drafts_db_conn()
+    if conn is None:
+        return list(snap_drafts)
+    try:
+        if not _ensure_drafts_table(conn):
+            return list(snap_drafts)
+        with conn.cursor() as cur:
+            for d in snap_drafts:
+                if not isinstance(d, dict):
+                    continue
+                _dl_ts = d.get("downloaded_ts")
+                cur.execute(
+                    """
+                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (
+                        d.get("id"),
+                        d.get("name") or "Untitled draft",
+                        float(d.get("ts") or 0),
+                        d.get("status") or "draft",
+                        float(d.get("last_published_ts") or 0),
+                        int(d.get("last_recipient_count") or 0),
+                        json.dumps(d.get("snapshot") or {}),
+                        d.get("category") or None,
+                        float(_dl_ts) if _dl_ts else None,
+                    ),
+                )
+            conn.commit()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts FROM email_drafts ORDER BY ts DESC"
+            )
+            rows = cur.fetchall()
+        return [_row_to_draft(r) for r in rows]
+    except Exception as e:
+        logger.error(f"[email-drafts] snapshot restore failed: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return list(snap_drafts)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def _load_email_drafts() -> dict:
     """Load all drafts. Postgres-first; JSON fallback only when no DB is configured.
 
@@ -1068,6 +1225,14 @@ def _load_email_drafts() -> dict:
     transient DB blip can never silently look like "the table is empty" --
     which is exactly the failure mode that let prior versions of this code
     wipe every draft via downstream "save the full list" calls.
+
+    Snapshot-based recovery: if the table is reachable but returns ZERO
+    rows AND we have a non-empty on-disk snapshot, we treat that as an
+    accidental wipe (drizzle push --force dropping the table is the
+    historical culprit -- see `scripts/post-merge.sh`) and restore the
+    snapshot back into Postgres before returning. This makes
+    `_maybe_write_daily_drafts_snapshot` actually useful: previously it
+    wrote snapshots that nothing ever read.
     """
     if _DRAFTS_DB_URL:
         conn = _drafts_db_conn()
@@ -1092,6 +1257,26 @@ def _load_email_drafts() -> dict:
                 conn.close()
             except Exception:
                 pass
+        if not result["drafts"]:
+            # Postgres came back empty. If we have a non-empty snapshot
+            # on disk, the table was almost certainly wiped (the only
+            # legitimate "no rows" case is a brand-new install, which
+            # also has no snapshot). Restore from the most-recent
+            # non-empty snapshot, persist it back into Postgres so a
+            # subsequent crash doesn't lose it again, and return the
+            # restored draftss to the caller as if nothing happened.
+            try:
+                snap_fn, snap_drafts = _find_latest_nonempty_snapshot()
+            except Exception as _e:
+                snap_fn, snap_drafts = None, []
+            if snap_drafts:
+                logger.warning(
+                    "[email-drafts] table came back empty; restoring %d draft(s) "
+                    "from snapshot %s",
+                    len(snap_drafts), snap_fn,
+                )
+                restored = _restore_drafts_from_snapshot(snap_drafts)
+                result = {"drafts": restored}
         _maybe_write_daily_drafts_snapshot(result)
         return result
     # JSON fallback (Postgres genuinely not configured for this environment).

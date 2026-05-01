@@ -9,7 +9,7 @@
   },
   "scripts": {
     "push": "drizzle-kit push --config ./drizzle.config.ts",
-    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
+    "push-force": "node -e \"console.error('refusing to run drizzle push --force: src/schema/index.ts is empty so this would DROP every undeclared table (email_drafts, email_hosted_images, session). See replit.md > scripts/post-merge.sh for context. To intentionally run it set ALLOW_DRIZZLE_FORCE=1.'); process.exit(process.env.ALLOW_DRIZZLE_FORCE === '1' ? 0 : 1)\" && drizzle-kit push --force --config ./drizzle.config.ts"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

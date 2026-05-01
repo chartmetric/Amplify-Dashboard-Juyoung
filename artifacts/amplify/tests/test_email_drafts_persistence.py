@@ -346,5 +346,247 @@ class DailySnapshotTests(_JsonFallbackBase):
                 self.fail(f"_load_email_drafts raised on snapshot failure: {e}")
 
 
+# ---------------------------------------------------------------------------
+# (f) Snapshot writer refusal rules + poison-pill recovery
+# ---------------------------------------------------------------------------
+
+
+class SnapshotRefusalRulesTests(_JsonFallbackBase):
+    """Lock in the rules that prevent a same-day empty snapshot from
+    poisoning the only on-disk recovery source."""
+
+    def _today_snap_path(self) -> str:
+        from datetime import datetime, timezone
+        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+        return os.path.join(
+            self._tmpdir,
+            f"{amplify_app._EMAIL_DRAFTS_SNAPSHOT_PREFIX}{date_str}.json",
+        )
+
+    def test_does_not_overwrite_nonempty_snapshot_with_empty(self):
+        snap_path = self._today_snap_path()
+        with open(snap_path, "w") as f:
+            json.dump({"drafts": [{"id": "keep0001", "name": "n", "ts": 1.0,
+                                   "status": "draft", "last_published_ts": 0,
+                                   "last_recipient_count": 0, "snapshot": {}}]},
+                      f)
+        amplify_app._maybe_write_daily_drafts_snapshot({"drafts": []})
+        with open(snap_path, "r") as f:
+            payload = json.load(f)
+        self.assertEqual(len(payload["drafts"]), 1)
+        self.assertEqual(payload["drafts"][0]["id"], "keep0001")
+
+    def test_overwrites_empty_same_day_snapshot_with_real_drafts(self):
+        # The exact poison-pill scenario: an earlier load wrote an empty
+        # same-day snapshot while the table was wiped. Once real drafts
+        # are loaded later in the day, that empty file MUST be replaced.
+        snap_path = self._today_snap_path()
+        with open(snap_path, "w") as f:
+            json.dump({"drafts": []}, f)
+        amplify_app._maybe_write_daily_drafts_snapshot({
+            "drafts": [{"id": "real0001", "name": "n", "ts": 1.0,
+                        "status": "draft", "last_published_ts": 0,
+                        "last_recipient_count": 0, "snapshot": {}}]
+        })
+        with open(snap_path, "r") as f:
+            payload = json.load(f)
+        self.assertEqual(len(payload["drafts"]), 1)
+        self.assertEqual(payload["drafts"][0]["id"], "real0001")
+
+    def test_refuses_first_empty_snapshot_when_older_nonempty_exists(self):
+        # Yesterday's snapshot has data. A new (empty) load today must
+        # NOT write today's empty snapshot, otherwise retention pruning
+        # would eventually delete the only good snapshot and leave only
+        # empty ones.
+        older_path = os.path.join(
+            self._tmpdir,
+            f"{amplify_app._EMAIL_DRAFTS_SNAPSHOT_PREFIX}20250101.json",
+        )
+        with open(older_path, "w") as f:
+            json.dump({"drafts": [{"id": "old00001", "name": "n", "ts": 1.0,
+                                   "status": "draft", "last_published_ts": 0,
+                                   "last_recipient_count": 0, "snapshot": {}}]},
+                      f)
+        amplify_app._maybe_write_daily_drafts_snapshot({"drafts": []})
+        self.assertFalse(
+            os.path.exists(self._today_snap_path()),
+            "today's empty snapshot was written despite older non-empty file",
+        )
+
+    def test_find_latest_nonempty_skips_empty_snapshots(self):
+        # Newest file is empty (yesterday's poison pill), older one has
+        # data. Recovery must skip the empty file.
+        empty_path = os.path.join(
+            self._tmpdir,
+            f"{amplify_app._EMAIL_DRAFTS_SNAPSHOT_PREFIX}20260430.json",
+        )
+        good_path = os.path.join(
+            self._tmpdir,
+            f"{amplify_app._EMAIL_DRAFTS_SNAPSHOT_PREFIX}20260429.json",
+        )
+        with open(empty_path, "w") as f:
+            json.dump({"drafts": []}, f)
+        with open(good_path, "w") as f:
+            json.dump({"drafts": [{"id": "rec00001", "name": "n", "ts": 1.0,
+                                   "status": "draft", "last_published_ts": 0,
+                                   "last_recipient_count": 0, "snapshot": {}}]},
+                      f)
+        fn, drafts = amplify_app._find_latest_nonempty_snapshot()
+        self.assertEqual(len(drafts), 1)
+        self.assertEqual(drafts[0]["id"], "rec00001")
+        self.assertTrue(fn.endswith("20260429.json"))
+
+
+# ---------------------------------------------------------------------------
+# (g) Postgres wipe -> snapshot restore
+# ---------------------------------------------------------------------------
+
+
+class _FakePgCursor:
+    def __init__(self, conn):
+        self._conn = conn
+        self._last_select = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+    def execute(self, sql, params=None):
+        sql_norm = " ".join(sql.split()).upper()
+        if sql_norm.startswith("CREATE TABLE") or sql_norm.startswith("ALTER TABLE"):
+            return
+        if sql_norm.startswith("SELECT COUNT"):
+            self._last_select = "count"
+            return
+        if sql_norm.startswith("SELECT"):
+            self._last_select = "rows"
+            return
+        if sql_norm.startswith("INSERT"):
+            # Mimic ON CONFLICT DO NOTHING: insert a row.
+            row = (
+                params[0], params[1], params[2], params[3],
+                params[4], params[5], params[6], params[7], params[8],
+            )
+            self._conn.rows.append(row)
+            return
+        # default: ignore
+
+    def fetchone(self):
+        if self._last_select == "count":
+            return (len(self._conn.rows),)
+        return None
+
+    def fetchall(self):
+        # Newest first by ts (column index 2)
+        return sorted(self._conn.rows, key=lambda r: -float(r[2] or 0))
+
+
+class _FakePgConn:
+    def __init__(self, rows=None):
+        self.rows = list(rows or [])
+        self.committed = 0
+
+    def cursor(self):
+        return _FakePgCursor(self)
+
+    def commit(self):
+        self.committed += 1
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class WipeRecoveryFromSnapshotTests(unittest.TestCase):
+    """Postgres returns zero rows, but a non-empty snapshot is on disk:
+    `_load_email_drafts` must restore that snapshot back into Postgres
+    and return the restored drafts (never a blank My Content)."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.mkdtemp(prefix="email_drafts_recovery_")
+        self._orig_cache_dir = amplify_app._FEATURES_CACHE_DIR
+        amplify_app._FEATURES_CACHE_DIR = self._tmpdir
+        self._patch_url = mock.patch.object(
+            amplify_app, "_DRAFTS_DB_URL", "postgres://test"
+        )
+        self._patch_url.start()
+        # Force `_ensure_drafts_table` to short-circuit so we don't try
+        # to issue real DDL.
+        self._orig_initialized = amplify_app._drafts_db_initialized
+        amplify_app._drafts_db_initialized = True
+
+    def tearDown(self):
+        self._patch_url.stop()
+        amplify_app._drafts_db_initialized = self._orig_initialized
+        amplify_app._FEATURES_CACHE_DIR = self._orig_cache_dir
+        try:
+            for fn in os.listdir(self._tmpdir):
+                try:
+                    os.unlink(os.path.join(self._tmpdir, fn))
+                except OSError:
+                    pass
+            os.rmdir(self._tmpdir)
+        except OSError:
+            pass
+
+    def _write_snapshot(self, fn: str, drafts: list):
+        path = os.path.join(self._tmpdir, fn)
+        with open(path, "w") as f:
+            json.dump({"drafts": drafts}, f)
+
+    def test_empty_db_with_nonempty_snapshot_triggers_restore(self):
+        snap_drafts = [{
+            "id": "rec00001", "name": "Restored draft", "ts": 1700000000.0,
+            "status": "draft", "last_published_ts": 0,
+            "last_recipient_count": 0, "snapshot": {"channel": "email_standalone"},
+            "category": None, "downloaded_ts": None,
+        }]
+        self._write_snapshot(
+            f"{amplify_app._EMAIL_DRAFTS_SNAPSHOT_PREFIX}20260430.json",
+            snap_drafts,
+        )
+        fake_conn = _FakePgConn(rows=[])
+        with mock.patch.object(amplify_app, "_drafts_db_conn", return_value=fake_conn):
+            result = amplify_app._load_email_drafts()
+        self.assertEqual(len(result["drafts"]), 1)
+        self.assertEqual(result["drafts"][0]["id"], "rec00001")
+        # The restore MUST have written the row back into Postgres so a
+        # subsequent crash / load doesn't lose it again.
+        self.assertEqual(len(fake_conn.rows), 1)
+        self.assertGreaterEqual(fake_conn.committed, 1)
+
+    def test_empty_db_with_no_snapshot_returns_empty_without_error(self):
+        # Brand-new install: empty DB, no on-disk snapshots. Must NOT
+        # raise and must return an empty list.
+        fake_conn = _FakePgConn(rows=[])
+        with mock.patch.object(amplify_app, "_drafts_db_conn", return_value=fake_conn):
+            result = amplify_app._load_email_drafts()
+        self.assertEqual(result["drafts"], [])
+
+    def test_nonempty_db_does_not_trigger_restore(self):
+        # Snapshot has data, but DB also has data: the DB wins (no
+        # restore from snapshot -- snapshot is a recovery source only).
+        self._write_snapshot(
+            f"{amplify_app._EMAIL_DRAFTS_SNAPSHOT_PREFIX}20260430.json",
+            [{"id": "snap0001", "name": "n", "ts": 1.0, "status": "draft",
+              "last_published_ts": 0, "last_recipient_count": 0,
+              "snapshot": {}, "category": None, "downloaded_ts": None}],
+        )
+        existing_row = (
+            "live0001", "Live", 9999999999.0, "draft", 0, 0,
+            json.dumps({}), None, None,
+        )
+        fake_conn = _FakePgConn(rows=[existing_row])
+        with mock.patch.object(amplify_app, "_drafts_db_conn", return_value=fake_conn):
+            result = amplify_app._load_email_drafts()
+        ids = [d["id"] for d in result["drafts"]]
+        self.assertEqual(ids, ["live0001"])
+        self.assertEqual(len(fake_conn.rows), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
