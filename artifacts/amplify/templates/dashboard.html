@@ -11319,6 +11319,14 @@ function _renderArtifactRow(d, ID_RE) {
     if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
     var sentMeta = '<span style="color:#4ade80;font-size:11px;font-weight:600;">\u2713 Sent ' + escHtml(when) + (d.last_recipient_count ? ' \u00b7 ' + d.last_recipient_count + ' recipients' : '') + '</span>';
     var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:12px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">' + escHtml(d.subject) + '</div>' : '';
+    // One-click resend is only meaningful for email artifacts. For
+    // non-email channels (twitter, in-app, notion) the publish flow is
+    // channel-specific, so we just show Open.
+    var ch = String(d.channel || '');
+    var isEmail = ch === 'email_standalone' || ch === 'email_newsletter' || ch.indexOf('email') === 0;
+    var republishBtn = isEmail
+        ? '<button data-art-action="republish" data-art-id="' + safeId + '" title="Open this artifact and send it again to the same audience" style="background:#00C9A7;color:#0a1f1a;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;">Republish \u21BB</button>'
+        : '';
     return '<div data-art-id="' + safeId + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);margin-bottom:8px;">'
         + '<div style="flex:1;min-width:0;">'
         + '<div style="font-weight:600;color:var(--text-body);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
@@ -11328,7 +11336,8 @@ function _renderArtifactRow(d, ID_RE) {
         + '<div style="margin-top:4px;"><a href="/artifact/' + encodeURIComponent(safeId) + '" data-art-link="' + safeId + '" style="color:var(--text-muted);font-size:10px;text-decoration:none;font-family:monospace;">/artifact/' + escHtml(safeId) + '</a></div>'
         + '</div>'
         + '<div style="display:flex;flex-direction:column;gap:6px;">'
-        + '<button data-art-action="open" data-art-id="' + safeId + '" style="background:#4ade80;color:#fff;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Open / Resend</button>'
+        + republishBtn
+        + '<button data-art-action="open" data-art-id="' + safeId + '" style="background:#4ade80;color:#fff;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Open</button>'
         + '<button data-art-action="delete" data-art-id="' + safeId + '" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">Delete</button>'
         + '</div>'
         + '</div>';
@@ -11348,6 +11357,17 @@ function _renderDownloadedRow(d, ID_RE) {
     if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
     var dlMeta = '<span style="color:#60a5fa;font-size:11px;font-weight:600;">\u2913 Downloaded ' + escHtml(when) + '</span>';
     var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:12px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">' + escHtml(d.subject) + '</div>' : '';
+    // Same email-only gating as the Sent row: the one-click resend
+    // confirmation flow only makes sense for email artifacts.
+    var ch = String(d.channel || '');
+    var isEmail = ch === 'email_standalone' || ch === 'email_newsletter' || ch.indexOf('email') === 0;
+    // For drafts that have NEVER been sent, label the action "Publish"
+    // (their first send) rather than "Republish".
+    var publishedBefore = !!d.last_published_ts;
+    var publishLabel = publishedBefore ? 'Republish \u21BB' : 'Publish \u21E7';
+    var publishBtn = isEmail
+        ? '<button data-art-action="republish" data-art-id="' + safeId + '" title="Open this artifact and send it" style="background:#00C9A7;color:#0a1f1a;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;">' + publishLabel + '</button>'
+        : '';
     return '<div data-art-id="' + safeId + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);margin-bottom:8px;">'
         + '<div style="flex:1;min-width:0;">'
         + '<div style="font-weight:600;color:var(--text-body);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
@@ -11357,7 +11377,8 @@ function _renderDownloadedRow(d, ID_RE) {
         + '<div style="margin-top:4px;"><a href="/artifact/' + encodeURIComponent(safeId) + '" data-art-link="' + safeId + '" style="color:var(--text-muted);font-size:10px;text-decoration:none;font-family:monospace;">/artifact/' + escHtml(safeId) + '</a></div>'
         + '</div>'
         + '<div style="display:flex;flex-direction:column;gap:6px;">'
-        + '<button data-art-action="open" data-art-id="' + safeId + '" style="background:#60a5fa;color:#fff;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Open / Resend</button>'
+        + publishBtn
+        + '<button data-art-action="open" data-art-id="' + safeId + '" style="background:#60a5fa;color:#fff;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Open</button>'
         + '<button data-art-action="delete" data-art-id="' + safeId + '" style="background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;">Delete</button>'
         + '</div>'
         + '</div>';
@@ -11452,12 +11473,28 @@ function renderMyArtifactsList() {
         if (!ID_RE.test(id)) return;
         var act = btn.getAttribute('data-art-action');
         if (act === 'open') _openArtifactFromList(id);
+        else if (act === 'republish') _republishArtifactFromList(id);
         else if (act === 'delete') _deleteArtifactFromList(id);
     };
 }
 
 function _openArtifactFromList(id) {
     closeMyArtifacts();
+    // Plain Open must not inherit a stale Republish intent from a
+    // previous click that errored out before the flag was consumed.
+    window._republishAfterLoad = false;
+    loadEmailDraft(id);
+}
+
+// One-click resend from My Content. We deliberately route through the
+// existing editor-load path so the marketer sees exactly what's about
+// to be sent (subject, body, audience) before the existing send-time
+// confirmation modal fires. The flag is consumed inside
+// _applyRestoredCombinedFields so we run AFTER the snapshot has been
+// applied to the form fields publishCombinedEmail() reads from.
+function _republishArtifactFromList(id) {
+    closeMyArtifacts();
+    window._republishAfterLoad = true;
     loadEmailDraft(id);
 }
 
@@ -11674,6 +11711,11 @@ function _collectCombinedDraftSnapshot() {
     var bannerTitle = document.getElementById('combined-banner-title');
     var bannerMonth = document.getElementById('combined-banner-month');
     var body = document.getElementById('combined-email-body');
+    // Topic is required for audience-segment sends (powers per-topic
+    // unsubscribe). Persist it so My Content > Republish can fire the
+    // existing send-confirm flow without forcing the user to re-pick a
+    // topic that was already valid the first time around.
+    var topicSel = document.getElementById('combined-email-topic');
     var audValue = audSel ? audSel.value : '';
     var audLabel = '';
     if (audSel && audSel.selectedIndex >= 0) {
@@ -11701,7 +11743,8 @@ function _collectCombinedDraftSnapshot() {
             bcc: bcc ? bcc.value : '',
             bannerTitle: bannerTitle ? bannerTitle.value : '',
             bannerMonth: bannerMonth ? bannerMonth.value : '',
-            body: body ? body.value : ''
+            body: body ? body.value : '',
+            topicId: topicSel ? topicSel.value : ''
         }
     };
 }
@@ -12178,6 +12221,9 @@ function loadEmailDraft(id) {
     .then(function(r) { return r.json(); })
     .then(function(d) {
         if (d.error) {
+            // Failed load must not leave a Republish intent armed for
+            // whatever the user does next.
+            window._republishAfterLoad = false;
             showToast('Artifact not found', 'error');
             try { window.history.replaceState({}, '', '/'); } catch (_e) {}
             var ov = document.getElementById('prep-overlay');
@@ -12232,18 +12278,34 @@ function loadEmailDraft(id) {
             // Saved draft with no generated features — land on the Step 3
             // empty state so the user can regenerate or back out, instead
             // of dropping them into a broken Step 4 with nothing to preview.
+            if (window._republishAfterLoad) {
+                window._republishAfterLoad = false;
+                showToast('This artifact has no generated content to republish.', 'warning');
+            }
             return;
         }
         // Now jump to step 4 — renderCombinedPreview will see the populated list.
         prepGoToStep(4);
         setTimeout(_applyRestoredCombinedFields, 80);
     })
-    .catch(function(err) { showToast('Load failed: ' + err.message, 'error'); });
+    .catch(function(err) {
+        window._republishAfterLoad = false;
+        showToast('Load failed: ' + err.message, 'error');
+    });
 }
 
 function _applyRestoredCombinedFields() {
     var c = window._restoredCombined;
-    if (!c) return;
+    if (!c) {
+        // Snapshot had no combined-email block, so there is nothing to
+        // restore and nothing the auto-publish step could safely fire.
+        // Disarm the flag so it doesn't pollute a later load.
+        if (window._republishAfterLoad) {
+            window._republishAfterLoad = false;
+            showToast('This artifact is missing its email setup. Open it and check the form before sending.', 'warning');
+        }
+        return;
+    }
     var subj = document.getElementById('combined-email-subject');
     if (subj && c.subject) subj.value = c.subject;
     var from = document.getElementById('combined-email-fromname');
@@ -12287,7 +12349,89 @@ function _applyRestoredCombinedFields() {
         if (remaining > 0) setTimeout(function() { trySetTpl(remaining - 1); }, 200);
     }
     trySetTpl(50);
+    // Restore the saved topic. Topic options come from a separate fetch
+    // that may not be done yet, so poll like trySetAud. Once we set it,
+    // re-fire onCombinedEmailTopicChange so the contacts are reloaded
+    // through the topic filter (the audience contacts cache is what
+    // publishCombinedEmail reads).
+    var topSel = document.getElementById('combined-email-topic');
+    function trySetTopic(remaining) {
+        if (!topSel || !c.topicId) return;
+        for (var i = 0; i < topSel.options.length; i++) {
+            if (topSel.options[i].value === c.topicId) {
+                topSel.value = c.topicId;
+                if (typeof onCombinedEmailTopicChange === 'function') onCombinedEmailTopicChange();
+                return;
+            }
+        }
+        if (remaining > 0) setTimeout(function() { trySetTopic(remaining - 1); }, 200);
+    }
+    trySetTopic(50);
     showToast('Draft restored \u2705');
+    // One-click Republish: My Content > Republish set this flag before
+    // calling loadEmailDraft. Now that the editor has the snapshot
+    // applied, fire the existing publishCombinedEmail() — which shows
+    // the standard send-confirm modal so the user still gets to review
+    // recipients and bail out if anything looks wrong.
+    if (window._republishAfterLoad) {
+        window._republishAfterLoad = false;
+        _autoFireRepublish(c);
+    }
+}
+
+// Wait for the audience contacts cache (and topic dropdown) to finish
+// populating, then click the existing publish button. We poll with a
+// hard ceiling so a slow segment fetch doesn't leave the user staring
+// at the editor wondering what happened — if the wait runs out, we
+// just hand control back to the user with a clear toast.
+function _autoFireRepublish(combined) {
+    var startedAt = Date.now();
+    var TIMEOUT_MS = 8000;
+    var POLL_MS = 150;
+    var isCustom = combined && combined.audienceId === '__custom__';
+    // Legacy artifacts saved before topicId persistence won't carry one.
+    // Auto-firing in that state would race with whatever topic happens
+    // to be picked up by default and surface a confusing "Pick a topic"
+    // error from publishCombinedEmail. Bail out cleanly instead so the
+    // user can pick a topic and click Publish themselves.
+    if (!isCustom && combined && combined.audienceId && !combined.topicId) {
+        showToast('This artifact was saved before topic tracking. Pick a topic and click "Publish Email" to resend.', 'warning');
+        return;
+    }
+    function ready() {
+        if (isCustom) {
+            var custIn = document.getElementById('combined-email-custom');
+            return !!(custIn && custIn.value && custIn.value.trim());
+        }
+        // Audience-segment path: the topic must be set AND the cached
+        // contacts must have been loaded for THIS exact (audienceId,
+        // topicId) pair, not some earlier in-flight request. The cache
+        // key is what tells us the data is bound to the right send.
+        var audSel = document.getElementById('combined-email-audience');
+        var topSel = document.getElementById('combined-email-topic');
+        var curAud = audSel ? audSel.value : '';
+        var curTop = topSel ? topSel.value : '';
+        if (combined.audienceId && curAud !== combined.audienceId) return false;
+        if (combined.topicId && curTop !== combined.topicId) return false;
+        var wantKey = _combinedEmailAudKey(curAud, curTop);
+        if (window._combinedEmailAudContactsKey !== wantKey) return false;
+        var contactsOk = Array.isArray(window._combinedEmailAudContacts) && window._combinedEmailAudContacts.length > 0;
+        return contactsOk;
+    }
+    function tick() {
+        if (ready()) {
+            try { publishCombinedEmail(); }
+            catch (e) { showToast('Could not start republish. Click "Publish Email" to send.', 'error'); }
+            return;
+        }
+        if (Date.now() - startedAt > TIMEOUT_MS) {
+            showToast('Republish is ready but recipients are still loading. Click "Publish Email" when the count appears.', 'warning');
+            return;
+        }
+        setTimeout(tick, POLL_MS);
+    }
+    // First poll on the next tick so the toast above settles in first.
+    setTimeout(tick, 200);
 }
 
 var BATCH_ATTACH_STORAGE_KEY = 'amplify:batchAttachments:v1';
@@ -14461,6 +14605,13 @@ function onCombinedEmailTopicChange() {
     }
 }
 
+// Per-request token so out-of-order responses cannot poison the cache.
+// Republish restores audience THEN topic, which can fire two reloads in
+// quick succession; without this the topic-less response could resolve
+// last and leave us with the wrong contact set under a "ready" cache.
+var _combinedEmailAudReqSeq = 0;
+function _combinedEmailAudKey(audId, topicId) { return String(audId || '') + '|' + String(topicId || ''); }
+
 function reloadCombinedEmailAudienceContacts(audId) {
     var topSel = document.getElementById('combined-email-topic');
     var topicId = topSel ? topSel.value : '';
@@ -14469,6 +14620,13 @@ function reloadCombinedEmailAudienceContacts(audId) {
         countSpan.textContent = 'Loading...';
         countSpan.style.color = 'var(--text-muted)';
     }
+    // Invalidate the cache up front so the auto-republish readiness
+    // check (and any concurrent send confirm) cannot pick up a stale
+    // contact list while the new fetch is in flight.
+    window._combinedEmailAudContacts = null;
+    window._combinedEmailAudContactsKey = '';
+    var mySeq = ++_combinedEmailAudReqSeq;
+    var myKey = _combinedEmailAudKey(audId, topicId);
     var url = '/api/resend/audiences/' + audId + '/contacts';
     if (topicId) url += '?topic_id=' + encodeURIComponent(topicId);
     fetch(url)
@@ -14476,9 +14634,13 @@ function reloadCombinedEmailAudienceContacts(audId) {
         return r.json().then(function(data) { return { ok: r.ok, status: r.status, data: data }; });
     })
     .then(function(res) {
+        // Drop late responses: a newer request has been kicked off, so
+        // applying this one would race the cache back to a stale state.
+        if (mySeq !== _combinedEmailAudReqSeq) return;
         if (!res.ok || res.data.success === false || res.data.topic_filter_error) {
             // Fail-safe: clear cache so the publish-confirm flow blocks.
             window._combinedEmailAudContacts = null;
+            window._combinedEmailAudContactsKey = '';
             if (countSpan) {
                 countSpan.textContent = res.data.topic_filter_error
                     ? 'Could not verify topic subscriptions'
@@ -14489,10 +14651,13 @@ function reloadCombinedEmailAudienceContacts(audId) {
         }
         var contacts = res.data.contacts || [];
         window._combinedEmailAudContacts = contacts;
+        window._combinedEmailAudContactsKey = myKey;
         if (countSpan) countSpan.textContent = contacts.length + ' contacts';
     })
     .catch(function() {
+        if (mySeq !== _combinedEmailAudReqSeq) return;
         window._combinedEmailAudContacts = null;
+        window._combinedEmailAudContactsKey = '';
         if (countSpan) {
             countSpan.textContent = 'Error loading segment';
             countSpan.style.color = '#e07b00';
