@@ -13506,6 +13506,25 @@ var _combinedEmailPreviewTimer = null;
 var _combinedEmailPreviewSeq = 0;
 var _combinedEmailPreviewView = 'desktop';
 
+// Apply or remove the `.amplify-force-dark` class on the rendered email
+// inside the live-preview iframe so the Dark toggle simulates what
+// dark-mode email clients (iOS Mail, Apple Mail, Outlook.com dark) show
+// recipients. The same overrides are also keyed off
+// `@media (prefers-color-scheme: dark)` in the email's <style> block, so
+// real recipients get the same rendering automatically.
+function _applyDarkClassToPreviewIframe() {
+    var iframe = document.getElementById('combined-email-live-preview');
+    if (!iframe) return;
+    var doc;
+    try { doc = iframe.contentDocument; } catch (_e) { return; }
+    if (!doc || !doc.documentElement) return;
+    if (_combinedEmailPreviewView === 'dark') {
+        doc.documentElement.classList.add('amplify-force-dark');
+    } else {
+        doc.documentElement.classList.remove('amplify-force-dark');
+    }
+}
+
 function setCombinedEmailPreviewView(mode) {
     if (mode !== 'desktop' && mode !== 'mobile' && mode !== 'dark') mode = 'desktop';
     _combinedEmailPreviewView = mode;
@@ -13514,6 +13533,14 @@ function setCombinedEmailPreviewView(mode) {
     var toggles = document.getElementById('combined-email-preview-toggles');
     if (iframe) {
         iframe.style.maxWidth = (mode === 'mobile') ? '375px' : '640px';
+        // Bind once: each new srcdoc replaces the iframe document, so we
+        // re-apply whichever mode is active after every load.
+        if (!iframe._amplifyDarkBound) {
+            iframe.addEventListener('load', _applyDarkClassToPreviewIframe);
+            iframe._amplifyDarkBound = true;
+        }
+        // Apply immediately for instant toggle without waiting for a re-render.
+        _applyDarkClassToPreviewIframe();
     }
     if (frame) {
         frame.style.background = (mode === 'dark') ? '#1a1a1a' : '#f1f3f5';
