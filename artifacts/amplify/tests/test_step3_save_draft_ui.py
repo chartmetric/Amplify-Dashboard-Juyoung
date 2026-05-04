@@ -3,19 +3,18 @@
 These tests guard against accidental regressions of the rendered template
 contract that the client-side autosave loop relies on:
 
-  (1) Step 3 (the per-feature batch review) renders the same Save-as-Draft
-      cluster (.btn-save-new-draft + [data-auto-save-pill]) as Step 4.
-      Without this, the autosave pill can't display while the marketer is
-      on Step 3 and the save button on Step 3 is missing.
+  (1) Step 3 (the per-feature batch review) and Step 4 (combined preview)
+      each render a Save button (.btn-save-progress) inside their
+      .prep-step-header, alongside the auto-save status pill.
   (2) The auto-save status pill is class-driven (not id-driven) and there
-      is one per cluster, so _updateAutoSaveStatusPill() can target both
+      is one per step header, so _updateAutoSaveStatusPill() can target both
       via a single querySelectorAll lookup.
-  (3) The dashed "+ Save as new draft" button (btn-save-new-draft) is the
-      sole save action on both steps -- the solid btn-save-draft has been
-      removed. Draft-status pills have also been removed from the DOM.
-  (4) Autosave is always on. When no draft id exists yet, _serverAutoSaveNow
-      auto-creates a draft via saveCombinedAsNewDraft(). The guard that
-      short-circuits without content (prepBatchResults empty) remains.
+  (3) The solid "Save" button (btn-save-progress) calls saveCombinedAsDraft()
+      which updates an existing draft or creates one when none exists.
+  (4) Autosave now works from the very first edit: when no draft id exists,
+      _serverAutoSaveNow auto-creates a draft via saveCombinedAsDraft().
+      The guard that short-circuits without content (prepBatchResults empty)
+      remains.
 
 These are pure string assertions over the rendered template -- they don't
 spin up a browser. The structure being asserted is small and stable, so
@@ -42,47 +41,39 @@ class Step3SaveDraftUiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.html = _read_template()
 
-    def test_step3_bottom_bar_has_save_as_draft_cluster(self) -> None:
-        # Locate the Step 3 bottom bar block by its id, then assert the
-        # save cluster is in the same block.
-        anchor = self.html.find('id="batch-bottom-bar"')
-        self.assertGreater(anchor, 0, 'Step 3 batch-bottom-bar not found')
-        # Cluster should appear after the bottom bar opens but before the
-        # Preview Combined button so it's visible in the same row.
-        preview_btn = self.html.find('id="btn-preview-combined"', anchor)
-        self.assertGreater(preview_btn, anchor)
-        cluster_idx = self.html.find('class="save-draft-cluster"', anchor, preview_btn)
-        self.assertGreater(
-            cluster_idx, 0,
-            'save-draft-cluster missing inside Step 3 bottom bar (expected '
-            'between #batch-bottom-bar and #btn-preview-combined)',
-        )
-
-    def test_step3_save_button_calls_shared_save_function(self) -> None:
-        # The sole save action on Step 3 is the dashed btn-save-new-draft
-        # button, bound to saveCombinedAsNewDraft(). The solid btn-save-draft
-        # has been removed; only the dashed button should appear here.
-        anchor = self.html.find('id="batch-bottom-bar"')
-        end = self.html.find('id="btn-preview-combined"', anchor)
+    def test_step3_header_has_save_button(self) -> None:
+        # The Save button must appear inside the Step 3 prep-step-header,
+        # between the step3-title and the start of batch-progress.
+        anchor = self.html.find('id="step3-title"')
+        self.assertGreater(anchor, 0, 'Step 3 title element not found')
+        end = self.html.find('id="batch-progress"', anchor)
+        self.assertGreater(end, anchor, 'batch-progress marker not found after step3-title')
         snippet = self.html[anchor:end]
-        self.assertIn('onclick="saveCombinedAsNewDraft()"', snippet)
-        self.assertNotIn('onclick="saveCombinedAsDraft()"', snippet,
-                         'Solid btn-save-draft should be removed from Step 3')
+        self.assertIn('btn-save-progress', snippet,
+                      'btn-save-progress missing in Step 3 header (expected between '
+                      'step3-title and batch-progress)')
 
-    def test_two_auto_save_pills_for_two_clusters(self) -> None:
-        # One auto-save pill per save-draft cluster (Step 3 + Step 4) so
-        # querySelectorAll('[data-auto-save-pill]') returns both and they
-        # stay in sync.
+    def test_step3_save_button_calls_save_draft_function(self) -> None:
+        # The Save button on Step 3 calls saveCombinedAsDraft() which updates
+        # an existing draft or auto-creates one when none exists.
+        anchor = self.html.find('id="step3-title"')
+        end = self.html.find('id="batch-progress"', anchor)
+        snippet = self.html[anchor:end]
+        self.assertIn('onclick="saveCombinedAsDraft()"', snippet,
+                      'Step 3 Save button should call saveCombinedAsDraft()')
+
+    def test_two_save_buttons_and_two_auto_save_pills(self) -> None:
+        # One btn-save-progress per step (Step 3 + Step 4) so the user can
+        # save from either step without navigating.
         self.assertEqual(
-            self.html.count('class="save-draft-cluster"'), 2,
-            'Expected exactly two save-draft clusters (Step 3 + Step 4)',
+            self.html.count('btn-save-progress" onclick="saveCombinedAsDraft()"'), 2,
+            'Expected exactly two Save buttons (one in Step 3 header, one in Step 4 header)',
         )
         # Count attribute usages on real elements (i.e. ` data-auto-save-pill `
-        # with surrounding whitespace), not the two JS selector strings
-        # like querySelectorAll('[data-auto-save-pill]').
+        # with surrounding whitespace), not the JS selector strings.
         self.assertEqual(
             self.html.count(' data-auto-save-pill '), 2,
-            'Expected exactly two auto-save status pills (one per cluster)',
+            'Expected exactly two auto-save status pills (one per step header)',
         )
 
     def test_two_draft_status_pills_class_driven(self) -> None:
@@ -98,15 +89,14 @@ class Step3SaveDraftUiTests(unittest.TestCase):
                          'draft-status-pill id element should be removed from the DOM')
 
     def test_server_autosave_guarded_by_current_draft_id(self) -> None:
-        # The autosave loop must short-circuit in BOTH _scheduleServerAutoSave
-        # and _serverAutoSaveNow when there is no active draft id.
-        # This prevents the loop from auto-creating a new draft row and
-        # hijacking the user's session context mid-flow.
+        # The autosave loop must check _currentDraftId in both
+        # _scheduleServerAutoSave and _serverAutoSaveNow.
         sched = self.html.find('function _scheduleServerAutoSave')
         self.assertGreater(sched, 0, '_scheduleServerAutoSave function missing')
         sched_body = self.html[sched:sched + 400]
         self.assertIn("if (!window._currentDraftId)", sched_body)
-        # _serverAutoSaveNow also guards independently as a safety net.
+        # _serverAutoSaveNow also checks independently and auto-creates a
+        # draft when there is content but no existing draft id.
         now_fn = self.html.find('function _serverAutoSaveNow')
         self.assertGreater(now_fn, 0, '_serverAutoSaveNow function missing')
         now_body = self.html[now_fn:now_fn + 400]
@@ -129,7 +119,7 @@ class Step3SaveDraftUiTests(unittest.TestCase):
         # Race avoidance: a manual save MUST clear any pending
         # debounced autosave timer (otherwise an older snapshot could
         # land on top of the fresh manual save) AND it must disable
-        # every cluster's button (otherwise a marketer can double-submit
+        # every save button (otherwise a marketer can double-submit
         # by jumping between Step 3 and Step 4 mid-flight).
         core = self.html.find('function _saveCombinedDraftCore')
         self.assertGreater(core, 0)
@@ -140,12 +130,10 @@ class Step3SaveDraftUiTests(unittest.TestCase):
         # Bump a counter the autosave path checks, so an in-flight
         # autosave doesn't paint a stale pill state.
         self.assertIn('window._manualSaveInFlight =', body)
-        # Use querySelectorAll (not querySelector) so BOTH cluster
-        # buttons get disabled / re-labeled to "Saving...".
-        # btn-save-draft has been removed; only btn-save-new-draft exists now,
-        # so the selector always targets that class regardless of forceNew.
+        # Use querySelectorAll (not querySelector) so BOTH step buttons
+        # get disabled / re-labeled to "Saving...".
         self.assertIn(
-            "document.querySelectorAll('.btn-save-new-draft')",
+            "document.querySelectorAll('.btn-save-new-draft, .btn-save-progress')",
             body,
         )
         self.assertIn("btns[bi].disabled = true", body)
