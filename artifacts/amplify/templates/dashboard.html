@@ -14943,7 +14943,19 @@ function renderCombinedPreview() {
     var emailPubBtn = document.querySelector('.btn-publish-combined-email');
     var emailHtmlDropdown = document.getElementById('email-html-dropdown');
     var isPublishable = !!PUBLISHABLE_CHANNELS[prepChannel];
-    if (publishBtn) publishBtn.style.display = (isPublishable && !isEmailCh) ? '' : 'none';
+    var isNotionBatch = !!NOTION_CHANNELS[prepChannel];
+    if (publishBtn) {
+        publishBtn.style.display = (isPublishable && !isEmailCh) ? '' : 'none';
+        if (isNotionBatch) {
+            publishBtn.style.background = '#000';
+            publishBtn.style.color = '#fff';
+            publishBtn.textContent = 'Publish All to Notion \uD83D\uDCDD';
+        } else {
+            publishBtn.style.background = '#1DA1F2';
+            publishBtn.style.color = '#fff';
+            publishBtn.textContent = 'Publish All Approved';
+        }
+    }
     if (previewBtn) previewBtn.style.display = (prepChannel === 'twitter') ? '' : 'none';
     if (emailPubBtn) emailPubBtn.style.display = isSendableEmail ? '' : 'none';
     if (emailHtmlDropdown) emailHtmlDropdown.style.display = isSendableEmail ? 'inline-block' : 'none';
@@ -16269,15 +16281,24 @@ function batchPublishItem(idx, skipConfirm) {
     var ta = document.getElementById('batch-ta-' + idx);
     var content = ta ? ta.value : '';
     if (!content) { showToast('No content to publish', 'error'); return; }
+    var isNotion = !!NOTION_CHANNELS[prepChannel];
 
     function doPublish() {
         batchPublishInFlight[idx] = true;
         var r = prepBatchResults[idx] || {};
         var fid = r.feature_id || '';
-        var payload = { content: content, feature_id: fid };
-        var img = (window.prepBatchImages || {})[idx];
-        if (img && img.dataUrl) {
-            payload.image = img.dataUrl.split(',')[1];
+        var payload;
+        if (isNotion) {
+            payload = {
+                channel: prepChannel,
+                content: content,
+                feature_id: fid,
+                feature_title: r.feature_title || ''
+            };
+        } else {
+            payload = { content: content, feature_id: fid };
+            var img = (window.prepBatchImages || {})[idx];
+            if (img && img.dataUrl) payload.image = img.dataUrl.split(',')[1];
         }
         fetch(endpoint, {
             method: 'POST',
@@ -16289,7 +16310,16 @@ function batchPublishItem(idx, skipConfirm) {
             batchPublishInFlight[idx] = false;
             if (!data.success) {
                 var errMsg = data.hint || data.error || 'Unknown error';
-                showToast('Post failed: ' + errMsg, 'error');
+                showToast('Publish failed: ' + errMsg, 'error');
+                return;
+            }
+            if (isNotion) {
+                prepBatchPublished[idx] = true;
+                updateBatchItemStatus(idx);
+                var pageLink = data.page_url
+                    ? ' <a href="' + data.page_url + '" target="_blank" style="color:#a78bfa;text-decoration:underline">Open in Notion</a>'
+                    : '';
+                showToast('Published to Notion \uD83D\uDCDD' + pageLink);
                 return;
             }
             if (data.method === 'fallback') {
@@ -16306,19 +16336,26 @@ function batchPublishItem(idx, skipConfirm) {
             }
             prepBatchPublished[idx] = true;
             updateBatchItemStatus(idx);
+            var img = (window.prepBatchImages || {})[idx];
             var hasImg = !!(img && img.dataUrl);
             var tweetLink = data.tweet_url ? ' <a href="' + data.tweet_url + '" target="_blank" style="color:#1DA1F2;text-decoration:underline">View tweet</a>' : '';
             showToast('Posted to X' + (hasImg ? ' with image' : '') + '! \u2705' + tweetLink);
         })
         .catch(function(err) {
             batchPublishInFlight[idx] = false;
-            showToast('Error: ' + err.message + ' - opening preview instead', 'error');
-            batchPreviewItem(idx);
+            showToast('Error: ' + err.message, 'error');
+            if (!isNotion) batchPreviewItem(idx);
         });
     }
 
     if (skipConfirm) {
         doPublish();
+    } else if (isNotion) {
+        showPublishConfirm(
+            'Publish "' + ((prepBatchResults[idx] || {}).feature_title || 'this item') + '" to the All Hands Notion page? It will be appended as new blocks.',
+            doPublish,
+            { title: 'Publish to Notion', icon: '\uD83D\uDCDD', confirmText: 'Yes, publish it' }
+        );
     } else {
         var hasImg = !!((window.prepBatchImages || {})[idx] && (window.prepBatchImages[idx] || {}).dataUrl);
         var msg = 'Do you want to post this on X? It will be directly posted to your account.';
@@ -16337,12 +16374,21 @@ function batchPublishAllApproved() {
     if (approvedIndices.length === 0) { showToast('No approved items to publish', 'warning'); return; }
     if (!PUBLISHABLE_CHANNELS[prepChannel]) { showToast('Publishing not supported for ' + prepChannel, 'warning'); return; }
 
-    showPublishConfirm('Post all ' + approvedIndices.length + ' approved item(s) to X? They will be directly posted to your account.', function() {
+    var isNotion = !!NOTION_CHANNELS[prepChannel];
+    var confirmMsg = isNotion
+        ? 'Publish all ' + approvedIndices.length + ' approved item(s) to the All Hands Notion page? Each item will be appended as new blocks.'
+        : 'Post all ' + approvedIndices.length + ' approved item(s) to X? They will be directly posted to your account.';
+    var confirmOpts = isNotion
+        ? { title: 'Publish to Notion', icon: '\uD83D\uDCDD', confirmText: 'Yes, publish all' }
+        : undefined;
+
+    showPublishConfirm(confirmMsg, function() {
         var btn = document.querySelector('.btn-publish-all-batch');
         if (btn) { btn.disabled = true; btn.textContent = 'Publishing...'; }
         for (var j = 0; j < approvedIndices.length; j++) {
             batchPublishItem(approvedIndices[j], true);
         }
+        var btnLabel = isNotion ? 'Publish All to Notion \uD83D\uDCDD' : 'Publish All Approved';
         var checkDone = setInterval(function() {
             var allDone = true;
             for (var k = 0; k < approvedIndices.length; k++) {
@@ -16350,10 +16396,10 @@ function batchPublishAllApproved() {
             }
             if (allDone) {
                 clearInterval(checkDone);
-                if (btn) { btn.disabled = false; btn.textContent = 'Publish All Approved'; }
+                if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
             }
         }, 500);
-    });
+    }, confirmOpts);
 }
 
 function batchPreviewAllOnX() {
