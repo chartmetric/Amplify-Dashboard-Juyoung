@@ -1,23 +1,21 @@
 """Step 3 Save-as-Draft + server-side autosave UI contract tests.
 
 These tests guard against accidental regressions of the rendered template
-contract that the new client-side autosave loop relies on:
+contract that the client-side autosave loop relies on:
 
   (1) Step 3 (the per-feature batch review) renders the same Save-as-Draft
-      cluster (.btn-save-draft + .btn-save-new-draft + .draft-status-pill +
-      [data-auto-save-pill]) as Step 4. Without this, the autosave pill
-      can't display while the marketer is on Step 3 and the new "Save as
-      Draft" button on Step 3 is missing.
+      cluster (.btn-save-new-draft + [data-auto-save-pill]) as Step 4.
+      Without this, the autosave pill can't display while the marketer is
+      on Step 3 and the save button on Step 3 is missing.
   (2) The auto-save status pill is class-driven (not id-driven) and there
       is one per cluster, so _updateAutoSaveStatusPill() can target both
       via a single querySelectorAll lookup.
-  (3) The Save-as-Draft button is bound to saveCombinedAsDraft() on Step 3
-      too, NOT a Step-3-only variant -- the snapshot collector and save
-      core are intentionally shared between steps.
-  (4) The server-side autosave guard rule is enforced in the JS: the
-      timer body must short-circuit when window._currentDraftId is falsy
-      (otherwise the autosave loop would spam the My Content list with
-      "Untitled" rows).
+  (3) The dashed "+ Save as new draft" button (btn-save-new-draft) is the
+      sole save action on both steps -- the solid btn-save-draft has been
+      removed. Draft-status pills have also been removed from the DOM.
+  (4) Autosave is always on. When no draft id exists yet, _serverAutoSaveNow
+      auto-creates a draft via saveCombinedAsNewDraft(). The guard that
+      short-circuits without content (prepBatchResults empty) remains.
 
 These are pure string assertions over the rendered template -- they don't
 spin up a browser. The structure being asserted is small and stable, so
@@ -61,14 +59,15 @@ class Step3SaveDraftUiTests(unittest.TestCase):
         )
 
     def test_step3_save_button_calls_shared_save_function(self) -> None:
-        # The Step 3 Save as Draft button MUST call the same
-        # saveCombinedAsDraft() the publish step calls; if a Step-3-only
-        # variant ever appears, the shared snapshot path won't run.
+        # The sole save action on Step 3 is the dashed btn-save-new-draft
+        # button, bound to saveCombinedAsNewDraft(). The solid btn-save-draft
+        # has been removed; only the dashed button should appear here.
         anchor = self.html.find('id="batch-bottom-bar"')
         end = self.html.find('id="btn-preview-combined"', anchor)
         snippet = self.html[anchor:end]
-        self.assertIn('onclick="saveCombinedAsDraft()"', snippet)
         self.assertIn('onclick="saveCombinedAsNewDraft()"', snippet)
+        self.assertNotIn('onclick="saveCombinedAsDraft()"', snippet,
+                         'Solid btn-save-draft should be removed from Step 3')
 
     def test_two_auto_save_pills_for_two_clusters(self) -> None:
         # One auto-save pill per save-draft cluster (Step 3 + Step 4) so
@@ -87,24 +86,27 @@ class Step3SaveDraftUiTests(unittest.TestCase):
         )
 
     def test_two_draft_status_pills_class_driven(self) -> None:
-        # Both clusters expose the .draft-status-pill class so the
-        # refactored _updateDraftStatusPill (querySelectorAll) keeps
-        # both in sync. The legacy id stays only on the Step 4 pill for
-        # backward compatibility with deep links / older bookmarks.
-        self.assertGreaterEqual(self.html.count('class="draft-status-pill'), 2)
-        self.assertEqual(self.html.count('id="draft-status-pill"'), 1)
-        self.assertEqual(self.html.count('class="draft-status-pill-text"'), 2)
+        # Draft-status pills ("New draft (unsaved)" etc.) have been removed
+        # from both clusters. Neither the class nor the id should appear
+        # on any DOM element inside a save-draft-cluster.
+        # We allow the class to appear in JS function bodies (which reference
+        # .draft-status-pill as a selector string) but NOT as an HTML class
+        # attribute on an element, so check that no element carries it.
+        self.assertNotIn('class="draft-status-pill', self.html,
+                         'draft-status-pill elements should be removed from the DOM')
+        self.assertNotIn('id="draft-status-pill"', self.html,
+                         'draft-status-pill id element should be removed from the DOM')
 
     def test_server_autosave_guarded_by_current_draft_id(self) -> None:
-        # The autosave loop MUST short-circuit when there is no active
-        # draft id; otherwise the loop would create a brand-new draft
-        # row on every keystroke. Lock that in so a future refactor
-        # doesn't accidentally drop the guard.
-        sched = self.html.find('function _scheduleServerAutoSave')
-        self.assertGreater(sched, 0, '_scheduleServerAutoSave function missing')
-        body = self.html[sched:sched + 600]
+        # Autosave is always on. When no draft id exists, _serverAutoSaveNow
+        # auto-creates one via saveCombinedAsNewDraft() if there is content,
+        # then returns so the regular update path doesn't run without an id.
+        # The guard must live in _serverAutoSaveNow (not _scheduleServerAutoSave).
+        now_fn = self.html.find('function _serverAutoSaveNow')
+        self.assertGreater(now_fn, 0, '_serverAutoSaveNow function missing')
+        body = self.html[now_fn:now_fn + 800]
         self.assertIn("if (!window._currentDraftId)", body)
-        self.assertIn("_updateAutoSaveStatusPill('idle')", body)
+        self.assertIn("saveCombinedAsNewDraft()", body)
 
     def test_server_autosave_does_not_overwrite_with_empty_state(self) -> None:
         # Mirror of the localStorage path: never POST a snapshot when
@@ -136,8 +138,10 @@ class Step3SaveDraftUiTests(unittest.TestCase):
         self.assertIn('window._manualSaveInFlight =', body)
         # Use querySelectorAll (not querySelector) so BOTH cluster
         # buttons get disabled / re-labeled to "Saving...".
+        # btn-save-draft has been removed; only btn-save-new-draft exists now,
+        # so the selector always targets that class regardless of forceNew.
         self.assertIn(
-            "document.querySelectorAll(forceNew ? '.btn-save-new-draft' : '.btn-save-draft')",
+            "document.querySelectorAll('.btn-save-new-draft')",
             body,
         )
         self.assertIn("btns[bi].disabled = true", body)

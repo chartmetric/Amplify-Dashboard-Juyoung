@@ -2595,10 +2595,8 @@
                      kept in sync with) the one on Step 4. -->
                 <div class="save-draft-cluster" style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:6px;margin-left:auto;">
                     <div style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                        <button class="btn-save-draft" onclick="saveCombinedAsDraft()" style="background:transparent;color:#a78bfa;border:1.5px solid #a78bfa;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">&#128190; Save as Draft</button>
-                        <button class="btn-save-new-draft" onclick="saveCombinedAsNewDraft()" title="Always create a brand-new draft row, even if you're editing one already" style="background:transparent;color:#a78bfa;border:1px dashed #a78bfa;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">+ Save as new draft</button>
-                        <span class="draft-status-pill pill-new" aria-live="polite"><span class="pill-dot"></span><span class="draft-status-pill-text">New draft (unsaved)</span></span>
-                        <span class="auto-save-status auto-idle" data-auto-save-pill aria-live="polite" title="Auto-save runs after you Save as Draft once. While it's idle, your work is still cached locally."><span class="auto-dot"></span><span class="auto-save-status-text">Auto-save off</span></span>
+                        <button class="btn-save-new-draft" onclick="saveCombinedAsNewDraft()" title="Save as a new draft" style="background:transparent;color:#a78bfa;border:1px dashed #a78bfa;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">+ Save as new draft</button>
+                        <span class="auto-save-status auto-idle" data-auto-save-pill aria-live="polite" style="display:none;"><span class="auto-dot"></span><span class="auto-save-status-text"></span></span>
                     </div>
                 </div>
                 <button class="btn-generate-batch" id="btn-preview-combined" onclick="prepGoToStep(4)">Preview Combined &rarr;</button>
@@ -2627,10 +2625,8 @@
                 <button class="btn-copy-all" onclick="copyAllCombined()">Copy All Combined</button>
                 <div class="save-draft-cluster" style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:6px;">
                     <div style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                        <button class="btn-save-draft" onclick="saveCombinedAsDraft()" style="background:transparent;color:#a78bfa;border:1.5px solid #a78bfa;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">&#128190; Save as Draft</button>
-                        <button class="btn-save-new-draft" onclick="saveCombinedAsNewDraft()" title="Always create a brand-new draft row, even if you're editing one already" style="background:transparent;color:#a78bfa;border:1px dashed #a78bfa;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">+ Save as new draft</button>
-                        <span id="draft-status-pill" class="draft-status-pill pill-new" aria-live="polite"><span class="pill-dot"></span><span id="draft-status-pill-text" class="draft-status-pill-text">New draft (unsaved)</span></span>
-                        <span class="auto-save-status auto-idle" data-auto-save-pill aria-live="polite" title="Auto-save runs after you Save as Draft once. While it's idle, your work is still cached locally."><span class="auto-dot"></span><span class="auto-save-status-text">Auto-save off</span></span>
+                        <button class="btn-save-new-draft" onclick="saveCombinedAsNewDraft()" title="Save as a new draft" style="background:transparent;color:#a78bfa;border:1px dashed #a78bfa;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">+ Save as new draft</button>
+                        <span class="auto-save-status auto-idle" data-auto-save-pill aria-live="polite" style="display:none;"><span class="auto-dot"></span><span class="auto-save-status-text"></span></span>
                     </div>
                 </div>
                 <button class="btn-done" onclick="exitPrepWorkflow()">Done - Back to Dashboard</button>
@@ -12356,7 +12352,7 @@ function _updateDraftStatusPill() {
 function _setSaveDraftFailureState(detail) {
     // Apply to every cluster (Step 3 review + Step 4 publish) so a save
     // failure shows up wherever the marketer happens to be looking.
-    var btns = document.querySelectorAll('.btn-save-draft');
+    var btns = document.querySelectorAll('.btn-save-new-draft');
     var clusters = document.querySelectorAll('.save-draft-cluster');
     if (!btns.length) return;
     for (var i = 0; i < btns.length; i++) {
@@ -12381,11 +12377,11 @@ function _setSaveDraftFailureState(detail) {
 }
 
 function _clearSaveDraftFailureState() {
-    var btns = document.querySelectorAll('.btn-save-draft');
+    var btns = document.querySelectorAll('.btn-save-new-draft');
     var clusters = document.querySelectorAll('.save-draft-cluster');
     for (var i = 0; i < btns.length; i++) {
         btns[i].classList.remove('save-failed');
-        btns[i].innerHTML = '\uD83D\uDCBE Save as Draft';
+        btns[i].innerHTML = '+ Save as new draft';
     }
     for (var c = 0; c < clusters.length; c++) {
         var d = clusters[c].querySelector('.save-fail-detail');
@@ -12422,22 +12418,26 @@ function _updateAutoSaveStatusPill(state, ts) {
         var text = pill.querySelector('.auto-save-status-text');
         pill.classList.remove('auto-idle', 'auto-saving', 'auto-saved', 'auto-failed');
         if (state === 'saving') {
+            pill.style.display = '';
             pill.classList.add('auto-saving');
             if (text) text.textContent = 'Saving...';
-            pill.title = 'Auto-saving your draft to My Content...';
+            pill.title = 'Auto-saving your draft...';
         } else if (state === 'saved') {
+            pill.style.display = '';
             pill.classList.add('auto-saved');
             var when = _draftRelativeTime(ts || window._serverAutoSaveLastSavedTs);
-            if (text) text.textContent = when ? ('Saved ' + when) : 'Saved just now';
-            pill.title = 'Auto-saved to My Content. Future edits sync automatically.';
+            if (text) text.textContent = when ? ('Autosaved ' + when) : 'Autosaved just now';
+            pill.title = 'Autosaved to My Content.';
         } else if (state === 'failed') {
+            pill.style.display = '';
             pill.classList.add('auto-failed');
-            if (text) text.textContent = 'Auto-save failed';
-            pill.title = 'Last auto-save attempt failed. Your work is still cached locally; we will retry on the next edit.';
+            if (text) text.textContent = 'Autosave failed';
+            pill.title = 'Last autosave attempt failed. Work is cached locally and will retry on next edit.';
         } else {
+            // idle: autosave is always on but nothing to show yet — hide the pill
+            pill.style.display = 'none';
             pill.classList.add('auto-idle');
-            if (text) text.textContent = 'Auto-save off';
-            pill.title = 'Auto-save runs after you Save as Draft once. While it is idle, your work is still cached locally.';
+            if (text) text.textContent = '';
         }
     }
 }
@@ -12452,26 +12452,33 @@ function _refreshAutoSaveStatusPillTime() {
         var text = pills[i].querySelector('.auto-save-status-text');
         if (!text) continue;
         var when = _draftRelativeTime(window._serverAutoSaveLastSavedTs);
-        text.textContent = when ? ('Saved ' + when) : 'Saved just now';
+        text.textContent = when ? ('Autosaved ' + when) : 'Autosaved just now';
     }
 }
 setInterval(function() { try { _refreshAutoSaveStatusPillTime(); } catch (_e) {} }, 15000);
 
 function _scheduleServerAutoSave() {
-    // Only meaningful once the marketer has explicitly created a draft
-    // row. Leaving the pill in 'auto-idle' is the honest signal that
-    // syncing won't happen until they hit Save as Draft once.
-    if (!window._currentDraftId) {
-        _updateAutoSaveStatusPill('idle');
-        return;
-    }
+    // Autosave is always on. When no draft ID exists yet, auto-create
+    // one on the first debounced trigger (if there is content to save).
+    // Once a draft exists, every subsequent edit syncs silently.
     if (_serverAutoSaveTimer) clearTimeout(_serverAutoSaveTimer);
     _serverAutoSaveTimer = setTimeout(_serverAutoSaveNow, _SERVER_AUTOSAVE_DEBOUNCE_MS);
 }
 
 function _serverAutoSaveNow() {
     _serverAutoSaveTimer = null;
-    if (!window._currentDraftId) return;
+    // No draft yet: auto-create one silently if there is content to save.
+    // saveCombinedAsNewDraft() handles the creation and sets _currentDraftId
+    // so subsequent autosaves update the same row.
+    if (!window._currentDraftId) {
+        if (prepBatchResults && prepBatchResults.length &&
+            typeof saveCombinedAsNewDraft === 'function' &&
+            !_serverAutoSaveInFlight &&
+            !(window._manualSaveInFlight && window._manualSaveInFlight > 0)) {
+            saveCombinedAsNewDraft();
+        }
+        return;
+    }
     if (_serverAutoSaveInFlight) {
         // Another save is already in flight. Re-arm so the latest edits
         // get persisted once it lands, instead of getting silently
@@ -12617,7 +12624,7 @@ function _saveCombinedDraftCore(forceNew) {
     // marketer can't double-submit by jumping between steps mid-flight,
     // and so the "Saving..." affordance is visible regardless of which
     // step they happen to be on when the request lands.
-    var btns = document.querySelectorAll(forceNew ? '.btn-save-new-draft' : '.btn-save-draft');
+    var btns = document.querySelectorAll('.btn-save-new-draft');
     var originalTexts = [];
     for (var bi = 0; bi < btns.length; bi++) {
         originalTexts.push(btns[bi].innerHTML);
