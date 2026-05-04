@@ -2116,25 +2116,6 @@
         <div id="home-section">
             <div class="funnel-bar" id="funnel-bar" style="display:none;"></div>
 
-            <!-- Inline My Content widget ────────────────────────── -->
-            <div id="home-content-strip">
-                <div class="home-strip-header">
-                    <span style="font-size:16px;font-weight:700;color:var(--text-body);">&#128194; My Content</span>
-                    <div class="home-widget-tabs">
-                        <button class="home-widget-tab active" id="hwt-draft"     onclick="setHomeWidgetTab('draft')">
-                            Draft <span class="home-widget-tab-count" id="hwt-count-draft"></span>
-                        </button>
-                        <button class="home-widget-tab"        id="hwt-artifact"  onclick="setHomeWidgetTab('artifact')">
-                            Artifact <span class="home-widget-tab-count" id="hwt-count-artifact"></span>
-                        </button>
-                        <button class="home-widget-tab"        id="hwt-downloaded" onclick="setHomeWidgetTab('downloaded')">
-                            Downloaded <span class="home-widget-tab-count" id="hwt-count-downloaded"></span>
-                        </button>
-                    </div>
-                </div>
-                <div id="home-drafts-list"><div class="home-strip-empty">No drafts yet. Save as Draft from the content prep flow to see them here.</div></div>
-            </div>
-
             <!-- Channel picker use-case cards ──────────────────── -->
             <div id="home-use-cases-section">
                 <h2 class="home-use-cases-title">What are you prepping content for?</h2>
@@ -2152,6 +2133,25 @@
             <div class="features-panel-topbar">
                 <button class="btn-back features-panel-back" onclick="closeFeaturesPanel()">&#8592; Home</button>
                 <span class="features-panel-title">Features</span>
+            </div>
+
+            <!-- My Content widget ───────────────────────────────── -->
+            <div id="home-content-strip">
+                <div class="home-strip-header">
+                    <span style="font-size:16px;font-weight:700;color:var(--text-body);">&#128194; My Content</span>
+                    <div class="home-widget-tabs">
+                        <button class="home-widget-tab active" id="hwt-draft"     onclick="setHomeWidgetTab('draft')">
+                            Draft <span class="home-widget-tab-count" id="hwt-count-draft"></span>
+                        </button>
+                        <button class="home-widget-tab"        id="hwt-artifact"  onclick="setHomeWidgetTab('artifact')">
+                            Artifact <span class="home-widget-tab-count" id="hwt-count-artifact"></span>
+                        </button>
+                        <button class="home-widget-tab"        id="hwt-downloaded" onclick="setHomeWidgetTab('downloaded')">
+                            Downloaded <span class="home-widget-tab-count" id="hwt-count-downloaded"></span>
+                        </button>
+                    </div>
+                </div>
+                <div id="home-drafts-list"><div class="home-strip-empty">No drafts yet. Save as Draft from the content prep flow to see them here.</div></div>
             </div>
 
         <div class="section-header">
