@@ -14934,7 +14934,8 @@ function initBatchDragDrop() {
 
 function renderCombinedPreview() {
     var uc = USE_CASES.find(function(u) { return u.key === prepChannel; });
-    document.getElementById('step4-title').textContent = (uc ? uc.name : prepChannel) + ' - Combined Preview';
+    var _step4TitleOverrides = { notion_monthly: '🎉 New Features' };
+    document.getElementById('step4-title').textContent = (_step4TitleOverrides[prepChannel] || (uc ? uc.name : prepChannel)) + ' - Combined Preview';
 
     var isEmailCh = (prepChannel === 'email_newsletter' || prepChannel === 'email_standalone');
     var isSendableEmail = (prepChannel === 'email_standalone');
