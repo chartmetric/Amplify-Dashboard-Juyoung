@@ -190,6 +190,18 @@ def _block(block_type: str, rich: list[dict]) -> dict:
     }
 
 
+# Matches attachment/media marker lines produced by the editor:
+#   [image: name_or_url]  [video: ...]  [banner: ...]  [badge: ...]
+#   [cta: ...]  [hosted_image: ...]  [attachment: ...]
+# These cannot be embedded as-is in Notion.  URL-valued image markers are
+# converted to Notion external image blocks; everything else is dropped so
+# the line does not appear as broken literal text in the Notion page.
+_ATTACHMENT_MARKER_RE = re.compile(
+    r"^\s*\[(?P<kind>banner|badge|cta|image|video|hosted_image|attachment)\s*:\s*(?P<val>.*?)\]\s*$",
+    re.IGNORECASE,
+)
+
+
 def _content_to_blocks(content: str) -> list[dict]:
     blocks: list[dict] = []
     lines = content.replace("\r\n", "\n").split("\n")
@@ -207,6 +219,23 @@ def _content_to_blocks(content: str) -> list[dict]:
         line = raw.rstrip()
         if not line.strip():
             flush_paragraph()
+            continue
+
+        # Attachment / media markers — handle before generic paragraph fall-through
+        am = _ATTACHMENT_MARKER_RE.match(line)
+        if am:
+            flush_paragraph()
+            kind = am.group("kind").lower()
+            val = am.group("val").strip()
+            # Image markers with a real URL become Notion external image blocks.
+            if kind in ("image", "hosted_image") and val.startswith(("http://", "https://")):
+                blocks.append({
+                    "object": "block",
+                    "type": "image",
+                    "image": {"type": "external", "external": {"url": val}},
+                })
+            # All other markers (local filenames, video, banner, etc.) are silently
+            # dropped — they cannot be meaningfully embedded in Notion.
             continue
 
         # Headings
