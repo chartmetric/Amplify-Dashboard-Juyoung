@@ -1312,6 +1312,73 @@
             font-family: inherit; white-space: nowrap; flex-shrink: 0;
         }
         .btn-prep-content:hover { background: var(--accent-hover); }
+        /* "See Features" button — same visual weight as the old Prep Content button */
+        .btn-see-features {
+            background: var(--bg-card); color: var(--text-body); border: 1px solid var(--border);
+            padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+            cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .btn-see-features:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+
+        /* ── Home section: pipeline + My Content strip + channel cards ── */
+        #home-section { padding: 0 0 40px; }
+
+        /* My Content inline strip */
+        #home-content-strip {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 12px; margin: 20px 0 24px; overflow: hidden;
+        }
+        .home-strip-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 18px 12px; border-bottom: 1px solid var(--border);
+        }
+        .home-strip-view-all {
+            background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+            padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+            cursor: pointer; font-family: inherit; transition: border-color 0.2s, color 0.2s;
+        }
+        .home-strip-view-all:hover { border-color: var(--accent); color: var(--accent); }
+        #home-drafts-list { padding: 10px 18px 14px; max-height: 280px; overflow-y: auto; }
+        .home-strip-empty { color: var(--text-muted); font-size: 13px; padding: 12px 0; }
+        .home-draft-row {
+            display: flex; align-items: center; gap: 12px;
+            padding: 9px 0; border-bottom: 1px solid var(--border);
+            cursor: pointer; transition: background 0.15s;
+        }
+        .home-draft-row:last-child { border-bottom: none; }
+        .home-draft-row:hover { color: var(--accent); }
+        .home-draft-status-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }
+        .home-draft-name { font-size: 13px; font-weight: 600; color: var(--text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .home-draft-row:hover .home-draft-name { color: var(--accent); }
+        .home-draft-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+        .home-draft-chip {
+            display: inline-block; background: rgba(167,139,250,0.12); color: #a78bfa;
+            border: 1px solid rgba(167,139,250,0.3); border-radius: 10px;
+            padding: 1px 8px; font-size: 10px; font-weight: 600; white-space: nowrap;
+        }
+        .home-draft-chip.chip-sent { background: rgba(74,222,128,0.1); color: #4ade80; border-color: rgba(74,222,128,0.3); }
+
+        /* Home use-case section title */
+        .home-use-cases-title { font-size: 18px; font-weight: 700; color: var(--text-body); margin: 0 0 4px; }
+        .home-use-cases-subtitle { font-size: 13px; color: var(--text-muted); margin: 0 0 18px; }
+
+        /* ── Features panel (opened by "See Features") ─────────────── */
+        #features-panel { animation: fadeInUp 0.2s ease-out both; }
+        .features-panel-topbar {
+            display: flex; align-items: center; gap: 14px;
+            padding: 0 0 14px; margin-bottom: 4px;
+            border-bottom: 1px solid var(--border);
+        }
+        .features-panel-title { font-size: 20px; font-weight: 700; color: var(--text-body); }
+        .features-panel-back {
+            background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+            padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;
+            cursor: pointer; font-family: inherit; transition: border-color 0.2s, color 0.2s;
+        }
+        .features-panel-back:hover { border-color: var(--accent); color: var(--accent); }
         .btn-analytics {
             background: var(--bg-card); color: var(--text-body); border: 1px solid var(--border);
             padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
@@ -1666,7 +1733,7 @@
 
         .btn-back:active, .btn-regen:active, .btn-quick:active, .btn-done:active,
         .btn-copy-all:active, .btn-publish:active, .btn-generate-batch:active,
-        .btn-prep-content:active, .btn-load-all:active, .funnel-btn:active,
+        .btn-prep-content:active, .btn-see-features:active, .btn-load-all:active, .funnel-btn:active,
         .btn-outline:active { transform: scale(0.97); }
 
         @keyframes fadeInUp {
@@ -1997,7 +2064,7 @@
             </div>
             <button class="btn-analytics" onclick="toggleAnalytics()">&#128202; Analytics</button>
             <button id="btn-my-artifacts" onclick="openMyArtifacts()" title="View saved drafts and past sends" style="position:relative;background:var(--bg-card);color:var(--text-body);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;transition:background 0.2s,border-color 0.2s;">&#128194; My Content<span id="my-artifacts-count" style="display:none;margin-left:6px;background:#a78bfa;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:700;"></span></button>
-            <button class="btn-prep-content" onclick="startPrepWorkflow()">Prep Content</button>
+            <button class="btn-see-features" id="btn-see-features" onclick="openFeaturesPanel()">See Features</button>
             <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">&#127769;</button>
             <div style="display:flex;align-items:center;gap:6px;" title="API server connection">
                 <span class="health-dot" id="health-dot"></span>
@@ -2006,6 +2073,47 @@
         </div>
     </div>
     <div class="main">
+
+        <!-- ===================================================== -->
+        <!-- HOME SECTION  (default view)                          -->
+        <!-- Shows: pipeline stats + My Content strip + use-case   -->
+        <!-- channel picker cards. "See Features" opens the panel  -->
+        <!-- below which contains the full features list + filters.-->
+        <!-- ===================================================== -->
+        <div id="home-section">
+            <div class="funnel-bar" id="funnel-bar" style="display:none;"></div>
+
+            <!-- Inline My Content strip ─────────────────────────── -->
+            <div id="home-content-strip">
+                <div class="home-strip-header">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="font-size:16px;font-weight:700;color:var(--text-body);">&#128194; My Content</span>
+                        <span id="home-content-count" style="font-size:12px;color:var(--text-muted);"></span>
+                    </div>
+                    <button class="home-strip-view-all" onclick="openMyArtifacts()">View all &#8594;</button>
+                </div>
+                <div id="home-drafts-list"><div class="home-strip-empty">No drafts yet. Save as Draft from the content prep flow to see them here.</div></div>
+            </div>
+
+            <!-- Channel picker use-case cards ──────────────────── -->
+            <div id="home-use-cases-section">
+                <h2 class="home-use-cases-title">What are you prepping content for?</h2>
+                <p class="home-use-cases-subtitle">Pick a channel to batch-generate content for multiple features at once</p>
+                <div class="use-case-grid" id="use-case-grid-home"></div>
+            </div>
+        </div><!-- /home-section -->
+
+        <!-- ===================================================== -->
+        <!-- FEATURES PANEL  (opened by "See Features" button)     -->
+        <!-- Contains the full features list, filters, search, and -->
+        <!-- all existing feature-card capabilities.               -->
+        <!-- ===================================================== -->
+        <div id="features-panel" style="display:none;">
+            <div class="features-panel-topbar">
+                <button class="btn-back features-panel-back" onclick="closeFeaturesPanel()">&#8592; Home</button>
+                <span class="features-panel-title">Features</span>
+            </div>
+
         <div class="section-header">
             <span class="section-title">Features</span>
             <div class="controls-row">
@@ -2072,7 +2180,6 @@
             </div>
         </div>
 
-        <div class="funnel-bar" id="funnel-bar" style="display:none;"></div>
         <div id="load-all-banner" style="display:none;" class="load-all-banner">
             <span class="load-all-banner-icon">&#9888;</span>
             <span class="load-all-banner-text">Showing all Asana tasks &mdash; only classified features can generate content. Use "Classify" on individual cards or wait for background classification.</span>
@@ -2233,11 +2340,12 @@
         </div>
         <div id="empty-state" class="empty-state" style="display:none;"></div>
         <div id="error-state" class="error-state" style="display:none;"></div>
+        </div><!-- /features-panel -->
     </div>
 
     <div id="content-view" class="content-view" style="display:none;">
         <div class="content-view-header">
-            <button class="btn-back" onclick="exitContentView()">&larr; Back to Features</button>
+            <button class="btn-back" onclick="exitContentView(); openFeaturesPanel();">&larr; Back to Features</button>
         </div>
         <div class="content-feature-header" id="content-feature-header"></div>
         <div class="feature-attachments-section" id="feature-image-section" style="display:none;">
@@ -2385,7 +2493,7 @@
 
         <div id="prep-step2" class="prep-step" style="display:none;">
             <div class="prep-step-header">
-                <button class="btn-back" onclick="prepGoToStep(1)">&larr; Back to use cases</button>
+                <button class="btn-back" onclick="exitPrepWorkflow()">&larr; Back to Home</button>
                 <h2 class="prep-title" id="step2-title"></h2>
             </div>
             <div id="drafts-bar-step2" style="margin:0 0 14px 0;"></div>
@@ -3967,6 +4075,9 @@ function getFilteredFeatures() {
 }
 
 function renderAll() {
+    // Refresh the home channel cards so the feature count stays accurate
+    // after the Asana fetch completes or filters change.
+    try { renderUseCaseGridHome(); } catch (_e) {}
     var list = document.getElementById('feature-list');
     list.querySelectorAll('.override-reason-row').forEach(function(row) {
         if (row._outsideClickHandler) {
@@ -11297,6 +11408,109 @@ function exitPrepWorkflow() {
 }
 
 // ---------------------------------------------------------------------------
+// Features panel: the full features list + filters, hidden by default.
+// Opened via the topbar "See Features" button; closed by the back button
+// or any code that calls closeFeaturesPanel(). The home section (pipeline
+// stats + My Content strip + channel cards) shows when the panel is closed.
+// ---------------------------------------------------------------------------
+function openFeaturesPanel() {
+    var panel = document.getElementById('features-panel');
+    var home  = document.getElementById('home-section');
+    if (!panel || !home) return;
+    home.style.display  = 'none';
+    panel.style.display = 'block';
+    // Scroll to top so the back button is immediately visible.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function closeFeaturesPanel() {
+    var panel = document.getElementById('features-panel');
+    var home  = document.getElementById('home-section');
+    if (!panel || !home) return;
+    panel.style.display = 'none';
+    home.style.display  = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ---------------------------------------------------------------------------
+// Home-screen My Content strip: a compact list of recent drafts/artifacts
+// shown directly on the home page above the channel picker cards so the
+// marketer can see and resume their work without opening the full modal.
+// Populated from _myArtifactsCache (the same cache the modal uses) so no
+// extra network call is needed when the data is already fresh.
+// ---------------------------------------------------------------------------
+function renderHomeContentStrip() {
+    var list = document.getElementById('home-drafts-list');
+    var countEl = document.getElementById('home-content-count');
+    if (!list) return;
+    var all = window._myArtifactsCache || [];
+    if (countEl) countEl.textContent = all.length ? '(' + all.length + ')' : '';
+    if (!all.length) {
+        list.innerHTML = '<div class="home-strip-empty">No drafts yet. Save as Draft from the content prep flow to see them here.</div>';
+        return;
+    }
+    var ID_RE = /^[A-Za-z0-9]{1,64}$/;
+    var html = all.slice(0, 12).map(function(d) {
+        if (!d || !ID_RE.test(String(d.id || ''))) return '';
+        var safeId = String(d.id);
+        var name = d.name || 'Untitled draft';
+        var isSent = (d.status || 'draft') === 'published';
+        var dotColor = isSent ? '#4ade80' : '#a78bfa';
+        var chip = isSent
+            ? '<span class="home-draft-chip chip-sent">Sent</span>'
+            : '<span class="home-draft-chip">Draft</span>';
+        var when = d.ts ? _draftRelativeTime(d.ts) : '';
+        var meta = [(d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's'), when].filter(Boolean).join(' \u00b7 ');
+        return '<div class="home-draft-row" onclick="loadEmailDraft(\'' + escAttr(safeId) + '\')">'
+            + '<span class="home-draft-status-dot" style="background:' + dotColor + ';"></span>'
+            + '<span class="home-draft-name">' + escHtml(name) + '</span>'
+            + chip
+            + (meta ? '<span class="home-draft-meta">' + escHtml(meta) + '</span>' : '')
+            + '</div>';
+    }).join('');
+    list.innerHTML = html || '<div class="home-strip-empty">No content yet.</div>';
+}
+
+// Render the use-case channel picker cards onto the home page grid.
+// Uses the same USE_CASES array and .use-case-card CSS as the prep
+// overlay Step 1, but clicking a card goes directly to Step 2 of
+// the prep overlay (skipping the Step 1 overlay screen).
+function renderUseCaseGridHome() {
+    var grid = document.getElementById('use-case-grid-home');
+    if (!grid) return;
+    var featureCount = allFeatures.filter(function(f) {
+        return f.classification && f.classification.importance_score >= 3;
+    }).length;
+    grid.innerHTML = USE_CASES.map(function(uc) {
+        var badge = uc.recommended ? '<span class="use-case-card-badge">Recommended</span>' : '';
+        return '<div class="use-case-card' + (uc.recommended ? ' is-recommended' : '') + '" onclick="selectUseCaseFromHome(\'' + uc.key + '\')">'
+            + badge
+            + '<div class="use-case-card-icon">' + uc.icon + '</div>'
+            + '<div class="use-case-card-name">' + escHtml(uc.name) + '</div>'
+            + '<div class="use-case-card-desc">' + escHtml(uc.desc) + '</div>'
+            + '<div class="use-case-card-count">' + featureCount + ' features available (score 3+)</div>'
+            + '</div>';
+    }).join('');
+}
+
+// Entry point when clicking a channel card on the home screen.
+// Initialises a fresh prep session and opens the prep overlay directly
+// at Step 2 (the feature picker), bypassing Step 1 since the channel
+// choice has already been made on the home screen.
+function selectUseCaseFromHome(channelKey) {
+    _resetPrepState();
+    _setArtifactUrl(null);
+    var overlay = document.getElementById('prep-overlay');
+    overlay.style.display = 'block';
+    overlay.classList.add('crossfade-in');
+    setTimeout(function() { overlay.classList.remove('crossfade-in'); }, 300);
+    document.body.style.overflow = 'hidden';
+    // Delegate to the shared selectUseCase helper which sets prepChannel
+    // and prepSelectedIds before calling prepGoToStep(2).
+    selectUseCase(channelKey);
+}
+
+// ---------------------------------------------------------------------------
 // Per-artifact deep links: /artifact/<id> updates the browser URL while a
 // draft or sent artifact is open, so the marketer can bookmark or share.
 // ---------------------------------------------------------------------------
@@ -11337,13 +11551,16 @@ function refreshMyArtifactsCount() {
         var arts = (data && data.drafts) || [];
         window._myArtifactsCache = arts;
         var badge = document.getElementById('my-artifacts-count');
-        if (!badge) return;
-        if (arts.length > 0) {
-            badge.style.display = '';
-            badge.textContent = arts.length;
-        } else {
-            badge.style.display = 'none';
+        if (badge) {
+            if (arts.length > 0) {
+                badge.style.display = '';
+                badge.textContent = arts.length;
+            } else {
+                badge.style.display = 'none';
+            }
         }
+        // Keep the home-screen My Content strip in sync with the same data.
+        try { renderHomeContentStrip(); } catch (_e) {}
     })
     .catch(function() {});
 }
@@ -11680,6 +11897,9 @@ function _deleteArtifactFromList(id) {
 // On page load: refresh count badge; if URL is /artifact/<id>, deep-link in.
 document.addEventListener('DOMContentLoaded', function() {
     refreshMyArtifactsCount();
+    // Render the home-screen channel picker cards immediately so the user
+    // sees content as soon as the page loads, before any Asana fetch.
+    try { renderUseCaseGridHome(); } catch (_e) {}
     var initId = window._initialArtifactId;
     if (initId) {
         setTimeout(function() {
