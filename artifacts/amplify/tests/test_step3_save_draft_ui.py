@@ -98,15 +98,19 @@ class Step3SaveDraftUiTests(unittest.TestCase):
                          'draft-status-pill id element should be removed from the DOM')
 
     def test_server_autosave_guarded_by_current_draft_id(self) -> None:
-        # Autosave is always on. When no draft id exists, _serverAutoSaveNow
-        # auto-creates one via saveCombinedAsNewDraft() if there is content,
-        # then returns so the regular update path doesn't run without an id.
-        # The guard must live in _serverAutoSaveNow (not _scheduleServerAutoSave).
+        # The autosave loop must short-circuit in BOTH _scheduleServerAutoSave
+        # and _serverAutoSaveNow when there is no active draft id.
+        # This prevents the loop from auto-creating a new draft row and
+        # hijacking the user's session context mid-flow.
+        sched = self.html.find('function _scheduleServerAutoSave')
+        self.assertGreater(sched, 0, '_scheduleServerAutoSave function missing')
+        sched_body = self.html[sched:sched + 400]
+        self.assertIn("if (!window._currentDraftId)", sched_body)
+        # _serverAutoSaveNow also guards independently as a safety net.
         now_fn = self.html.find('function _serverAutoSaveNow')
         self.assertGreater(now_fn, 0, '_serverAutoSaveNow function missing')
-        body = self.html[now_fn:now_fn + 800]
-        self.assertIn("if (!window._currentDraftId)", body)
-        self.assertIn("saveCombinedAsNewDraft()", body)
+        now_body = self.html[now_fn:now_fn + 400]
+        self.assertIn("if (!window._currentDraftId)", now_body)
 
     def test_server_autosave_does_not_overwrite_with_empty_state(self) -> None:
         # Mirror of the localStorage path: never POST a snapshot when

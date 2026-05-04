@@ -12458,27 +12458,17 @@ function _refreshAutoSaveStatusPillTime() {
 setInterval(function() { try { _refreshAutoSaveStatusPillTime(); } catch (_e) {} }, 15000);
 
 function _scheduleServerAutoSave() {
-    // Autosave is always on. When no draft ID exists yet, auto-create
-    // one on the first debounced trigger (if there is content to save).
-    // Once a draft exists, every subsequent edit syncs silently.
+    // Only meaningful once a draft row exists. Silently skip if there is
+    // no current draft id — the pill stays hidden (idle) until the first
+    // save lands and arms the loop.
+    if (!window._currentDraftId) return;
     if (_serverAutoSaveTimer) clearTimeout(_serverAutoSaveTimer);
     _serverAutoSaveTimer = setTimeout(_serverAutoSaveNow, _SERVER_AUTOSAVE_DEBOUNCE_MS);
 }
 
 function _serverAutoSaveNow() {
     _serverAutoSaveTimer = null;
-    // No draft yet: auto-create one silently if there is content to save.
-    // saveCombinedAsNewDraft() handles the creation and sets _currentDraftId
-    // so subsequent autosaves update the same row.
-    if (!window._currentDraftId) {
-        if (prepBatchResults && prepBatchResults.length &&
-            typeof saveCombinedAsNewDraft === 'function' &&
-            !_serverAutoSaveInFlight &&
-            !(window._manualSaveInFlight && window._manualSaveInFlight > 0)) {
-            saveCombinedAsNewDraft();
-        }
-        return;
-    }
+    if (!window._currentDraftId) return;
     if (_serverAutoSaveInFlight) {
         // Another save is already in flight. Re-arm so the latest edits
         // get persisted once it lands, instead of getting silently
