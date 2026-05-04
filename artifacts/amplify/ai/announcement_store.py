@@ -1,16 +1,26 @@
 """Storage backend for the in-app announcements admin.
 
-Two modes, switched by ``ANNOUNCEMENTS_STUB_MODE``:
+Two modes, switched automatically by environment configuration:
 
-  * Stub (``true``, default): JSON-cache + in-memory store at
-    ``.announcement_store.json`` modeled after ``ai/feature_sets.py`` and
-    ``ai/classifier.py`` — survives restarts, no network. Lets the admin
-    UI run end-to-end before chartmetric-api implements the matching
-    endpoints documented in ``docs/chartmetric-announcement-admin-api.md``.
+  * **Stub** — picked when EITHER ``CHARTMETRIC_ADMIN_API_BASE_URL`` or
+    ``CHARTMETRIC_ADMIN_API_TOKEN`` is missing. JSON-cache + in-memory
+    store at ``.announcement_store.json`` — survives restarts, no
+    network. Lets the admin UI run end-to-end before chartmetric-api
+    is reachable.
 
-  * Proxy (``false``): Forwards every operation to
-    ``CHARTMETRIC_ADMIN_API_BASE_URL`` with
-    ``Authorization: Bearer ${CHARTMETRIC_ADMIN_API_TOKEN}``.
+  * **Proxy / live** — picked when BOTH ``CHARTMETRIC_ADMIN_API_BASE_URL``
+    and ``CHARTMETRIC_ADMIN_API_TOKEN`` are set. The local JSON store
+    remains the *working copy* (it tracks Amplify-only metadata such
+    as ``display_format``, ``scheduled_publish_at``, ``source_feature_*``,
+    plus the local-id ↔ Chartmetric-id mapping) and every create /
+    update / delete is also pushed to the live Chartmetric REST API
+    via ``integrations.chartmetric_announcement_client``.
+
+Live mode can be forced *off* (kill switch) by setting
+``ANNOUNCEMENTS_STUB_MODE`` to a truthy value (``1`` / ``true`` /
+``yes`` / ``on``); this is intended for incident response so an
+operator can pin Amplify to its local working copy without unsetting
+the Chartmetric env vars.
 
 Both modes return the same JSON shape (see spec §6).
 """
@@ -49,11 +59,22 @@ DEFAULT_CATEGORIES = [
 # ---------------------------------------------------------------------------
 
 def _stub_mode_enabled() -> bool:
-    """Read at call time so tests / runtime config flips work."""
-    if not getattr(config, "CHARTMETRIC_ADMIN_API_BASE_URL", "").strip():
+    """Decide whether Amplify is in stub mode for this call.
+
+    Live mode is enabled automatically when BOTH the Chartmetric admin
+    base URL and bearer token are configured. Either being absent forces
+    stub mode. ``ANNOUNCEMENTS_STUB_MODE`` only matters as a *kill
+    switch* — set it to ``1`` / ``true`` / ``yes`` / ``on`` to pin
+    Amplify to the local working copy even when the env vars are wired.
+    """
+    base_url = (getattr(config, "CHARTMETRIC_ADMIN_API_BASE_URL", "") or "").strip()
+    token = (getattr(config, "CHARTMETRIC_ADMIN_API_TOKEN", "") or "").strip()
+    if not base_url or not token:
         return True
-    val = os.environ.get("ANNOUNCEMENTS_STUB_MODE", "true").strip().lower()
-    return val not in ("0", "false", "no", "off")
+    raw = os.environ.get("ANNOUNCEMENTS_STUB_MODE")
+    if raw is None:
+        return False
+    return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
 def get_mode_info() -> dict:
@@ -182,20 +203,53 @@ class ValidationError(Exception):
 
 
 def _validate_translations(value: Any, fields: tuple[str, ...]) -> dict:
+    """Validate the JSONB translations payload sent to Chartmetric.
+
+    English (``en``) is *never* persisted in ``translations`` — it lives
+    in the top-level ``title`` / ``content`` / ``name`` columns. We reject
+    it explicitly so the marketer notices the mistake.
+
+    Per-locale entries must be objects with **every** required ``field``
+    present and well-typed (``str`` for everything except ``content``,
+    which must be a non-empty Slate.js block array). Partial blobs —
+    e.g. a post locale carrying only ``title`` without ``content`` —
+    are rejected so the wire payload always matches the JSONB shape
+    the Chartmetric reader expects.
+    """
     if value is None:
         return {}
     if not isinstance(value, dict):
         raise ValidationError("translations must be an object")
+    if "en" in value:
+        raise ValidationError(
+            "translations must not contain the 'en' key — English is stored in the "
+            "top-level title/content/name columns")
     out: dict[str, dict] = {}
     for lang, blob in value.items():
         if lang not in TARGET_LOCALES:
+            # silently ignore unknown locales rather than hard-failing
             continue
         if not isinstance(blob, dict):
-            continue
+            raise ValidationError(
+                f"translations.{lang} must be an object with keys {list(fields)}")
+        missing = [f for f in fields if f not in blob]
+        if missing:
+            raise ValidationError(
+                f"translations.{lang} is missing required field(s): "
+                f"{', '.join(missing)}")
         keep: dict[str, Any] = {}
         for f in fields:
-            if f in blob:
-                keep[f] = blob[f]
+            v = blob[f]
+            if f == "content":
+                if not isinstance(v, list) or not v:
+                    raise ValidationError(
+                        f"translations.{lang}.content must be a non-empty "
+                        "Slate.js block array")
+            else:
+                if not isinstance(v, str) or not v.strip():
+                    raise ValidationError(
+                        f"translations.{lang}.{f} must be a non-empty string")
+            keep[f] = v
         out[lang] = keep
     return out
 
@@ -471,126 +525,443 @@ def _stub_delete_category(cat_id: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Proxy mode
+# Live-mode push helpers
 # ---------------------------------------------------------------------------
+#
+# In live (non-stub) mode the local JSON store is still the working copy —
+# it owns the local id space, all Amplify-only metadata
+# (display_format, scheduled_publish_at, source_feature_id,
+# source_feature_set_id) and the local-id ↔ Chartmetric-id mapping.
+# Each public CRUD entry-point performs the local mutation first, then
+# pushes the *cleaned* payload to Chartmetric via the dedicated client.
+# The remote id is persisted back onto the local record so subsequent
+# updates / deletes target the right Chartmetric row even after the
+# local id space diverges.
 
-def _proxy_request(method: str, path: str,
-                   params: dict | None = None,
-                   body: Any = None,
-                   files: Any = None,
-                   timeout: float = 15.0):
-    """Forward a request to chartmetric-api admin endpoints."""
-    import requests
-    base_url = getattr(config, "CHARTMETRIC_ADMIN_API_BASE_URL", "").rstrip("/")
-    if not base_url:
-        raise RuntimeError("CHARTMETRIC_ADMIN_API_BASE_URL not configured")
-    url = f"{base_url}{path}"
-    headers = {}
-    token = getattr(config, "CHARTMETRIC_ADMIN_API_TOKEN", "")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    if body is not None and files is None:
-        headers["Content-Type"] = "application/json; charset=utf-8"
-    resp = requests.request(
-        method.upper(), url,
-        params=params,
-        json=body if body is not None and files is None else None,
-        files=files,
-        headers=headers,
-        timeout=timeout,
-    )
-    return resp
+# Amplify-only fields that MUST NOT be sent to Chartmetric — the live
+# tables (announcement_post / announcement_category) don't have these
+# columns. They live only in the Amplify working copy.
+_AMPLIFY_ONLY_POST_FIELDS = (
+    "display_format",
+    "scheduled_publish_at",
+    "source_feature_id",
+    "source_feature_set_id",
+)
 
 
-def _proxy_json(resp) -> dict:
+def _live_mode_enabled() -> bool:
+    return not _stub_mode_enabled()
+
+
+def _shape_post_payload(local_post: dict, remote_category_ids: list[int]) -> dict:
+    """Build the JSON body for POST/PUT /admin/announcement.
+
+    Strips every Amplify-only field and substitutes the local
+    ``category_ids`` with their Chartmetric counterparts.
+    """
+    payload = {
+        "title": local_post.get("title") or "",
+        "content": local_post.get("content") or [],
+        "translations": local_post.get("translations") or {},
+        "image_url": local_post.get("image_url"),
+        "is_pinned": bool(local_post.get("is_pinned")),
+        "is_boosted": bool(local_post.get("is_boosted")),
+        "is_published": bool(local_post.get("is_published")),
+        "published_at": local_post.get("published_at"),
+        "category_ids": list(remote_category_ids),
+    }
+    # Defensive: never leak any Amplify-only field.
+    for k in _AMPLIFY_ONLY_POST_FIELDS:
+        payload.pop(k, None)
+    return payload
+
+
+def _shape_category_payload(local_cat: dict) -> dict:
+    return {
+        "name": local_cat.get("name") or "",
+        "color": local_cat.get("color") or "",
+        "translations": local_cat.get("translations") or {},
+    }
+
+
+def _resolve_remote_category_ids(local_cat_ids: list[int],
+                                  data: dict,
+                                  cache: dict | None = None) -> list[int]:
+    """Map local category ids to their Chartmetric ids.
+
+    For any local category that doesn't yet have a ``chartmetric_id``,
+    we resolve-or-create on Chartmetric by *name* (case-insensitive)
+    and stage the mapping on the in-memory category record. The caller
+    is responsible for the final ``_save(data)`` — we deliberately do
+    NOT persist mid-flight so a downstream Chartmetric failure leaves
+    the on-disk store untouched. ``cache`` (passed once for the entire
+    save operation) ensures all categories are resolved with a single
+    ``GET /admin/announcement/categories`` round-trip.
+    """
+    from integrations import chartmetric_announcement_client as cmc
+    if cache is None:
+        cache = {}
+    out: list[int] = []
+    for cid in local_cat_ids or []:
+        local = data["categories"].get(str(cid))
+        if not local:
+            continue
+        remote_id = local.get("chartmetric_id")
+        if remote_id:
+            out.append(int(remote_id))
+            continue
+        # Need to find or create on Chartmetric.
+        remote = cmc.resolve_or_create_category(
+            local["name"], local["color"],
+            translations=local.get("translations") or {},
+            cache=cache,
+        )
+        rid = remote.get("id")
+        if rid is None:
+            raise ValidationError(
+                f"Chartmetric returned no id for category {local['name']!r}",
+                "chartmetric_error", 502)
+        # Stage mapping on the in-memory record. Persisted by caller's
+        # _save(data) once the post push succeeds.
+        local["chartmetric_id"] = int(rid)
+        out.append(int(rid))
+    return out
+
+
+def _coerce_remote_id(payload: dict | None, *, kind: str) -> int:
+    """Pull ``id`` out of a Chartmetric success body and coerce to int.
+
+    Raises a shaped :class:`ValidationError` (502 chartmetric_error)
+    when the body is missing or contains a non-numeric id, so callers
+    never bubble a generic ``TypeError`` / ``ValueError`` to the user.
+    """
+    raw = (payload or {}).get("id")
+    if raw is None:
+        raise ValidationError(
+            f"Chartmetric {kind} response missing 'id' field",
+            "chartmetric_error", 502)
     try:
-        return resp.json()
-    except Exception:
-        return {"error": resp.text or f"Unexpected status {resp.status_code}"}
+        return int(raw)
+    except (TypeError, ValueError):
+        raise ValidationError(
+            f"Chartmetric {kind} response has non-numeric id: {raw!r}",
+            "chartmetric_error", 502)
+
+
+def _push_post_to_chartmetric(local_post: dict, data: dict) -> None:
+    """Push a local post (create-or-update) to Chartmetric and update
+    the local record with the returned remote id.
+
+    Caller MUST hold ``_lock`` and pass the live ``data`` dict — we
+    persist the remote-id mapping inline.
+    """
+    from integrations import chartmetric_announcement_client as cmc
+    cat_cache: dict = {}
+    remote_cat_ids = _resolve_remote_category_ids(
+        local_post.get("category_ids") or [], data, cache=cat_cache)
+    body = _shape_post_payload(local_post, remote_cat_ids)
+    remote_id = local_post.get("chartmetric_id")
+    try:
+        if remote_id:
+            updated = cmc.update_post(remote_id, body)
+            if updated is None:
+                # Remote row vanished — re-create.
+                created = cmc.create_post(body)
+                local_post["chartmetric_id"] = _coerce_remote_id(
+                    created, kind="post")
+            else:
+                # Remote may rewrite the id — keep using it.
+                if updated.get("id") is not None:
+                    local_post["chartmetric_id"] = _coerce_remote_id(
+                        updated, kind="post")
+        else:
+            created = cmc.create_post(body)
+            local_post["chartmetric_id"] = _coerce_remote_id(
+                created, kind="post")
+        # Replace link-table rows so existing ones not in the new set
+        # are removed.
+        cmc.replace_post_categories(
+            local_post["chartmetric_id"], remote_cat_ids)
+    except cmc.ChartmetricClientError as e:
+        raise ValidationError(
+            f"Chartmetric push failed: {e.short()}",
+            "chartmetric_error", 502) from e
+
+
+def _delete_post_on_chartmetric(remote_id: int | None) -> None:
+    if not remote_id:
+        return
+    from integrations import chartmetric_announcement_client as cmc
+    try:
+        cmc.delete_post(remote_id)
+    except cmc.ChartmetricClientError as e:
+        raise ValidationError(
+            f"Chartmetric delete failed: {e.short()}",
+            "chartmetric_error", 502) from e
+
+
+def _push_category_to_chartmetric(local_cat: dict) -> None:
+    from integrations import chartmetric_announcement_client as cmc
+    body = _shape_category_payload(local_cat)
+    remote_id = local_cat.get("chartmetric_id")
+    try:
+        if remote_id:
+            updated = cmc.update_category(remote_id, body)
+            if updated is None:
+                created = cmc.create_category(body)
+                local_cat["chartmetric_id"] = _coerce_remote_id(
+                    created, kind="category")
+            elif updated.get("id") is not None:
+                local_cat["chartmetric_id"] = _coerce_remote_id(
+                    updated, kind="category")
+        else:
+            # Resolve-or-create avoids the 409 if the name already exists
+            # on Chartmetric (e.g. seeded by another environment).
+            cache: dict = {}
+            remote = cmc.resolve_or_create_category(
+                local_cat["name"], local_cat["color"],
+                translations=local_cat.get("translations") or {},
+                cache=cache,
+            )
+            local_cat["chartmetric_id"] = _coerce_remote_id(
+                remote, kind="category")
+    except cmc.ChartmetricClientError as e:
+        raise ValidationError(
+            f"Chartmetric push failed: {e.short()}",
+            "chartmetric_error", 502) from e
+
+
+def _delete_category_on_chartmetric(remote_id: int | None) -> None:
+    if not remote_id:
+        return
+    from integrations import chartmetric_announcement_client as cmc
+    try:
+        cmc.delete_category(remote_id)
+    except cmc.ChartmetricClientError as e:
+        raise ValidationError(
+            f"Chartmetric delete failed: {e.short()}",
+            "chartmetric_error", 502) from e
 
 
 # ---------------------------------------------------------------------------
-# Public API (mode-dispatching)
+# Public API
 # ---------------------------------------------------------------------------
+#
+# Read paths (list_posts, get_post, list_categories) are served from the
+# local working copy in BOTH modes — the working copy is a strict
+# superset of what the wire stores (it includes display_format /
+# scheduled_publish_at / source_feature_*).
 
 def list_posts(status: str | None = None, category: str | None = None,
                search: str | None = None, offset: int = 0,
                limit: int = 25) -> dict:
-    if _stub_mode_enabled():
-        return _stub_list_posts(status, category, search, offset, limit)
-    resp = _proxy_request("GET", "/admin/announcement",
-                          params={"status": status or "all",
-                                  "category": category or "",
-                                  "search": search or "",
-                                  "offset": offset, "limit": limit})
-    return _proxy_json(resp)
+    return _stub_list_posts(status, category, search, offset, limit)
 
 
 def get_post(post_id: int) -> dict | None:
-    if _stub_mode_enabled():
-        return _stub_get_post(post_id)
-    resp = _proxy_request("GET", f"/admin/announcement/{post_id}")
-    if resp.status_code == 404:
-        return None
-    return _proxy_json(resp)
+    return _stub_get_post(post_id)
+
+
+def list_categories() -> list[dict]:
+    return _stub_list_categories()
 
 
 def create_post(payload: dict) -> dict:
     if _stub_mode_enabled():
         return _stub_create_post(payload)
-    resp = _proxy_request("POST", "/admin/announcement", body=payload)
-    return _proxy_json(resp)
+    # Live mode — local mutation first, then push.
+    cleaned = _validate_post_input(payload)
+    with _lock:
+        data = _load()
+        _ensure_seed_categories(data)
+        for cid in cleaned["category_ids"]:
+            if str(cid) not in data["categories"]:
+                raise ValidationError(f"Unknown category id: {cid}",
+                                      "not_found", 404)
+        pid = data["next_post_id"]
+        data["next_post_id"] = pid + 1
+        now = _now_iso()
+        post = {
+            "id": pid,
+            "title": cleaned["title"],
+            "content": cleaned["content"],
+            "translations": cleaned["translations"],
+            "category_ids": cleaned["category_ids"],
+            "image_url": cleaned["image_url"],
+            "display_format": cleaned["display_format"],
+            "is_pinned": cleaned["is_pinned"],
+            "is_boosted": cleaned["is_boosted"],
+            "created_at": now,
+            "modified_at": now,
+            "source_feature_id": cleaned["source_feature_id"],
+            "source_feature_set_id": cleaned["source_feature_set_id"],
+            "chartmetric_id": None,
+        }
+        post.update(_resolve_status(cleaned["status"],
+                                     cleaned["scheduled_publish_at"]))
+        data["posts"][str(pid)] = post
+        _push_post_to_chartmetric(post, data)
+        _save(data)
+        return _hydrate_post(post, data["categories"])
 
 
 def update_post(post_id: int, payload: dict) -> dict | None:
     if _stub_mode_enabled():
         return _stub_update_post(post_id, payload)
-    resp = _proxy_request("PUT", f"/admin/announcement/{post_id}", body=payload)
-    if resp.status_code == 404:
-        return None
-    return _proxy_json(resp)
+    cleaned = _validate_post_input(payload)
+    with _lock:
+        data = _load()
+        existing = data["posts"].get(str(post_id))
+        if not existing:
+            return None
+        for cid in cleaned["category_ids"]:
+            if str(cid) not in data["categories"]:
+                raise ValidationError(f"Unknown category id: {cid}",
+                                      "not_found", 404)
+        existing["title"] = cleaned["title"]
+        existing["content"] = cleaned["content"]
+        existing["translations"] = cleaned["translations"]
+        existing["category_ids"] = cleaned["category_ids"]
+        existing["image_url"] = cleaned["image_url"]
+        existing["display_format"] = cleaned["display_format"]
+        existing["is_pinned"] = cleaned["is_pinned"]
+        existing["is_boosted"] = cleaned["is_boosted"]
+        existing["source_feature_id"] = cleaned["source_feature_id"]
+        existing["source_feature_set_id"] = cleaned["source_feature_set_id"]
+        existing["modified_at"] = _now_iso()
+        prev_published = existing.get("is_published", False)
+        new_state = _resolve_status(cleaned["status"],
+                                     cleaned["scheduled_publish_at"])
+        if new_state["is_published"] and not prev_published:
+            new_state["published_at"] = _now_iso()
+        elif new_state["is_published"] and prev_published and existing.get("published_at"):
+            new_state["published_at"] = existing["published_at"]
+        existing.update(new_state)
+        _push_post_to_chartmetric(existing, data)
+        _save(data)
+        return _hydrate_post(existing, data["categories"])
 
 
 def delete_post(post_id: int) -> bool:
     if _stub_mode_enabled():
         return _stub_delete_post(post_id)
-    resp = _proxy_request("DELETE", f"/admin/announcement/{post_id}")
-    return resp.status_code in (200, 204)
+    with _lock:
+        data = _load()
+        existing = data["posts"].get(str(post_id))
+        if not existing:
+            return False
+        _delete_post_on_chartmetric(existing.get("chartmetric_id"))
+        data["posts"].pop(str(post_id))
+        _save(data)
+        return True
 
 
-def list_categories() -> list[dict]:
-    if _stub_mode_enabled():
-        return _stub_list_categories()
-    resp = _proxy_request("GET", "/admin/announcement/categories")
-    return _proxy_json(resp) or []
+def set_post_boost(post_id: int, is_boosted: bool) -> dict | None:
+    """Immediately flip ``is_boosted`` on an existing post.
+
+    This entry point is *only* meant for posts that are already
+    published AND already synced to Chartmetric — that's the case
+    where the marketer wants the boost change to go live without
+    re-saving the entire form. For drafts and scheduled posts the
+    boost toggle is staged inside the editor form and persisted as
+    part of the next Save / Publish. Calling this for a draft /
+    scheduled / unsynced post is a programmer error and raises
+    ``ValidationError`` so the UI can surface a clear message.
+
+    Returns the updated (hydrated) post dict, or ``None`` if the post
+    doesn't exist locally.
+    """
+    with _lock:
+        data = _load()
+        existing = data["posts"].get(str(post_id))
+        if not existing:
+            return None
+        if not existing.get("is_published"):
+            raise ValidationError(
+                "Boost can only be toggled live on published posts; "
+                "save the boost setting from the editor for drafts or "
+                "scheduled posts.",
+                "boost_not_allowed", 409)
+        if _live_mode_enabled() and not existing.get("chartmetric_id"):
+            raise ValidationError(
+                "Post is not synced to Chartmetric yet; save it first "
+                "before toggling boost.",
+                "boost_not_allowed", 409)
+        existing["is_boosted"] = bool(is_boosted)
+        existing["modified_at"] = _now_iso()
+        if _live_mode_enabled() and existing.get("chartmetric_id"):
+            from integrations import chartmetric_announcement_client as cmc
+            try:
+                cmc.patch_post_boost(existing["chartmetric_id"],
+                                      bool(is_boosted))
+            except cmc.ChartmetricClientError as e:
+                raise ValidationError(
+                    f"Chartmetric boost toggle failed: {e.short()}",
+                    "chartmetric_error", 502) from e
+        _save(data)
+        return _hydrate_post(existing, data["categories"])
 
 
 def create_category(payload: dict) -> dict:
     if _stub_mode_enabled():
         return _stub_create_category(payload)
-    resp = _proxy_request("POST", "/admin/announcement/categories", body=payload)
-    return _proxy_json(resp)
+    cleaned = _validate_category_input(payload)
+    with _lock:
+        data = _load()
+        for c in data["categories"].values():
+            if c["name"].strip().lower() == cleaned["name"].lower():
+                raise ValidationError("Category name already exists",
+                                      "category_name_taken", 409)
+        cid = data["next_category_id"]
+        data["next_category_id"] = cid + 1
+        cat = {"id": cid, "chartmetric_id": None, **cleaned}
+        data["categories"][str(cid)] = cat
+        _push_category_to_chartmetric(cat)
+        _save(data)
+        return {**cat, "posts_count": 0}
 
 
 def update_category(cat_id: int, payload: dict) -> dict | None:
     if _stub_mode_enabled():
         return _stub_update_category(cat_id, payload)
-    resp = _proxy_request("PUT", f"/admin/announcement/categories/{cat_id}", body=payload)
-    if resp.status_code == 404:
-        return None
-    return _proxy_json(resp)
+    cleaned = _validate_category_input(payload)
+    with _lock:
+        data = _load()
+        existing = data["categories"].get(str(cat_id))
+        if not existing:
+            return None
+        for c in data["categories"].values():
+            if (c["id"] != cat_id
+                    and c["name"].strip().lower() == cleaned["name"].lower()):
+                raise ValidationError("Category name already exists",
+                                      "category_name_taken", 409)
+        existing.update(cleaned)
+        _push_category_to_chartmetric(existing)
+        _save(data)
+        usage = sum(1 for p in data["posts"].values()
+                    if cat_id in (p.get("category_ids") or []))
+        return {**existing, "posts_count": usage}
 
 
 def delete_category(cat_id: int) -> dict:
     if _stub_mode_enabled():
         return _stub_delete_category(cat_id)
-    resp = _proxy_request("DELETE", f"/admin/announcement/categories/{cat_id}")
-    if resp.status_code in (200, 204):
+    with _lock:
+        data = _load()
+        existing = data["categories"].get(str(cat_id))
+        if not existing:
+            return {"deleted": False, "id": cat_id, "missing": True}
+        usage = sum(1 for p in data["posts"].values()
+                    if cat_id in (p.get("category_ids") or []))
+        if usage > 0:
+            raise ValidationError(
+                f"Category in use by {usage} post(s)",
+                "category_in_use", 409,
+            )
+        _delete_category_on_chartmetric(existing.get("chartmetric_id"))
+        data["categories"].pop(str(cat_id))
+        _save(data)
         return {"deleted": True, "id": cat_id}
-    body = _proxy_json(resp)
-    raise ValidationError(body.get("error") or "Delete failed",
-                          body.get("code") or "delete_failed",
-                          resp.status_code)
 
 
 # ---------------------------------------------------------------------------
@@ -631,3 +1002,31 @@ def publish_announcement_quick(title: str, body: str,
         return {"success": False, "error": str(e)}
     return {"success": True, "announcement": post,
             "id": post.get("id")}
+
+
+# ---------------------------------------------------------------------------
+# Connection probe (used by the admin "Test Chartmetric connection" button)
+# ---------------------------------------------------------------------------
+
+def ping_chartmetric() -> dict:
+    """Probe live Chartmetric admin API and return diagnostics.
+
+    Always returns a dict — never raises — so the route handler can
+    serialize the result directly.
+    """
+    if _stub_mode_enabled():
+        return {
+            "ok": False,
+            "stub_mode": True,
+            "base_url": getattr(config, "CHARTMETRIC_ADMIN_API_BASE_URL", "") or None,
+            "token_configured": bool(getattr(config, "CHARTMETRIC_ADMIN_API_TOKEN", "")),
+            "error": "Stub mode is enabled — set both "
+                     "CHARTMETRIC_ADMIN_API_BASE_URL and "
+                     "CHARTMETRIC_ADMIN_API_TOKEN to go live "
+                     "(and unset the ANNOUNCEMENTS_STUB_MODE kill switch "
+                     "if it's set).",
+        }
+    from integrations import chartmetric_announcement_client as cmc
+    info = cmc.ping()
+    info["stub_mode"] = False
+    return info

@@ -73,6 +73,10 @@ def announcements_page():
 @bp.route("/api/admin/announcement-mode", methods=["GET"])
 def announcement_mode():
     info = announcement_store.get_mode_info()
+    # Optional live probe — used by the "Test Chartmetric connection"
+    # button in the admin UI.
+    if request.args.get("ping") in ("1", "true", "yes"):
+        info["chartmetric"] = announcement_store.ping_chartmetric()
     return jsonify({"success": True, **info}), 200
 
 
@@ -139,10 +143,41 @@ def update_post_endpoint(post_id: int):
 
 @bp.route("/api/admin/announcements/<int:post_id>", methods=["DELETE"])
 def delete_post_endpoint(post_id: int):
-    ok = announcement_store.delete_post(post_id)
+    try:
+        ok = announcement_store.delete_post(post_id)
+    except ValidationError as e:
+        return _validation_response(e)
+    except Exception as e:
+        logger.exception("[announcements] delete %s failed: %s", post_id, e)
+        return jsonify({"success": False, "error": str(e)}), 500
     if not ok:
         return jsonify({"success": False, "error": "Not found"}), 404
     return jsonify({"success": True, "id": post_id}), 200
+
+
+@bp.route("/api/admin/announcements/<int:post_id>/boost", methods=["POST"])
+def set_post_boost_endpoint(post_id: int):
+    """Flip ``is_boosted`` on a post. Only valid for published+synced
+    posts — the store immediately PATCHes Chartmetric and persists.
+
+    Drafts/scheduled posts (or unsynced posts in live mode) are
+    rejected with HTTP 409 ``boost_not_allowed``; the UI gates the
+    toggle so the change stays in the unsaved working copy of the
+    editor and is only persisted via the normal save flow once the
+    post is published.
+    """
+    payload = request.get_json(silent=True) or {}
+    is_boosted = bool(payload.get("is_boosted"))
+    try:
+        post = announcement_store.set_post_boost(post_id, is_boosted)
+    except ValidationError as e:
+        return _validation_response(e)
+    except Exception as e:
+        logger.exception("[announcements] boost %s failed: %s", post_id, e)
+        return jsonify({"success": False, "error": str(e)}), 500
+    if post is None:
+        return jsonify({"success": False, "error": "Not found"}), 404
+    return jsonify({"success": True, "post": post}), 200
 
 
 # ---------------------------------------------------------------------------

@@ -94,6 +94,40 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
   width: 100%; max-width: 880px; max-height: calc(100vh - 48px); overflow-y: auto; padding: 24px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+.modal.split { max-width: 1280px; padding: 0; overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 0; max-height: calc(100vh - 48px); }
+.modal.split .editor-col { padding: 24px; overflow-y: auto; max-height: calc(100vh - 48px); }
+.modal.split .preview-col {
+  background: var(--bg-page); border-left: 1px solid var(--border);
+  padding: 18px 18px 22px; overflow-y: auto; max-height: calc(100vh - 48px);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.preview-col h3 { margin: 0; font-size: 12px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+.preview-toggle-row { display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; border-radius: 8px; background: var(--bg-card); border: 1px solid var(--border); }
+.preview-toggle-row .label { font-size: 13px; font-weight: 600; }
+.preview-toggle-row .hint { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.preview-mock { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px; min-height: 200px; }
+.preview-mock.popup { background: linear-gradient(180deg, rgba(0,201,167,0.06), transparent);
+  border-color: rgba(0,201,167,0.4); box-shadow: 0 0 0 4px rgba(0,201,167,0.08); }
+.preview-mock .mock-image { display: block; max-width: 100%; max-height: 140px;
+  border-radius: 6px; margin-bottom: 10px; }
+.preview-mock .mock-cats { margin-bottom: 8px; }
+.preview-mock .mock-title { font-size: 16px; font-weight: 700; margin: 0 0 8px; }
+.preview-mock .mock-body { font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+.preview-mock .mock-body p { margin: 0 0 8px; }
+.preview-mock .mock-body img, .preview-mock .mock-body video { max-width: 100%; border-radius: 4px; }
+.preview-mock .mock-pinned { float: right; font-size: 11px; color: var(--accent); }
+.preview-frame-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 4px; }
+@media (max-width: 1100px) {
+  .modal.split { grid-template-columns: 1fr; }
+  .modal.split .preview-col { border-left: none; border-top: 1px solid var(--border);
+    max-height: 50vh; }
+}
 .modal h2 { margin: 0 0 16px; font-size: 18px; }
 .modal .form-row { margin-bottom: 14px; }
 .modal label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;
@@ -193,6 +227,12 @@ tr:hover td { background: rgba(255,255,255,0.02); }
   </aside>
   <main class="main">
     <div id="mode-banner" class="banner" style="display:none"></div>
+    <div class="banner" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(0,201,167,0.06);border-color:rgba(0,201,167,0.25);color:var(--text-body)">
+      <div id="conn-status" style="font-size:12px;line-height:1.6">
+        <span class="dim">Chartmetric:</span> <span id="conn-summary">checking…</span>
+      </div>
+      <button class="btn small secondary" type="button" onclick="testChartmetric()">Test Chartmetric connection</button>
+    </div>
 
     <!-- Posts tab -->
     <section id="tab-posts">
@@ -261,11 +301,13 @@ tr:hover td { background: rgba(255,255,255,0.02); }
     <!-- Docs tab -->
     <section id="tab-docs" style="display:none">
       <div class="section-header"><h1>chartmetric-api Contract</h1></div>
-      <p class="muted">When the backend team implements the Chartmetric admin API, set
+      <p class="muted">Live mode turns on automatically the moment both
         <code>CHARTMETRIC_ADMIN_API_BASE_URL</code> and
-        <code>CHARTMETRIC_ADMIN_API_TOKEN</code> in env, then set
-        <code>ANNOUNCEMENTS_STUB_MODE=false</code>. Until then, this admin
-        runs against a local JSON store.</p>
+        <code>CHARTMETRIC_ADMIN_API_TOKEN</code> are set in env — no extra flag
+        is required. Until then, this admin runs against a local JSON store.
+        <code>ANNOUNCEMENTS_STUB_MODE</code> is reserved as a kill switch:
+        leave it unset, set it truthy only if you need to pin Amplify back to
+        the local store during an incident.</p>
       <p>The full REST contract (auth, schema, endpoints, validation rules,
          error codes, deployment checklist) lives in
          <a href="https://github.com/chartmetric/amplify/blob/main/docs/chartmetric-announcement-admin-api.md" target="_blank" rel="noopener">
@@ -277,7 +319,8 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 
 <!-- Post editor modal -->
 <div class="overlay" id="post-modal" onclick="if(event.target===this) closePostEditor()">
-  <div class="modal">
+  <div class="modal split">
+   <div class="editor-col">
     <h2 id="post-modal-title">New Post</h2>
 
     <div class="form-row">
@@ -365,6 +408,36 @@ tr:hover td { background: rgba(255,255,255,0.02); }
       <button class="btn secondary" onclick="savePost('draft')" id="btn-save-draft">Save Draft</button>
       <button class="btn" onclick="savePost(null)" id="btn-save-publish">Save</button>
     </div>
+   </div><!-- /editor-col -->
+
+   <aside class="preview-col">
+    <h3>Live preview</h3>
+
+    <div class="preview-toggle-row">
+      <div>
+        <div class="label">Boost as popup</div>
+        <div class="hint" id="boost-hint">Boosted posts surface as a centered modal on first sight.</div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="f-boosted-mirror" onchange="onBoostMirror(this.checked)" /></label>
+    </div>
+
+    <div>
+      <div class="preview-frame-label" id="preview-frame-label">In-drawer card</div>
+      <div id="preview-mock" class="preview-mock">
+        <div class="mock-cats" id="preview-cats"></div>
+        <img id="preview-image" class="mock-image" style="display:none" />
+        <h4 class="mock-title" id="preview-title">(untitled)</h4>
+        <div class="mock-body" id="preview-body"></div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:var(--text-dim);line-height:1.55">
+      Updates as you type. The boost toggle here mirrors the form's
+      <b>Boost</b> checkbox — for an already-published post, flipping it
+      sends an immediate <code>PATCH /admin/announcement/&lt;id&gt;/boost</code>
+      to Chartmetric.
+    </div>
+   </aside>
   </div>
 </div>
 
@@ -421,6 +494,7 @@ const LANG_NAMES = { de:'Deutsch', es:'Español', fr:'Français', ja:'日本語'
 
 let _categoriesCache = [];
 let _editingPostId = null;
+let _editingPostMeta = null;  // {status, chartmetric_id} of the loaded post — null for new/unloaded posts
 let _editingCatId = null;
 let _activeLangTab = 'en';
 let _translationsState = {};   // lang -> { title, content_html }
@@ -457,13 +531,58 @@ async function loadMode() {
     const r = await fetch('/api/admin/announcement-mode');
     const data = await r.json();
     _modeInfo = data;
+    renderConnSummary(data);
     if (data.stub_mode) {
       const b = $('mode-banner');
       b.style.display = 'block';
       b.innerHTML = '<b>Stub mode</b> — running against a local JSON store at <code>' +
-        (data.store_path||'.announcement_store.json') + '</code>. Configure <code>CHARTMETRIC_ADMIN_API_BASE_URL</code> + <code>CHARTMETRIC_ADMIN_API_TOKEN</code> and set <code>ANNOUNCEMENTS_STUB_MODE=false</code> to proxy to chartmetric-api.';
+        (data.store_path||'.announcement_store.json') + '</code>. Live mode turns on automatically once <code>CHARTMETRIC_ADMIN_API_BASE_URL</code> and <code>CHARTMETRIC_ADMIN_API_TOKEN</code> are both set in env (no extra flag required). <code>ANNOUNCEMENTS_STUB_MODE</code> is a kill switch — leave it unset for normal operation.';
     }
   } catch(e) { console.warn('mode load failed', e); }
+}
+
+function renderConnSummary(data, probe) {
+  const el = $('conn-summary');
+  if (!el) return;
+  if (!data) { el.textContent = 'unknown'; return; }
+  if (data.stub_mode) {
+    let reason;
+    if (!data.base_url && !data.token_configured) {
+      reason = 'CHARTMETRIC_ADMIN_API_BASE_URL + CHARTMETRIC_ADMIN_API_TOKEN not set';
+    } else if (!data.base_url) {
+      reason = 'CHARTMETRIC_ADMIN_API_BASE_URL not set';
+    } else if (!data.token_configured) {
+      reason = 'CHARTMETRIC_ADMIN_API_TOKEN not set';
+    } else {
+      reason = 'ANNOUNCEMENTS_STUB_MODE kill switch is active';
+    }
+    el.innerHTML = '<span style="color:var(--warn)">stub mode</span> · ' + escapeHtml(reason);
+    return;
+  }
+  if (probe) {
+    if (probe.ok) {
+      const cnt = probe.count != null ? ` · ${probe.count} categories` : '';
+      el.innerHTML = `<span style="color:var(--accent)">live · HTTP ${probe.status}${cnt}</span> · ${escapeHtml(data.base_url||'')}`;
+    } else {
+      el.innerHTML = `<span style="color:var(--danger)">FAILED · HTTP ${probe.status}</span> · ${escapeHtml(probe.error||'')}`;
+    }
+  } else {
+    el.innerHTML = `live · ${escapeHtml(data.base_url||'')} · token ${data.token_configured?'configured':'<span style="color:var(--warn)">missing</span>'}`;
+  }
+}
+
+async function testChartmetric() {
+  const el = $('conn-summary');
+  if (el) el.innerHTML = '<span class="spinner"></span> probing…';
+  try {
+    const r = await fetch('/api/admin/announcement-mode?ping=1');
+    const data = await r.json();
+    _modeInfo = data;
+    renderConnSummary(data, data.chartmetric);
+    if (data.chartmetric && data.chartmetric.ok) toast('Chartmetric reachable');
+    else if (data.chartmetric) toast('Chartmetric probe failed: ' + (data.chartmetric.error||'unknown'),'error');
+    else toast('Stub mode is on — set CHARTMETRIC_ADMIN_API_BASE_URL to go live','error');
+  } catch(e) { toast('Probe failed: '+e.message,'error'); }
 }
 
 // ----- Posts list -----
@@ -579,6 +698,7 @@ async function deleteCategory(id) {
 
 function openPostEditor(id) {
   _editingPostId = id;
+  _editingPostMeta = null;
   _activeLangTab = 'en';
   _translationsState = {};
   $('post-modal-title').textContent = id ? 'Edit Post #' + id : 'New Post';
@@ -596,6 +716,8 @@ function openPostEditor(id) {
   renderCategoryCheckboxes([]);
   renderLangTabs();
   $('post-modal').classList.add('show');
+  bindPreviewListeners();
+  renderPreview();
   if (id) loadPostIntoEditor(id);
   else $('f-title').focus();
 }
@@ -604,6 +726,11 @@ async function loadPostIntoEditor(id) {
   try {
     const data = await apiJson('/api/admin/announcements/' + id);
     const p = data.post;
+    _editingPostMeta = {
+      status: p.status,
+      chartmetric_id: p.chartmetric_id || null,
+      is_boosted: !!p.is_boosted,
+    };
     $('f-title').value = p.title || '';
     $('f-body').innerHTML = await slateToHtml(p.content || []);
     $('f-display-format').value = p.display_format || 'banner';
@@ -634,10 +761,136 @@ async function loadPostIntoEditor(id) {
       }
     }
     renderLangTabs();
+    renderPreview();
   } catch(e) { toast(e.message, 'error'); }
 }
 
-function closePostEditor() { $('post-modal').classList.remove('show'); }
+function closePostEditor() {
+  $('post-modal').classList.remove('show');
+  if (_previewTimer) { clearTimeout(_previewTimer); _previewTimer = null; }
+}
+
+// ----- Live preview pane + Boost toggle mirror -----
+let _previewTimer = null;
+function schedulePreview() {
+  if (_previewTimer) clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(renderPreview, 120);
+}
+function renderPreview() {
+  const title = $('f-title').value.trim() || '(untitled)';
+  const bodyHtml = $('f-body').innerHTML || '';
+  const imageUrl = $('f-image-url').value.trim();
+  const isPinned = $('f-pinned').checked;
+  const isBoosted = $('f-boosted').checked;
+  $('preview-title').textContent = title + (isPinned ? '  📌' : '');
+  $('preview-body').innerHTML = bodyHtml || '<span class="dim">Body preview will appear here…</span>';
+  if (imageUrl) {
+    $('preview-image').src = imageUrl;
+    $('preview-image').style.display = '';
+  } else {
+    $('preview-image').style.display = 'none';
+  }
+  // Categories
+  const cats = Array.from(document.querySelectorAll('#f-cats input:checked'))
+    .map(i => _categoriesCache.find(c => String(c.id) === i.value))
+    .filter(Boolean);
+  $('preview-cats').innerHTML = cats.map(c =>
+    `<span class="cat-pill" style="background:${escapeAttr(c.color)}">${escapeHtml(c.name)}</span>`
+  ).join('') || '<span class="dim" style="font-size:11px">No categories</span>';
+  // Boost render mode
+  const mock = $('preview-mock');
+  const label = $('preview-frame-label');
+  if (isBoosted) {
+    mock.classList.add('popup');
+    label.textContent = 'Popup (modal on first sight)';
+  } else {
+    mock.classList.remove('popup');
+    label.textContent = 'In-drawer card (announcement feed)';
+  }
+  // Mirror into preview-pane checkbox
+  const mirror = $('f-boosted-mirror');
+  if (mirror && mirror.checked !== isBoosted) mirror.checked = isBoosted;
+}
+
+async function onBoostMirror(checked) {
+  // Entry point shared by the preview-pane mirror checkbox AND the
+  // editor's Boost checkbox — keep both in sync, then run the
+  // gated immediate-PATCH flow exactly once. Re-entry is guarded so
+  // a programmatic rollback inside the catch() doesn't bounce back
+  // through the change listener.
+  if (window._boostMirrorBusy) return;
+  window._boostMirrorBusy = true;
+  const cb = $('f-boosted');
+  const mirror = $('f-boosted-mirror');
+  if (cb && cb.checked !== checked) cb.checked = checked;
+  if (mirror && mirror.checked !== checked) mirror.checked = checked;
+  schedulePreview();
+  // The immediate boost endpoint is *only* for posts that are already
+  // published AND already synced to Chartmetric. For new posts, drafts,
+  // and scheduled posts we just stage the value in the form — it will
+  // be persisted as part of the next Save / Publish.
+  const meta = _editingPostMeta;
+  // Gate on BOTH the persisted status (only published posts may boost
+  // server-side) AND the current dropdown value — if the editor has
+  // an unsaved switch to draft/scheduled, treat the boost as staged
+  // and let the next Save persist it through the normal write path.
+  const formStatus = $('f-status') ? $('f-status').value : '';
+  const formStillPublished = (formStatus === '' || formStatus === 'publish_now');
+  const canFireLive = !!(_editingPostId
+                          && meta
+                          && meta.status === 'published'
+                          && formStillPublished
+                          && (meta.chartmetric_id || _modeInfo && _modeInfo.stub_mode));
+  if (!canFireLive) {
+    toast('Boost staged — will save with the post', 'info');
+    window._boostMirrorBusy = false;
+    return;
+  }
+  try {
+    const r = await apiJson('/api/admin/announcements/' + _editingPostId + '/boost',
+      { method: 'POST', body: JSON.stringify({ is_boosted: checked }) });
+    if (r.post) {
+      _editingPostMeta = {
+        status: r.post.status,
+        chartmetric_id: r.post.chartmetric_id || null,
+        is_boosted: !!r.post.is_boosted,
+      };
+    }
+    const live = !(_modeInfo && _modeInfo.stub_mode);
+    if (live) {
+      toast(checked ? 'Boost ON — pushed to Chartmetric' : 'Boost OFF — pushed to Chartmetric');
+    } else {
+      toast(checked ? 'Boost ON (stub mode — saved locally only)' : 'Boost OFF (stub mode — saved locally only)');
+    }
+  } catch(e) {
+    if (cb) cb.checked = !checked;
+    if (mirror) mirror.checked = !checked;
+    schedulePreview();
+    toast('Boost failed: '+e.message,'error');
+  } finally {
+    window._boostMirrorBusy = false;
+  }
+}
+
+function bindPreviewListeners() {
+  if (window._previewBound) return;
+  window._previewBound = true;
+  ['f-title','f-image-url'].forEach(id => $(id).addEventListener('input', schedulePreview));
+  $('f-pinned').addEventListener('change', schedulePreview);
+  // Flipping the form's Boost checkbox should behave identically to
+  // flipping the preview-pane mirror: same gating, same immediate
+  // PATCH for published+synced posts, same staged-toast for everything
+  // else. We delegate to onBoostMirror() and let it sync the mirror.
+  $('f-boosted').addEventListener('change', (ev) => {
+    if (ev && ev.isTrusted === false) return;  // ignore programmatic flips
+    onBoostMirror($('f-boosted').checked);
+  });
+  $('f-body').addEventListener('input', schedulePreview);
+  // Fire when categories change
+  document.addEventListener('change', e => {
+    if (e.target && e.target.matches('#f-cats input')) schedulePreview();
+  });
+}
 
 function onStatusChange() {
   const status = $('f-status').value;
