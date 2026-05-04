@@ -1663,6 +1663,33 @@
             transition: background-color 0.2s;
         }
         .batch-item-drag { color: var(--text-faint); font-size: 16px; cursor: grab; user-select: none; }
+        .batch-item-check {
+            appearance: none; -webkit-appearance: none;
+            width: 16px; height: 16px; min-width: 16px;
+            border: 2px solid var(--border); border-radius: 4px;
+            background: var(--bg-input, #1a1a1a); cursor: pointer;
+            position: relative; transition: background 0.15s, border-color 0.15s;
+            display: none;
+        }
+        .batch-item.approved .batch-item-check,
+        .batch-item.published .batch-item-check { display: block; }
+        .batch-item-check:checked {
+            background: var(--accent, #00C9A7); border-color: var(--accent, #00C9A7);
+        }
+        .batch-item-check:checked::after {
+            content: ''; position: absolute;
+            left: 2px; top: -1px; width: 8px; height: 5px;
+            border-left: 2px solid #000; border-bottom: 2px solid #000;
+            transform: rotate(-45deg);
+        }
+        .batch-item-remove {
+            color: var(--text-faint); background: none; border: none;
+            font-size: 15px; cursor: pointer; padding: 2px 5px;
+            border-radius: 4px; line-height: 1; opacity: 0.45;
+            transition: opacity 0.15s, color 0.15s; margin-left: auto;
+        }
+        .batch-item-remove:hover { opacity: 1; color: #ff6b6b; }
+        .batch-item.deselected { opacity: 0.55; }
         .batch-item-title { font-size: 14px; font-weight: 600; color: var(--text-body); flex: 1; }
         .batch-item-title[contenteditable="true"] {
             cursor: text;
@@ -11298,6 +11325,8 @@ var prepSelectedIds = {};
 var prepBatchResults = [];
 var prepBatchApproved = {};
 var prepBatchPublished = {};
+var prepBatchSelected = {};
+var prepBatchRemoved = {};
 var prepBatchInitialDrafts = {};
 var prepBatchRegenFeedback = {};
 var prepDragItem = null;
@@ -11389,6 +11418,8 @@ function _resetPrepState() {
     prepBatchResults = [];
     prepBatchApproved = {};
     prepBatchPublished = {};
+    prepBatchSelected = {};
+    prepBatchRemoved = {};
     prepBatchInitialDrafts = {};
     prepBatchRegenFeedback = {};
     window.prepBatchImages = {};
@@ -12143,6 +12174,8 @@ function _restoreBatchAutoSave() {
     prepSelectedIds = {};
     prepBatchApproved = {};
     prepBatchPublished = {};
+    prepBatchSelected = {};
+    prepBatchRemoved = {};
     prepBatchInitialDrafts = {};
     prepBatchRegenFeedback = {};
     var approvedByFid = snap.approvedByFeatureId || {};
@@ -12151,7 +12184,7 @@ function _restoreBatchAutoSave() {
         var fid = results[i] && results[i].feature_id;
         if (!fid) continue;
         prepSelectedIds[fid] = true;
-        if (approvedByFid[fid]) prepBatchApproved[i] = true;
+        if (approvedByFid[fid]) { prepBatchApproved[i] = true; prepBatchSelected[i] = true; }
         if (initByFid[fid] !== undefined) prepBatchInitialDrafts[i] = initByFid[fid];
     }
     window.prepBatchEmailSubject = snap.emailSubjects || {};
@@ -13288,6 +13321,8 @@ function loadEmailDraft(id) {
         prepSelectedIds = {};
         prepBatchApproved = {};
         prepBatchPublished = {};
+        prepBatchSelected = {};
+        prepBatchRemoved = {};
         prepBatchInitialDrafts = {};
         prepBatchRegenFeedback = {};
         window.prepBatchImages = {};
@@ -13302,7 +13337,7 @@ function loadEmailDraft(id) {
             var fid = results[i] && results[i].feature_id;
             if (!fid) continue;
             prepSelectedIds[fid] = true;
-            if (approvedByFid[fid]) prepBatchApproved[i] = true;
+            if (approvedByFid[fid]) { prepBatchApproved[i] = true; prepBatchSelected[i] = true; }
             if (initByFid[fid] !== undefined) prepBatchInitialDrafts[i] = initByFid[fid];
             if (imgByFid[fid]) window.prepBatchImages[i] = imgByFid[fid];
             if (vidByFid[fid]) window.prepBatchVideos[i] = vidByFid[fid];
@@ -14146,6 +14181,8 @@ function startBatchGeneration() {
     prepBatchResults = [];
     prepBatchApproved = {};
     prepBatchPublished = {};
+    prepBatchSelected = {};
+    prepBatchRemoved = {};
     prepBatchInitialDrafts = {};
     prepBatchRegenFeedback = {};
     window._batchAttachmentsLoaded = false;
@@ -14357,6 +14394,10 @@ function buildBatchItem(r, idx) {
         '>' + escHtml(r.feature_title || '') + '</span>';
     item.innerHTML =
         '<div class="batch-item-header">' +
+            '<input type="checkbox" class="batch-item-check" id="batch-check-' + idx + '"' +
+                ' title="Include in Publish All"' +
+                ' onmousedown="event.stopPropagation();"' +
+                ' onchange="toggleBatchSelect(' + idx + ', this.checked)">' +
             '<span class="batch-item-drag">\u2261</span>' +
             batchTitleHtml +
             '<span class="batch-item-score' + (batchScoreDisabled ? ' disabled' : '') + '" id="batch-score-' + idx + '" data-fid="' + escAttr(batchFid) + '" ' + batchScoreTitle + '>' + batchScoreHtml + '</span>' +
@@ -14364,6 +14405,9 @@ function buildBatchItem(r, idx) {
             '<span class="char-count-badge ' + charClass + '" id="batch-char-' + idx + '">' + __pl + '/' + maxChars + '</span>' +
             '<span class="status-badge draft" id="batch-status-' + idx + '">Draft</span>' +
             (r.from_cache ? '<span class="cached-badge">Cached</span>' : '') +
+            '<button class="batch-item-remove" id="batch-remove-' + idx + '"' +
+                ' title="Remove from draft" onmousedown="event.stopPropagation();"' +
+                ' onclick="removeBatchItem(' + idx + ')">&#x2715;</button>' +
         '</div>' +
         '<div class="batch-item-body" id="batch-body-' + idx + '">' +
             ((window.prepBatchMode === 'digest' && prepChannel === 'email_standalone') ?
@@ -14754,6 +14798,7 @@ function batchApproveItem(idx) {
     .then(function(data) {
         if (data.error) { showToast('Approve failed: ' + data.error, true); if (approveBtn) { approveBtn.textContent = 'Approve \u2713'; approveBtn.disabled = false; } return; }
         prepBatchApproved[idx] = true;
+        if (prepBatchSelected[idx] === undefined) prepBatchSelected[idx] = true;
         prepBatchResults[idx].approved_content = ta ? ta.value : currentContent;
         updateBatchItemStatus(idx);
         updateBatchApprovalCount();
@@ -14776,6 +14821,14 @@ function updateBatchItemStatus(idx) {
     var item = document.getElementById('batch-item-' + idx);
     var status = document.getElementById('batch-status-' + idx);
     var actions = document.getElementById('batch-actions-' + idx);
+    var chk = document.getElementById('batch-check-' + idx);
+    if (chk) {
+        chk.checked = !!prepBatchSelected[idx];
+        if (item) {
+            if (prepBatchSelected[idx] === false) { item.classList.add('deselected'); }
+            else { item.classList.remove('deselected'); }
+        }
+    }
     if (prepBatchPublished[idx]) {
         if (item) { item.classList.add('published'); item.classList.add('approved'); }
         if (status) { status.className = 'status-badge published-badge'; status.textContent = 'Published \u2713'; }
@@ -14836,7 +14889,35 @@ function updateBatchItemStatus(idx) {
 function batchUndoApprove(idx) {
     prepBatchApproved[idx] = false;
     prepBatchPublished[idx] = false;
+    prepBatchSelected[idx] = false;
     updateBatchItemStatus(idx);
+    updateBatchApprovalCount();
+    if (typeof _scheduleBatchAutoSave === 'function') _scheduleBatchAutoSave();
+}
+
+function toggleBatchSelect(idx, checked) {
+    prepBatchSelected[idx] = !!checked;
+    var item = document.getElementById('batch-item-' + idx);
+    if (item) {
+        if (checked) { item.classList.remove('deselected'); }
+        else { item.classList.add('deselected'); }
+    }
+}
+
+function removeBatchItem(idx) {
+    prepBatchRemoved[idx] = true;
+    prepBatchApproved[idx] = false;
+    prepBatchPublished[idx] = false;
+    prepBatchSelected[idx] = false;
+    var item = document.getElementById('batch-item-' + idx);
+    if (item) {
+        item.style.transition = 'opacity 0.2s, max-height 0.25s';
+        item.style.overflow = 'hidden';
+        item.style.opacity = '0';
+        item.style.maxHeight = item.offsetHeight + 'px';
+        setTimeout(function() { item.style.maxHeight = '0'; item.style.marginBottom = '0'; }, 20);
+        setTimeout(function() { item.style.display = 'none'; }, 270);
+    }
     updateBatchApprovalCount();
     if (typeof _scheduleBatchAutoSave === 'function') _scheduleBatchAutoSave();
 }
@@ -16368,7 +16449,8 @@ function batchPublishItem(idx, skipConfirm) {
 function batchPublishAllApproved() {
     var approvedIndices = [];
     for (var i = 0; i < prepBatchResults.length; i++) {
-        if (prepBatchApproved[i] && !prepBatchPublished[i] && !batchPublishInFlight[i]) {
+        if (prepBatchApproved[i] && !prepBatchPublished[i] && !batchPublishInFlight[i]
+                && !prepBatchRemoved[i] && prepBatchSelected[i] !== false) {
             approvedIndices.push(i);
         }
     }
