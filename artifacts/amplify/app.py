@@ -6198,7 +6198,7 @@ def combine_content_endpoint():
     fmt = "markdown"
 
     if channel == "notion_monthly":
-        combined_parts.append("# Product Updates - Monthly Meeting\n")
+        combined_parts.append("# 🎉 New Features\n")
         for item in items:
             combined_parts.append(item.get("content", ""))
             combined_parts.append("\n---\n")
