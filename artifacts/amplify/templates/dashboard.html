@@ -1333,33 +1333,66 @@
             display: flex; align-items: center; justify-content: space-between;
             padding: 14px 18px 12px; border-bottom: 1px solid var(--border);
         }
-        .home-strip-view-all {
-            background: transparent; border: 1px solid var(--border); color: var(--text-muted);
-            padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
-            cursor: pointer; font-family: inherit; transition: border-color 0.2s, color 0.2s;
+        /* Widget tabs (Draft / Artifact / Downloaded) */
+        .home-widget-tabs {
+            display: flex; align-items: center; gap: 4px;
         }
-        .home-strip-view-all:hover { border-color: var(--accent); color: var(--accent); }
-        #home-drafts-list { padding: 10px 18px 14px; max-height: 280px; overflow-y: auto; }
-        .home-strip-empty { color: var(--text-muted); font-size: 13px; padding: 12px 0; }
+        .home-widget-tab {
+            background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+            padding: 5px 13px; border-radius: 6px; font-size: 12px; font-weight: 600;
+            cursor: pointer; font-family: inherit; transition: background 0.15s, border-color 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+        .home-widget-tab:hover { border-color: var(--accent); color: var(--accent); }
+        .home-widget-tab.active {
+            background: var(--accent-bg); border-color: var(--accent); color: var(--accent);
+        }
+        .home-widget-tab-count {
+            font-weight: 400; font-size: 11px; opacity: 0.75;
+        }
+        #home-drafts-list { padding: 4px 18px 14px; max-height: 320px; overflow-y: auto; }
+        .home-strip-empty { color: var(--text-muted); font-size: 13px; padding: 16px 0; text-align: center; }
+
+        /* Home widget rows */
         .home-draft-row {
-            display: flex; align-items: center; gap: 12px;
-            padding: 9px 0; border-bottom: 1px solid var(--border);
-            cursor: pointer; transition: background 0.15s;
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 0; border-bottom: 1px solid var(--border);
         }
         .home-draft-row:last-child { border-bottom: none; }
-        .home-draft-row:hover { color: var(--accent); }
         .home-draft-status-dot {
             width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
         }
-        .home-draft-name { font-size: 13px; font-weight: 600; color: var(--text-body); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .home-draft-row:hover .home-draft-name { color: var(--accent); }
-        .home-draft-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+        .home-draft-body { flex: 1; min-width: 0; }
+        .home-draft-name {
+            font-size: 13px; font-weight: 600; color: var(--text-body);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            cursor: pointer; transition: color 0.15s;
+        }
+        .home-draft-name:hover { color: var(--accent); }
+        .home-draft-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .home-draft-chips { display: flex; align-items: center; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
         .home-draft-chip {
             display: inline-block; background: rgba(167,139,250,0.12); color: #a78bfa;
             border: 1px solid rgba(167,139,250,0.3); border-radius: 10px;
             padding: 1px 8px; font-size: 10px; font-weight: 600; white-space: nowrap;
         }
         .home-draft-chip.chip-sent { background: rgba(74,222,128,0.1); color: #4ade80; border-color: rgba(74,222,128,0.3); }
+        .home-draft-chip.chip-dl { background: rgba(96,165,250,0.1); color: #60a5fa; border-color: rgba(96,165,250,0.3); }
+        .home-draft-actions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+        .home-draft-btn-open {
+            background: var(--bg-card); border: 1px solid var(--border); color: var(--text-body);
+            padding: 5px 12px; border-radius: 5px; font-size: 11px; font-weight: 600;
+            cursor: pointer; font-family: inherit; white-space: nowrap;
+            transition: border-color 0.15s, color 0.15s;
+        }
+        .home-draft-btn-open:hover { border-color: var(--accent); color: var(--accent); }
+        .home-draft-btn-convert {
+            background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+            padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600;
+            cursor: pointer; font-family: inherit; white-space: nowrap;
+            transition: border-color 0.15s, color 0.15s;
+        }
+        .home-draft-btn-convert:hover { border-color: #a78bfa; color: #a78bfa; }
 
         /* Home use-case section title */
         .home-use-cases-title { font-size: 18px; font-weight: 700; color: var(--text-body); margin: 0 0 4px; }
@@ -2083,14 +2116,21 @@
         <div id="home-section">
             <div class="funnel-bar" id="funnel-bar" style="display:none;"></div>
 
-            <!-- Inline My Content strip ─────────────────────────── -->
+            <!-- Inline My Content widget ────────────────────────── -->
             <div id="home-content-strip">
                 <div class="home-strip-header">
-                    <div style="display:flex;align-items:center;gap:10px;">
-                        <span style="font-size:16px;font-weight:700;color:var(--text-body);">&#128194; My Content</span>
-                        <span id="home-content-count" style="font-size:12px;color:var(--text-muted);"></span>
+                    <span style="font-size:16px;font-weight:700;color:var(--text-body);">&#128194; My Content</span>
+                    <div class="home-widget-tabs">
+                        <button class="home-widget-tab active" id="hwt-draft"     onclick="setHomeWidgetTab('draft')">
+                            Draft <span class="home-widget-tab-count" id="hwt-count-draft"></span>
+                        </button>
+                        <button class="home-widget-tab"        id="hwt-artifact"  onclick="setHomeWidgetTab('artifact')">
+                            Artifact <span class="home-widget-tab-count" id="hwt-count-artifact"></span>
+                        </button>
+                        <button class="home-widget-tab"        id="hwt-downloaded" onclick="setHomeWidgetTab('downloaded')">
+                            Downloaded <span class="home-widget-tab-count" id="hwt-count-downloaded"></span>
+                        </button>
                     </div>
-                    <button class="home-strip-view-all" onclick="openMyArtifacts()">View all &#8594;</button>
                 </div>
                 <div id="home-drafts-list"><div class="home-strip-empty">No drafts yet. Save as Draft from the content prep flow to see them here.</div></div>
             </div>
@@ -11433,42 +11473,142 @@ function closeFeaturesPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// Home-screen My Content strip: a compact list of recent drafts/artifacts
-// shown directly on the home page above the channel picker cards so the
-// marketer can see and resume their work without opening the full modal.
-// Populated from _myArtifactsCache (the same cache the modal uses) so no
-// extra network call is needed when the data is already fresh.
+// Home-screen My Content widget: tabbed list (Draft / Artifact / Downloaded)
+// shown directly on the home page above the channel picker cards.
+// Populated from _myArtifactsCache -- no extra network call needed.
 // ---------------------------------------------------------------------------
+
+// Active tab state: 'draft' | 'artifact' | 'downloaded'
+window._homeWidgetTab = 'draft';
+
+function setHomeWidgetTab(tab) {
+    if (tab !== 'draft' && tab !== 'artifact' && tab !== 'downloaded') tab = 'draft';
+    window._homeWidgetTab = tab;
+    ['draft','artifact','downloaded'].forEach(function(t) {
+        var el = document.getElementById('hwt-' + t);
+        if (el) {
+            if (t === tab) el.classList.add('active'); else el.classList.remove('active');
+        }
+    });
+    renderHomeContentStrip();
+}
+
 function renderHomeContentStrip() {
     var list = document.getElementById('home-drafts-list');
-    var countEl = document.getElementById('home-content-count');
     if (!list) return;
     var all = window._myArtifactsCache || [];
-    if (countEl) countEl.textContent = all.length ? '(' + all.length + ')' : '';
-    if (!all.length) {
-        list.innerHTML = '<div class="home-strip-empty">No drafts yet. Save as Draft from the content prep flow to see them here.</div>';
+
+    // Update per-tab counts in the tab buttons
+    var cntDraft      = all.filter(function(d) { return (d.status || 'draft') !== 'published'; }).length;
+    var cntArtifact   = all.filter(function(d) { return (d.status || 'draft') === 'published'; }).length;
+    var cntDownloaded = all.filter(function(d) { return !!d.downloaded_ts; }).length;
+    var elD = document.getElementById('hwt-count-draft');
+    var elA = document.getElementById('hwt-count-artifact');
+    var elDl= document.getElementById('hwt-count-downloaded');
+    if (elD)  elD.textContent  = cntDraft      ? '(' + cntDraft + ')'      : '';
+    if (elA)  elA.textContent  = cntArtifact   ? '(' + cntArtifact + ')'   : '';
+    if (elDl) elDl.textContent = cntDownloaded ? '(' + cntDownloaded + ')' : '';
+
+    var tab = window._homeWidgetTab || 'draft';
+    var ID_RE = /^[A-Za-z0-9]{1,64}$/;
+
+    // Filter items based on active tab
+    var items;
+    if (tab === 'downloaded') {
+        items = all.filter(function(d) { return !!d.downloaded_ts; });
+        items.sort(function(a, b) {
+            return (b.downloaded_ts || b.ts || 0) - (a.downloaded_ts || a.ts || 0);
+        });
+    } else if (tab === 'artifact') {
+        items = all.filter(function(d) { return (d.status || 'draft') === 'published'; });
+    } else {
+        items = all.filter(function(d) { return (d.status || 'draft') !== 'published'; });
+    }
+
+    if (!items.length) {
+        var empty = {
+            draft:      'No drafts yet. Save as Draft from the content prep flow to see them here.',
+            artifact:   'No artifacts yet. Emails you send will appear here.',
+            downloaded: 'No downloads yet. HTML files you export will appear here.'
+        }[tab] || 'Nothing here yet.';
+        list.innerHTML = '<div class="home-strip-empty">' + escHtml(empty) + '</div>';
+        _bindHomeWidgetDelegation(list, ID_RE);
         return;
     }
-    var ID_RE = /^[A-Za-z0-9]{1,64}$/;
-    var html = all.slice(0, 12).map(function(d) {
+
+    var html = items.slice(0, 16).map(function(d) {
         if (!d || !ID_RE.test(String(d.id || ''))) return '';
-        var safeId = String(d.id);
-        var name = d.name || 'Untitled draft';
-        var isSent = (d.status || 'draft') === 'published';
-        var dotColor = isSent ? '#4ade80' : '#a78bfa';
-        var chip = isSent
-            ? '<span class="home-draft-chip chip-sent">Sent</span>'
-            : '<span class="home-draft-chip">Draft</span>';
-        var when = d.ts ? _draftRelativeTime(d.ts) : '';
-        var meta = [(d.feature_count || 0) + ' feature' + (d.feature_count === 1 ? '' : 's'), when].filter(Boolean).join(' \u00b7 ');
-        return '<div class="home-draft-row" onclick="loadEmailDraft(\'' + escAttr(safeId) + '\')">'
+        var safeId    = String(d.id);
+        var name      = d.name || 'Untitled';
+        var isSent    = (d.status || 'draft') === 'published';
+        var dotColor  = isSent ? '#4ade80' : '#a78bfa';
+        var when      = d.ts ? _draftRelativeTime(d.ts) : '';
+        var fc        = (d.feature_count || 0);
+        var meta      = fc + ' feature' + (fc === 1 ? '' : 's') + (when ? ' \u00b7 ' + when : '');
+
+        // Status + download chips
+        var chips = '';
+        if (isSent)        chips += '<span class="home-draft-chip chip-sent">Sent</span>';
+        if (d.downloaded_ts) chips += '<span class="home-draft-chip chip-dl">Downloaded</span>';
+        if (!isSent && !d.downloaded_ts) chips += '<span class="home-draft-chip">Draft</span>';
+
+        // Actions: Open (always) + Convert to Draft (artifact & downloaded tabs)
+        var convertBtn = '';
+        if (tab === 'artifact' || tab === 'downloaded') {
+            convertBtn = '<button class="home-draft-btn-convert" data-hw-action="convert" data-hw-id="' + escAttr(safeId) + '" title="Reset status to Draft">Convert to Draft</button>';
+        }
+        var openBtn = '<button class="home-draft-btn-open" data-hw-action="open" data-hw-id="' + escAttr(safeId) + '">Open</button>';
+
+        return '<div class="home-draft-row">'
             + '<span class="home-draft-status-dot" style="background:' + dotColor + ';"></span>'
-            + '<span class="home-draft-name">' + escHtml(name) + '</span>'
-            + chip
-            + (meta ? '<span class="home-draft-meta">' + escHtml(meta) + '</span>' : '')
+            + '<div class="home-draft-body">'
+            +   '<div class="home-draft-name" data-hw-action="open" data-hw-id="' + escAttr(safeId) + '">' + escHtml(name) + '</div>'
+            +   '<div class="home-draft-meta">' + escHtml(meta) + '</div>'
+            +   '<div class="home-draft-chips">' + chips + '</div>'
+            + '</div>'
+            + '<div class="home-draft-actions">' + openBtn + convertBtn + '</div>'
             + '</div>';
     }).join('');
+
     list.innerHTML = html || '<div class="home-strip-empty">No content yet.</div>';
+    _bindHomeWidgetDelegation(list, ID_RE);
+}
+
+// Delegated click handler bound after each render so we avoid per-row
+// inline onclick attributes and keep IDs out of executable strings.
+function _bindHomeWidgetDelegation(list, ID_RE) {
+    list.onclick = function(ev) {
+        var t = ev.target;
+        var el = (t.closest && t.closest('[data-hw-action]')) || (t.getAttribute && t.getAttribute('data-hw-action') ? t : null);
+        if (!el) return;
+        var action = el.getAttribute('data-hw-action');
+        var id     = el.getAttribute('data-hw-id') || '';
+        if (!ID_RE.test(id)) return;
+        if (action === 'open') {
+            _openArtifactFromList ? _openArtifactFromList(id) : loadEmailDraft(id);
+        } else if (action === 'convert') {
+            _homeConvertToDraft(id);
+        }
+    };
+}
+
+// Convert a published artifact back to a draft via the mark-draft endpoint.
+// Updates the local cache immediately for snappy UI, then re-renders.
+function _homeConvertToDraft(id) {
+    fetch('/api/email-drafts/' + encodeURIComponent(id) + '/mark-draft', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+        if (resp.error) { showToast('Could not convert: ' + resp.error, 'error'); return; }
+        // Patch local cache so the UI updates without a network round-trip.
+        var cache = window._myArtifactsCache || [];
+        for (var i = 0; i < cache.length; i++) {
+            if (cache[i].id === id) { cache[i].status = 'draft'; break; }
+        }
+        // Switch to Draft tab to show the result and re-render.
+        setHomeWidgetTab('draft');
+        showToast('Converted to draft', 'success');
+    })
+    .catch(function() { showToast('Could not convert -- please try again', 'error'); });
 }
 
 // Render the use-case channel picker cards onto the home page grid.

@@ -1803,6 +1803,36 @@ def mark_email_draft_published(draft_id: str):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/email-drafts/<draft_id>/mark-draft", methods=["POST"])
+def mark_email_draft_draft(draft_id: str):
+    """Flip a published artifact back to status='draft'.
+
+    Called when the user clicks 'Convert to Draft' on an Artifact or
+    Downloaded row in the My Content widget. Does not clear
+    last_published_ts or downloaded_ts so the audit trail is preserved.
+    """
+    try:
+        try:
+            data = _load_email_drafts()
+        except EmailDraftsUnavailable as e:
+            logger.error(f"[email-drafts] mark-draft: store unavailable: {e}")
+            return jsonify({"error": "drafts store temporarily unavailable", "detail": str(e)}), 503
+        drafts = data.get("drafts", [])
+        for d in drafts:
+            if d.get("id") == draft_id:
+                d["status"] = "draft"
+                try:
+                    _upsert_email_draft(d)
+                except EmailDraftsUnavailable as e:
+                    logger.error(f"[email-drafts] mark-draft: upsert failed: {e}")
+                    return jsonify({"error": "drafts store temporarily unavailable", "detail": str(e)}), 503
+                return jsonify({"success": True, "summary": _draft_summary(d)})
+        return jsonify({"error": "not found"}), 404
+    except Exception as e:
+        logger.error(f"[email-drafts] mark-draft error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/email-drafts/<draft_id>/mark-downloaded", methods=["POST"])
 def mark_email_draft_downloaded(draft_id: str):
     """Stamp `downloaded_ts` on a draft so it shows up in the Downloaded tab.
