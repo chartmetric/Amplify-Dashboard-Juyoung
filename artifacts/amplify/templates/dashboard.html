@@ -13348,9 +13348,15 @@ function loadEmailDraft(id) {
             }
             return;
         }
-        // Now jump to step 4 — renderCombinedPreview will see the populated list.
-        prepGoToStep(4);
-        setTimeout(_applyRestoredCombinedFields, 80);
+        // Only jump to Step 4 if some items were already approved. If nothing
+        // was approved when the draft was saved, stay on Step 3 so the user
+        // can review and approve their content rather than landing on a blank
+        // "No approved items to preview" screen.
+        var hasAnyApproved = Object.keys(approvedByFid).length > 0;
+        if (hasAnyApproved) {
+            prepGoToStep(4);
+            setTimeout(_applyRestoredCombinedFields, 80);
+        }
     })
     .catch(function(err) {
         window._republishAfterLoad = false;
