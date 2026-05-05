@@ -198,7 +198,12 @@
             const data = await resp.json();
 
             if (data.success) {
-                window.location.href = data.redirect || "/";
+                const dest = data.redirect || "/";
+                // Replace location so back-button doesn't return to login
+                window.location.replace(dest);
+                // Fallback: if navigation hasn't happened in 3 s, force it
+                setTimeout(function() { window.location.replace("/"); }, 3000);
+                return; // keep spinner visible while navigating
             } else {
                 throw new Error(data.error || "Sign-in failed");
             }

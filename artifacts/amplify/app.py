@@ -70,7 +70,7 @@ def _require_login():
         return None
     if request.path.startswith("/api/"):
         return jsonify({"success": False, "error": "Authentication required"}), 401
-    session["next"] = request.url
+    session["next"] = request.path  # store path only — avoids internal hostnames
     return redirect(url_for("auth.login"))
 
 # In-app announcements admin (Task #91): registers /announcements page +

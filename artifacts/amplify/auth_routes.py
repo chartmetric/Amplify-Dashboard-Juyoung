@@ -64,8 +64,12 @@ def firebase_verify():
         "picture": decoded.get("picture", ""),
     }
     logger.info("[auth] login ok email=%s", session["user"].get("email"))
-    next_url = session.pop("next", None) or url_for("dashboard")
-    return jsonify({"success": True, "redirect": next_url})
+    next_path = session.pop("next", None) or "/"
+    # Ensure we only ever redirect to a relative path — never an internal hostname
+    if next_path.startswith("http"):
+        from urllib.parse import urlparse as _up
+        next_path = _up(next_path).path or "/"
+    return jsonify({"success": True, "redirect": next_path})
 
 
 @bp.route("/logout")
