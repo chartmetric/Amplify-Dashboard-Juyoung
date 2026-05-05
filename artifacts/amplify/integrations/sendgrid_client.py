@@ -111,10 +111,12 @@ def _get_base_url() -> str:
     """Return the public base URL for embedding in outgoing emails / video links.
 
     Resolution order:
-      1. The current Flask request's host (when in a request context). This is
-         the only source that always matches whatever host the recipient just
-         hit, so it's correct for both production deploys and dev previews
-         even when env vars carry stale values from a different repl.
+      1. The current Flask request's host (when in a request context), but
+         **only** when the URL is HTTPS. The Replit reverse proxy always
+         terminates TLS, so a public-facing URL is always ``https://``.
+         Internal container-to-container URLs (e.g. ``http://8d96a…:5000/``)
+         are HTTP and must be rejected here — the browser cannot reach those
+         hostnames, which caused every image in the live preview to 404.
       2. ``REPLIT_DEPLOYMENT_URL`` if explicitly set (custom override).
       3. ``REPLIT_DOMAINS`` (the standard Replit env var, populated in both
          dev and production deployments — production points at the
@@ -131,7 +133,12 @@ def _get_base_url() -> str:
         from flask import has_request_context, request as _flask_request
         if has_request_context():
             host_url = (_flask_request.host_url or "").rstrip("/")
-            if host_url and not host_url.startswith("http://localhost"):
+            # Only accept HTTPS URLs — these come through the public Replit
+            # proxy and are reachable from users' browsers.  HTTP host_urls
+            # are internal container addresses (e.g. http://8d96a1cb7e0f:5000)
+            # that browsers cannot reach, so we fall through to env-var
+            # sources that carry the correct public domain.
+            if host_url and host_url.startswith("https://"):
                 return host_url
     except Exception:
         pass
