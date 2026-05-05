@@ -2405,24 +2405,6 @@
             </div>
         </div>
 
-        <div id="email-sent-modal" class="email-sent-modal-overlay" onclick="onEmailSentModalOverlayClick(event)">
-            <div class="email-sent-modal" role="dialog" aria-labelledby="email-sent-modal-title" aria-modal="true">
-                <div class="email-sent-modal-header">
-                    <button type="button" class="email-sent-modal-close" onclick="closeEmailSentModal()" aria-label="Close">&times;</button>
-                </div>
-                <div class="email-sent-modal-body">
-                    <div class="email-sent-modal-check" aria-hidden="true">&#10003;</div>
-                    <h2 id="email-sent-modal-title" class="email-sent-modal-title">Email sent</h2>
-                    <p id="email-sent-modal-recipient" class="email-sent-modal-recipient"></p>
-                    <p id="email-sent-modal-bcc" class="email-sent-modal-bcc" style="display:none;"></p>
-                    <p id="email-sent-modal-features" class="email-sent-modal-features" style="display:none;"></p>
-                </div>
-                <div class="email-sent-modal-footer">
-                    <button type="button" class="btn-email-sent-done" onclick="closeEmailSentModal()">Done</button>
-                </div>
-            </div>
-        </div>
-
         <div id="feature-list" class="feature-list"></div>
         <div id="loading" class="loading-container" style="display:none;">
             <div class="spinner"></div>
@@ -18103,5 +18085,22 @@ loadFeatures();
 loadPublishedMap();
 loadGeneratedContentIndex();
 </script>
+    <div id="email-sent-modal" class="email-sent-modal-overlay" onclick="onEmailSentModalOverlayClick(event)">
+        <div class="email-sent-modal" role="dialog" aria-labelledby="email-sent-modal-title" aria-modal="true">
+            <div class="email-sent-modal-header">
+                <button type="button" class="email-sent-modal-close" onclick="closeEmailSentModal()" aria-label="Close">&times;</button>
+            </div>
+            <div class="email-sent-modal-body">
+                <div class="email-sent-modal-check" aria-hidden="true">&#10003;</div>
+                <h2 id="email-sent-modal-title" class="email-sent-modal-title">Email sent</h2>
+                <p id="email-sent-modal-recipient" class="email-sent-modal-recipient"></p>
+                <p id="email-sent-modal-bcc" class="email-sent-modal-bcc" style="display:none;"></p>
+                <p id="email-sent-modal-features" class="email-sent-modal-features" style="display:none;"></p>
+            </div>
+            <div class="email-sent-modal-footer">
+                <button type="button" class="btn-email-sent-done" onclick="closeEmailSentModal()">Done</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
