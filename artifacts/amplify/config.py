@@ -6,10 +6,14 @@ SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "amplify-dev-secret")
 PORT = int(os.environ.get("PORT", 5000))
 
-# Google OAuth 2.0 credentials.
-# Create a project in Google Cloud Console, enable the Google Identity API,
-# and create an OAuth 2.0 Client ID (Web application).
-# Add <your-app-url>/auth/callback as an Authorized Redirect URI.
+# Firebase / Google Sign-In credentials
+FIREBASE_API_KEY = os.environ.get("FIREBASE_API_KEY", "")
+FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "")
+FIREBASE_APP_ID = os.environ.get("FIREBASE_APP_ID", "")
+# Auth domain follows the standard Firebase convention
+FIREBASE_AUTH_DOMAIN = f"{FIREBASE_PROJECT_ID}.firebaseapp.com" if FIREBASE_PROJECT_ID else ""
+
+# Legacy Google OAuth credentials (kept for backwards-compat references, unused)
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")

@@ -16,6 +16,7 @@ A marketing autopilot that ingests feature data and generates marketing content.
 - `ASANA_ACCESS_TOKEN` (Amplify)
 - `SLACK_BOT_TOKEN` (Amplify)
 - `AMPLIFY_ADMIN_TOKEN` (Amplify, for admin endpoints)
+- `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID` (Amplify, Firebase Google Sign-In)
 - `DATABASE_URL` (lib/db, for Drizzle Kit config)
 - `PORT` (api-server)
 

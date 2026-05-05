@@ -12,7 +12,6 @@
             --text: #e0e0e0;
             --muted: #8899aa;
             --accent: #00C9A7;
-            --accent-hover: #00e0bb;
             --error-bg: rgba(239,68,68,0.12);
             --error-border: rgba(239,68,68,0.4);
             --error-text: #fca5a5;
@@ -78,24 +77,29 @@
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            text-decoration: none;
+            font-family: inherit;
             transition: background 0.15s, box-shadow 0.15s;
             box-shadow: 0 2px 8px rgba(0,0,0,0.25);
         }
-        .btn-google:hover {
+        .btn-google:hover:not(:disabled) {
             background: #f5f5f5;
             box-shadow: 0 4px 16px rgba(0,0,0,0.35);
         }
+        .btn-google:disabled { opacity: 0.55; cursor: not-allowed; }
         .btn-google svg { flex-shrink: 0; }
-        .btn-google.disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            pointer-events: none;
+        .spinner {
+            display: none;
+            width: 18px; height: 18px;
+            border: 2px solid #ddd;
+            border-top-color: #4285F4;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
         .not-configured {
             font-size: 12px;
             color: var(--muted);
-            margin-top: 16px;
+            margin-top: 8px;
             line-height: 1.6;
             background: rgba(255,255,255,0.03);
             border: 1px solid var(--border);
@@ -111,11 +115,7 @@
             border-radius: 4px;
             font-size: 11px;
         }
-        .footer {
-            margin-top: 28px;
-            font-size: 12px;
-            color: var(--muted);
-        }
+        .footer { margin-top: 28px; font-size: 12px; color: var(--muted); }
     </style>
 </head>
 <body>
@@ -126,39 +126,97 @@
         {% if error %}
         <div class="error-box">{{ error }}</div>
         {% endif %}
+        <div id="error-dynamic" class="error-box" style="display:none;"></div>
 
-        {% if google_configured %}
-        <a href="/auth/google" class="btn-google">
+        {% if firebase_configured %}
+        <button class="btn-google" id="btn-google" onclick="signInWithGoogle()">
             <svg width="20" height="20" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
                 <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
                 <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
                 <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-                <path fill="none" d="M0 0h48v48H0z"/>
             </svg>
-            Sign in with Google
-        </a>
+            <span id="btn-label">Sign in with Google</span>
+            <span class="spinner" id="btn-spinner"></span>
+        </button>
         {% else %}
-        <a class="btn-google disabled" aria-disabled="true">
+        <button class="btn-google" disabled>
             <svg width="20" height="20" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
                 <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
                 <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
                 <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-                <path fill="none" d="M0 0h48v48H0z"/>
             </svg>
             Sign in with Google
-        </a>
+        </button>
         <div class="not-configured">
-            <strong>Google OAuth not configured.</strong> Set the
-            <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code>
-            environment variables to enable sign-in. Create an OAuth 2.0 client
-            in Google Cloud Console and add
-            <code>/auth/callback</code> as an Authorized Redirect URI.
+            <strong>Firebase not configured.</strong> Add
+            <code>FIREBASE_API_KEY</code>, <code>FIREBASE_PROJECT_ID</code>, and
+            <code>FIREBASE_APP_ID</code> to your environment secrets.
         </div>
         {% endif %}
 
         <div class="footer">Amplify &mdash; internal tool</div>
     </div>
+
+{% if firebase_configured %}
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
+
+    const firebaseConfig = {
+        apiKey:     "{{ firebase_api_key }}",
+        authDomain: "{{ firebase_auth_domain }}",
+        projectId:  "{{ firebase_project_id }}",
+        appId:      "{{ firebase_app_id }}",
+    };
+
+    const firebaseApp = initializeApp(firebaseConfig);
+    const auth        = getAuth(firebaseApp);
+    const provider    = new GoogleAuthProvider();
+
+    window.signInWithGoogle = async function() {
+        const btn     = document.getElementById("btn-google");
+        const label   = document.getElementById("btn-label");
+        const spinner = document.getElementById("btn-spinner");
+        const errBox  = document.getElementById("error-dynamic");
+
+        btn.disabled          = true;
+        label.textContent     = "Signing in…";
+        spinner.style.display = "inline-block";
+        errBox.style.display  = "none";
+
+        try {
+            const result  = await signInWithPopup(auth, provider);
+            const idToken = await result.user.getIdToken();
+
+            const resp = await fetch("/auth/firebase", {
+                method:  "POST",
+                headers: { "Content-Type": "application/json" },
+                body:    JSON.stringify({ idToken }),
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                window.location.href = data.redirect || "/";
+            } else {
+                throw new Error(data.error || "Sign-in failed");
+            }
+        } catch (err) {
+            const knownCodes = {
+                "auth/popup-closed-by-user": "Sign-in popup was closed. Please try again.",
+                "auth/popup-blocked":        "Popup was blocked by your browser. Please allow popups for this site.",
+                "auth/cancelled-popup-request": "Sign-in was cancelled. Please try again.",
+            };
+            const msg = knownCodes[err.code] || err.message || "Sign-in failed. Please try again.";
+            errBox.textContent    = msg;
+            errBox.style.display  = "block";
+            btn.disabled          = false;
+            label.textContent     = "Sign in with Google";
+            spinner.style.display = "none";
+        }
+    };
+</script>
+{% endif %}
 </body>
 </html>
