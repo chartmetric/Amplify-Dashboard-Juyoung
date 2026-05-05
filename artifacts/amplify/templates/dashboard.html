@@ -11264,11 +11264,30 @@ function copyBatchContent(idx, btn) {
     if (!text) { showToast('Nothing to copy', 'warning'); return; }
     var ok = function() { _flashCopyButton(btn); showToast('Copied to clipboard', 'success'); };
     var fail = function() { showToast('Copy failed', 'error'); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(ok).catch(fail);
+    // Plain text: strip internal [image: ...] markers so they don't land as
+    // literal text when pasted into Notion, Slack, or other plain-text fields.
+    var plainText = text.replace(/\n?\[image: [^\]]+\]\n?/g, '\n').replace(/^\n+|\n+$/g, '');
+    // Rich HTML: use the batch-aware renderer so attached images are embedded
+    // as <img> tags (data URLs from prepBatchImages[idx]) — paste into Notion,
+    // Google Docs, etc. will include the actual image, not a placeholder string.
+    var htmlText = '<div>' + simpleMarkdown(text, {batchIdx: idx}) + '</div>';
+    if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
+        try {
+            var clipItem = new ClipboardItem({
+                'text/plain': new Blob([plainText], { type: 'text/plain' }),
+                'text/html':  new Blob([htmlText],  { type: 'text/html' })
+            });
+            navigator.clipboard.write([clipItem]).then(ok).catch(function() {
+                navigator.clipboard.writeText(plainText).then(ok).catch(fail);
+            });
+        } catch(e) {
+            navigator.clipboard.writeText(plainText).then(ok).catch(fail);
+        }
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(plainText).then(ok).catch(fail);
     } else {
         try {
-            var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t);
+            var t = document.createElement('textarea'); t.value = plainText; document.body.appendChild(t);
             t.select(); document.execCommand('copy'); document.body.removeChild(t); ok();
         } catch(e) { fail(); }
     }
