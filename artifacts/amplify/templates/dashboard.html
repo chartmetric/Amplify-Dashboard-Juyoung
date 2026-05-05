@@ -8802,7 +8802,24 @@ function _propagateContentViewFeatureUrl(newUrl, originBodyId) {
     if (newUrl === prev) return;
     contentViewFeatureLink = newUrl || null;
     if (newUrl) {
-        _contentViewLiveRewriteCount += _rewriteBodyHyperlinksExcept(prev, newUrl, originBodyId);
+        var _pn = _rewriteBodyHyperlinksExcept(prev, newUrl, originBodyId);
+        _contentViewLiveRewriteCount += _pn;
+        // Real-time auto-insert: if no existing hyperlinks were rewritten
+        // (e.g. AI didn't embed a link, or this is the first URL entered)
+        // inject the link immediately so the text editor stays in sync
+        // without the user having to blur the field first.
+        if (_pn === 0 && !originBodyId && contentViewChannels) {
+            var _piKeys = Object.keys(contentViewChannels);
+            for (var _pii = 0; _pii < _piKeys.length; _pii++) {
+                var _piTa = document.getElementById('ta-' + _piKeys[_pii]);
+                if (!_piTa || !_piTa.value || _piTa.value.indexOf(newUrl) !== -1) continue;
+                _piTa.value = _piTa.value.replace(/\s+$/, '') + '\n[Link](' + newUrl + ')';
+                _piTa.dispatchEvent(new Event('input'));
+                var _piIsEmail = (_piKeys[_pii] === 'email_newsletter' || _piKeys[_pii] === 'email_standalone');
+                _refreshPreviewElement(document.getElementById('md-preview-' + _piKeys[_pii]), _piTa.value, _piIsEmail);
+                try { autoSaveDraft(_piKeys[_pii]); } catch(e) {}
+            }
+        }
     }
     var inp = document.getElementById('feature-url-input');
     if (inp && document.activeElement !== inp) inp.value = newUrl || '';
@@ -8951,6 +8968,20 @@ function _propagateBatchFeatureUrl(idx, newUrl, originBodyId) {
         var n = (typeof _rewriteBatchBodyHyperlinks === 'function')
             ? _rewriteBatchBodyHyperlinks(idx, prev, newUrl) : 0;
         _batchLiveRewriteCount[idx] = (_batchLiveRewriteCount[idx] || 0) + n;
+        // Real-time auto-insert for batch: if no existing hyperlinks were
+        // rewritten, inject the link immediately so the text editor updates
+        // as the marketer types rather than waiting for blur/settle.
+        if (n === 0 && !originBodyId) {
+            var _bpTa = document.getElementById('batch-ta-' + idx);
+            if (_bpTa && _bpTa.value && _bpTa.value.indexOf(newUrl) === -1) {
+                _bpTa.value = _bpTa.value.replace(/\s+$/, '') + '\n[Link](' + newUrl + ')';
+                _bpTa.dispatchEvent(new Event('input'));
+                _refreshPreviewElement(document.getElementById('batch-md-preview-' + idx), _bpTa.value, false);
+                if (window.prepBatchResults && window.prepBatchResults[idx]) {
+                    window.prepBatchResults[idx].content = _bpTa.value;
+                }
+            }
+        }
     }
     if (typeof renderBatchUrlOverrideIndicator === 'function') {
         renderBatchUrlOverrideIndicator(idx, fid);
