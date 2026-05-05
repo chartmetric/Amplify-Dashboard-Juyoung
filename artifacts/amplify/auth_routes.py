@@ -39,6 +39,7 @@ def login():
         firebase_project_id=config.FIREBASE_PROJECT_ID,
         firebase_app_id=config.FIREBASE_APP_ID,
         firebase_auth_domain=config.FIREBASE_AUTH_DOMAIN,
+        google_allowed_domain=config.GOOGLE_ALLOWED_DOMAIN,
     )
 
 
@@ -59,6 +60,21 @@ def firebase_verify():
         return jsonify({"success": False, "error": "Sign-in failed. Please try again."}), 401
 
     session.permanent = True
+
+    if config.GOOGLE_ALLOWED_DOMAIN:
+        hd = (decoded.get("hd") or "").strip().lower()
+        allowed = config.GOOGLE_ALLOWED_DOMAIN.strip().lower()
+        if hd != allowed:
+            logger.warning(
+                "[auth] domain mismatch: hd=%r email=%s allowed=%s",
+                hd or "(none)", decoded.get("email", ""), config.GOOGLE_ALLOWED_DOMAIN,
+            )
+            return jsonify({
+                "success": False,
+                "error": f"Only @{config.GOOGLE_ALLOWED_DOMAIN} accounts are allowed.",
+            }), 403
+
+
     session["user"] = {
         "name": decoded.get("name", ""),
         "email": decoded.get("email", ""),

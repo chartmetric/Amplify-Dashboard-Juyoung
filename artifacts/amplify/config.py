@@ -19,6 +19,11 @@ GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
 
+# Google Workspace domain restriction
+# When set (e.g. "chartmetric.com"), only accounts from that domain may sign in.
+# When unset, all Google accounts are accepted (backward-compatible default).
+GOOGLE_ALLOWED_DOMAIN = os.environ.get("GOOGLE_ALLOWED_DOMAIN", "")
+
 # In-app announcements admin (Task #143)
 # Live mode is enabled automatically when BOTH
 # CHARTMETRIC_ADMIN_API_BASE_URL and CHARTMETRIC_ADMIN_API_TOKEN are set;
