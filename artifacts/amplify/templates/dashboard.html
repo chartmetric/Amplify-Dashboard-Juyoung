@@ -120,10 +120,7 @@
         .refresh-icon-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
         .refresh-icon-btn.spinning svg { animation: spin 0.8s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .health-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; display: inline-block; }
-        .health-dot.ok { background: #00C9A7; box-shadow: 0 0 6px rgba(0,201,167,0.5); }
-        .health-dot.err { background: #ff4d4d; box-shadow: 0 0 6px rgba(255,77,77,0.4); }
-        .health-label { font-size: 12px; color: var(--text-muted); }
+
         .main { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
         .section-header {
             display: flex; align-items: center; justify-content: space-between;
@@ -2161,10 +2158,6 @@
             <button id="btn-my-artifacts" onclick="openMyArtifacts()" title="View saved drafts and past sends" style="position:relative;background:var(--bg-card);color:var(--text-body);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;transition:background 0.2s,border-color 0.2s;">&#128194; My Content<span id="my-artifacts-count" style="display:none;margin-left:6px;background:#a78bfa;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;font-weight:700;"></span></button>
             <button class="btn-see-features" id="btn-see-features" onclick="openFeaturesPanel()">See Features</button>
             <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">&#127769;</button>
-            <div style="display:flex;align-items:center;gap:6px;" title="API server connection">
-                <span class="health-dot" id="health-dot"></span>
-                <span class="health-label" id="health-label">Checking...</span>
-            </div>
             {% if session.get('user') %}
             <div style="display:flex;align-items:center;gap:8px;border-left:1px solid var(--border);padding-left:14px;">
                 {% if session['user'].get('picture') %}
@@ -2941,15 +2934,6 @@ document.addEventListener('click', function(e) {
     }
 });
 
-function checkHealth() {
-    fetch('/api/health').then(function(r){return r.json();}).then(function(){
-        document.getElementById('health-dot').className='health-dot ok';
-        document.getElementById('health-label').textContent='Healthy';
-    }).catch(function(){
-        document.getElementById('health-dot').className='health-dot err';
-        document.getElementById('health-label').textContent='Error';
-    });
-}
 
 function renderFunnelBar(data, activeStep) {
     var bar = document.getElementById('funnel-bar');
@@ -18162,7 +18146,6 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
-checkHealth();
 loadFeatures();
 loadPublishedMap();
 loadGeneratedContentIndex();
