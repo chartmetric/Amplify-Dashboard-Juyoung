@@ -966,6 +966,13 @@ def _ensure_drafts_table(conn) -> bool:
             cur.execute(
                 "ALTER TABLE email_drafts ADD COLUMN IF NOT EXISTS downloaded_ts DOUBLE PRECISION"
             )
+            # `owner_email` scopes each draft to the Google account that created
+            # it so My Content is personalised per-user. NULL on rows written
+            # before this column existed; those are shown to every user as
+            # shared/legacy content.
+            cur.execute(
+                "ALTER TABLE email_drafts ADD COLUMN IF NOT EXISTS owner_email TEXT"
+            )
             conn.commit()
         _drafts_db_initialized = True
         # One-time migration from on-disk JSON -> DB so any drafts saved
@@ -985,8 +992,8 @@ def _ensure_drafts_table(conn) -> bool:
                                 _legacy_dl_ts = d.get("downloaded_ts")
                                 cur.execute(
                                     """
-                                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts)
-                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts, owner_email)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                                     ON CONFLICT (id) DO NOTHING
                                     """,
                                     (
@@ -999,6 +1006,7 @@ def _ensure_drafts_table(conn) -> bool:
                                         json.dumps(d.get("snapshot") or {}),
                                         d.get("category") or None,
                                         float(_legacy_dl_ts) if _legacy_dl_ts else None,
+                                        d.get("owner_email") or None,
                                     ),
                                 )
                             conn.commit()
@@ -1023,10 +1031,11 @@ def _row_to_draft(row) -> dict:
             snap = json.loads(snap)
         except Exception:
             snap = {}
-    # `category` and `downloaded_ts` may be missing on rows written before
-    # those columns existed, so guard each index lookup.
+    # `category`, `downloaded_ts`, and `owner_email` may be missing on rows
+    # written before those columns existed, so guard each index lookup.
     category = row[7] if len(row) > 7 else None
     raw_dl_ts = row[8] if len(row) > 8 else None
+    owner_email = row[9] if len(row) > 9 else None
     return {
         "id": row[0],
         "name": row[1],
@@ -1037,6 +1046,7 @@ def _row_to_draft(row) -> dict:
         "snapshot": snap or {},
         "category": category,
         "downloaded_ts": float(raw_dl_ts) if raw_dl_ts else None,
+        "owner_email": owner_email,
     }
 
 
@@ -1207,8 +1217,8 @@ def _restore_drafts_from_snapshot(snap_drafts: list) -> list:
                 _dl_ts = d.get("downloaded_ts")
                 cur.execute(
                     """
-                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts, owner_email)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO NOTHING
                     """,
                     (
@@ -1221,12 +1231,13 @@ def _restore_drafts_from_snapshot(snap_drafts: list) -> list:
                         json.dumps(d.get("snapshot") or {}),
                         d.get("category") or None,
                         float(_dl_ts) if _dl_ts else None,
+                        d.get("owner_email") or None,
                     ),
                 )
             conn.commit()
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts FROM email_drafts ORDER BY ts DESC"
+                "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts, owner_email FROM email_drafts ORDER BY ts DESC"
             )
             rows = cur.fetchall()
         return [_row_to_draft(r) for r in rows]
@@ -1244,8 +1255,12 @@ def _restore_drafts_from_snapshot(snap_drafts: list) -> list:
             pass
 
 
-def _load_email_drafts() -> dict:
-    """Load all drafts. Postgres-first; JSON fallback only when no DB is configured.
+def _load_email_drafts(owner_email: str = None) -> dict:
+    """Load drafts. Postgres-first; JSON fallback only when no DB is configured.
+
+    When `owner_email` is provided, only rows belonging to that user (or
+    rows with no owner, i.e. legacy unowned content) are returned. Pass
+    ``None`` to load all drafts regardless of owner (admin / restore paths).
 
     Raises `EmailDraftsUnavailable` when `DATABASE_URL` is set but the
     Postgres store is unreachable (connect timeout, `_ensure_drafts_table`
@@ -1270,9 +1285,15 @@ def _load_email_drafts() -> dict:
             if not _ensure_drafts_table(conn):
                 raise EmailDraftsUnavailable("Postgres drafts store: CREATE TABLE failed")
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts FROM email_drafts ORDER BY ts DESC"
-                )
+                if owner_email:
+                    cur.execute(
+                        "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts, owner_email FROM email_drafts WHERE (owner_email = %s OR owner_email IS NULL) ORDER BY ts DESC",
+                        (owner_email,),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts, owner_email FROM email_drafts ORDER BY ts DESC"
+                    )
                 rows = cur.fetchall()
             result = {"drafts": [_row_to_draft(r) for r in rows]}
         except EmailDraftsUnavailable:
@@ -1314,17 +1335,27 @@ def _load_email_drafts() -> dict:
             with open(_EMAIL_DRAFTS_PATH, "r") as f:
                 data = json.load(f)
             if isinstance(data, dict) and isinstance(data.get("drafts"), list):
-                # Normalize: ensure every record exposes `category` and
-                # `downloaded_ts` (as null when missing) so callers don't
-                # have to special-case records that predate those columns.
+                # Normalize: ensure every record exposes `category`,
+                # `downloaded_ts`, and `owner_email` (as null when missing).
                 for d in data["drafts"]:
                     if isinstance(d, dict) and "category" not in d:
                         d["category"] = None
                     if isinstance(d, dict) and "downloaded_ts" not in d:
                         d["downloaded_ts"] = None
+                    if isinstance(d, dict) and "owner_email" not in d:
+                        d["owner_email"] = None
                 result = data
     except Exception as e:
         logger.warning(f"[email-drafts] JSON load failed: {e}")
+    # Apply owner filter in Python for the JSON fallback path.
+    if owner_email and result.get("drafts"):
+        result = {
+            **result,
+            "drafts": [
+                d for d in result["drafts"]
+                if not isinstance(d, dict) or not d.get("owner_email") or d.get("owner_email") == owner_email
+            ],
+        }
     _maybe_write_daily_drafts_snapshot(result)
     return result
 
@@ -1371,8 +1402,8 @@ def _upsert_email_draft(draft: dict) -> None:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO email_drafts (id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts, owner_email)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE SET
                         name = EXCLUDED.name,
                         ts = EXCLUDED.ts,
@@ -1381,7 +1412,8 @@ def _upsert_email_draft(draft: dict) -> None:
                         last_recipient_count = EXCLUDED.last_recipient_count,
                         snapshot = EXCLUDED.snapshot,
                         category = EXCLUDED.category,
-                        downloaded_ts = EXCLUDED.downloaded_ts
+                        downloaded_ts = EXCLUDED.downloaded_ts,
+                        owner_email = COALESCE(email_drafts.owner_email, EXCLUDED.owner_email)
                     """,
                     (
                         draft.get("id"),
@@ -1393,6 +1425,7 @@ def _upsert_email_draft(draft: dict) -> None:
                         json.dumps(draft.get("snapshot") or {}),
                         draft.get("category") or None,
                         float(_dl_ts) if _dl_ts else None,
+                        draft.get("owner_email") or None,
                     ),
                 )
                 conn.commit()
@@ -1619,8 +1652,9 @@ def _draft_summary(d: dict) -> dict:
 @app.route("/api/email-drafts", methods=["GET"])
 def list_email_drafts():
     try:
+        owner_email = (session.get("user") or {}).get("email") or None
         try:
-            data = _load_email_drafts()
+            data = _load_email_drafts(owner_email=owner_email)
         except EmailDraftsUnavailable as e:
             logger.error(f"[email-drafts] list: store unavailable: {e}")
             return jsonify({
@@ -1656,6 +1690,7 @@ def _normalize_draft_id(raw) -> str:
 @app.route("/api/email-drafts", methods=["POST"])
 def save_email_draft():
     try:
+        owner_email = (session.get("user") or {}).get("email") or None
         body = request.get_json(force=True) or {}
         name = (body.get("name") or "").strip() or "Untitled draft"
         snapshot = body.get("snapshot")
@@ -1672,7 +1707,7 @@ def save_email_draft():
         except Exception:
             pass
         try:
-            data = _load_email_drafts()
+            data = _load_email_drafts(owner_email=owner_email)
         except EmailDraftsUnavailable as e:
             # Refuse to write when we couldn't read the current state -- a
             # transient blip here used to look like "the table is empty" and
@@ -1719,6 +1754,10 @@ def save_email_draft():
             # Carry forward any prior download stamp so re-saving an edited
             # draft does not erase its presence in the Downloaded tab.
             "downloaded_ts": prev.get("downloaded_ts") or None,
+            # Stamp the owner on first save; carry it forward on updates so
+            # that mark-published/mark-downloaded upserts don't overwrite it
+            # (the DB uses COALESCE to preserve the original owner anyway).
+            "owner_email": prev.get("owner_email") or owner_email or None,
         }
         if existing_idx >= 0:
             drafts[existing_idx] = record
@@ -1772,8 +1811,9 @@ def save_email_draft():
 @app.route("/api/email-drafts/<draft_id>", methods=["GET"])
 def get_email_draft(draft_id: str):
     try:
+        owner_email = (session.get("user") or {}).get("email") or None
         try:
-            data = _load_email_drafts()
+            data = _load_email_drafts(owner_email=owner_email)
         except EmailDraftsUnavailable as e:
             logger.error(f"[email-drafts] get: store unavailable: {e}")
             return jsonify({
@@ -1797,10 +1837,11 @@ def mark_email_draft_published(draft_id: str):
     includes a draft_id) so My Artifacts can show what's been sent.
     """
     try:
+        owner_email = (session.get("user") or {}).get("email") or None
         body = request.get_json(silent=True) or {}
         recipient_count = int(body.get("recipient_count") or 0)
         try:
-            data = _load_email_drafts()
+            data = _load_email_drafts(owner_email=owner_email)
         except EmailDraftsUnavailable as e:
             logger.error(f"[email-drafts] mark-published: store unavailable, refusing to write: {e}")
             return jsonify({
@@ -1840,8 +1881,9 @@ def mark_email_draft_draft(draft_id: str):
     last_published_ts or downloaded_ts so the audit trail is preserved.
     """
     try:
+        owner_email = (session.get("user") or {}).get("email") or None
         try:
-            data = _load_email_drafts()
+            data = _load_email_drafts(owner_email=owner_email)
         except EmailDraftsUnavailable as e:
             logger.error(f"[email-drafts] mark-draft: store unavailable: {e}")
             return jsonify({"error": "drafts store temporarily unavailable", "detail": str(e)}), 503
@@ -1910,7 +1952,7 @@ def mark_email_draft_downloaded(draft_id: str):
                 # without a second round trip.
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts FROM email_drafts WHERE id = %s",
+                        "SELECT id, name, ts, status, last_published_ts, last_recipient_count, snapshot, category, downloaded_ts, owner_email FROM email_drafts WHERE id = %s",
                         (draft_id,),
                     )
                     row = cur.fetchone()
@@ -1936,9 +1978,10 @@ def mark_email_draft_downloaded(draft_id: str):
         # around the read-modify-write so concurrent writers serialize and
         # don't lose this stamp. The RLock lets `_upsert_email_draft`
         # re-acquire safely for its own JSON write.
+        owner_email = (session.get("user") or {}).get("email") or None
         with _email_drafts_lock:
             try:
-                data = _load_email_drafts()
+                data = _load_email_drafts(owner_email=owner_email)
             except EmailDraftsUnavailable as e:
                 # Belt and suspenders: load shouldn't raise here because we
                 # already gated on _DRAFTS_DB_URL above, but be defensive.
