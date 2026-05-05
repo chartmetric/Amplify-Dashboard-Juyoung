@@ -11928,13 +11928,24 @@ function _homeConvertToDraft(id) {
 // Uses the same USE_CASES array and .use-case-card CSS as the prep
 // overlay Step 1, but clicking a card goes directly to Step 2 of
 // the prep overlay (skipping the Step 1 overlay screen).
+function _sortedUseCases() {
+    var mostUsed = (_ucActivity.most_used || [])[0] || null;
+    if (!mostUsed) return USE_CASES;
+    var idx = USE_CASES.findIndex ? USE_CASES.findIndex(function(u) { return u.key === mostUsed; })
+        : (function() { for (var i = 0; i < USE_CASES.length; i++) { if (USE_CASES[i].key === mostUsed) return i; } return -1; })();
+    if (idx <= 0) return USE_CASES;
+    var copy = USE_CASES.slice();
+    copy.splice(0, 0, copy.splice(idx, 1)[0]);
+    return copy;
+}
+
 function renderUseCaseGridHome() {
     var grid = document.getElementById('use-case-grid-home');
     if (!grid) return;
     var featureCount = allFeatures.filter(function(f) {
         return f.classification && f.classification.importance_score >= 3;
     }).length;
-    grid.innerHTML = USE_CASES.map(function(uc) {
+    grid.innerHTML = _sortedUseCases().map(function(uc) {
         return '<div class="use-case-card' + _ucCardClass(uc.key) + '" onclick="selectUseCaseFromHome(\'' + uc.key + '\')">'
             + _ucBadgeHtml(uc.key)
             + '<div class="use-case-card-icon">' + uc.icon + '</div>'
@@ -14135,7 +14146,7 @@ function renderUseCaseGrid() {
     var featureCount = allFeatures.filter(function(f) {
         return f.classification && f.classification.importance_score >= 3;
     }).length;
-    grid.innerHTML = USE_CASES.map(function(uc) {
+    grid.innerHTML = _sortedUseCases().map(function(uc) {
         return '<div class="use-case-card' + _ucCardClass(uc.key) + '" onclick="selectUseCase(\'' + uc.key + '\')">' +
             _ucBadgeHtml(uc.key) +
             '<div class="use-case-card-icon">' + uc.icon + '</div>' +
