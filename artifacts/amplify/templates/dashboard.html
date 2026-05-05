@@ -1630,8 +1630,11 @@
         }
         .use-case-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 20px var(--shadow); }
         .use-case-card { position: relative; overflow: visible; }
-        .use-case-card.is-recommended { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-        .use-case-card-badge { position: absolute; top: 0; right: 10px; transform: translateY(-50%); background: var(--accent); color: #062017; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
+        .use-case-card.is-most-used { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+        .use-case-card.is-recently-used { border-color: #7c3aed; box-shadow: 0 0 0 1px #7c3aed inset; }
+        .use-case-card-badge { position: absolute; top: 0; right: 10px; transform: translateY(-50%); font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
+        .use-case-card-badge.badge-most-used { background: var(--accent); color: #062017; }
+        .use-case-card-badge.badge-recently-used { background: #7c3aed; color: #fff; }
         .use-case-card-icon { font-size: 28px; margin-bottom: 8px; }
         .use-case-card-name { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
         .use-case-card-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.4; }
@@ -11444,7 +11447,7 @@ function exitContentView() {
 }
 
 var USE_CASES = [
-    { key: 'email_standalone', icon: '\uD83D\uDCE8', name: 'Standalone Email', desc: 'Dedicated product update email (Short / Medium / Long)', recommended: true },
+    { key: 'email_standalone', icon: '\uD83D\uDCE8', name: 'Standalone Email', desc: 'Dedicated product update email (Short / Medium / Long)' },
     { key: 'notion_monthly', icon: '\uD83D\uDCCB', name: 'All Hands / Monthly Meeting', desc: 'Feature summaries for your monthly product meeting notes' },
     { key: 'email_newsletter', icon: '\uD83D\uDCE7', name: 'Marketing Newsletter', desc: 'Product update blocks for the Chartmetric newsletter' },
     { key: 'twitter', icon: '\uD83D\uDC26', name: 'Twitter / X Thread', desc: 'Short-form social posts for X' },
@@ -11452,6 +11455,47 @@ var USE_CASES = [
     { key: 'inapp', icon: '\uD83D\uDCF1', name: 'In-App Announcements', desc: 'Product announcements inside Chartmetric' },
     { key: 'article_hmc', icon: '\uD83D\uDCDD', name: 'HMC Blog Article', desc: 'Long-form SEO articles for How Music Charts' }
 ];
+
+var _ucActivity = { recently_used: [], most_used: [] };
+
+function fetchUseCaseActivity() {
+    fetch('/api/use-case-activity')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        _ucActivity = data || { recently_used: [], most_used: [] };
+        try { renderUseCaseGridHome(); } catch (_e) {}
+        var grid = document.getElementById('use-case-grid');
+        if (grid && grid.children.length > 0) { try { renderUseCaseGrid(); } catch (_e) {} }
+    })
+    .catch(function() {});
+}
+
+function trackUseCaseActivity(key) {
+    fetch('/api/use-case-activity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: key })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) { if (data.success) { fetchUseCaseActivity(); } })
+    .catch(function() {});
+}
+
+function _ucBadgeHtml(key) {
+    var isMostUsed = _ucActivity.most_used.indexOf(key) !== -1;
+    var isRecentlyUsed = !isMostUsed && _ucActivity.recently_used.indexOf(key) !== -1;
+    if (isMostUsed) return '<span class="use-case-card-badge badge-most-used">Most Used</span>';
+    if (isRecentlyUsed) return '<span class="use-case-card-badge badge-recently-used">Recently Used</span>';
+    return '';
+}
+
+function _ucCardClass(key) {
+    var isMostUsed = _ucActivity.most_used.indexOf(key) !== -1;
+    var isRecentlyUsed = !isMostUsed && _ucActivity.recently_used.indexOf(key) !== -1;
+    if (isMostUsed) return ' is-most-used';
+    if (isRecentlyUsed) return ' is-recently-used';
+    return '';
+}
 var prepChannel = null;
 var prepSelectedIds = {};
 var prepBatchResults = [];
@@ -11787,9 +11831,8 @@ function renderUseCaseGridHome() {
         return f.classification && f.classification.importance_score >= 3;
     }).length;
     grid.innerHTML = USE_CASES.map(function(uc) {
-        var badge = uc.recommended ? '<span class="use-case-card-badge">Recommended</span>' : '';
-        return '<div class="use-case-card' + (uc.recommended ? ' is-recommended' : '') + '" onclick="selectUseCaseFromHome(\'' + uc.key + '\')">'
-            + badge
+        return '<div class="use-case-card' + _ucCardClass(uc.key) + '" onclick="selectUseCaseFromHome(\'' + uc.key + '\')">'
+            + _ucBadgeHtml(uc.key)
             + '<div class="use-case-card-icon">' + uc.icon + '</div>'
             + '<div class="use-case-card-name">' + escHtml(uc.name) + '</div>'
             + '<div class="use-case-card-desc">' + escHtml(uc.desc) + '</div>'
@@ -12225,6 +12268,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Render the home-screen channel picker cards immediately so the user
     // sees content as soon as the page loads, before any Asana fetch.
     try { renderUseCaseGridHome(); } catch (_e) {}
+    // Fetch per-user activity stats so badges are dynamic (Task #153).
+    fetchUseCaseActivity();
     var initId = window._initialArtifactId;
     if (initId) {
         setTimeout(function() {
@@ -13987,9 +14032,8 @@ function renderUseCaseGrid() {
         return f.classification && f.classification.importance_score >= 3;
     }).length;
     grid.innerHTML = USE_CASES.map(function(uc) {
-        var badge = uc.recommended ? '<span class="use-case-card-badge">Recommended</span>' : '';
-        return '<div class="use-case-card' + (uc.recommended ? ' is-recommended' : '') + '" onclick="selectUseCase(\'' + uc.key + '\')">' +
-            badge +
+        return '<div class="use-case-card' + _ucCardClass(uc.key) + '" onclick="selectUseCase(\'' + uc.key + '\')">' +
+            _ucBadgeHtml(uc.key) +
             '<div class="use-case-card-icon">' + uc.icon + '</div>' +
             '<div class="use-case-card-name">' + escHtml(uc.name) + '</div>' +
             '<div class="use-case-card-desc">' + escHtml(uc.desc) + '</div>' +
@@ -13999,6 +14043,7 @@ function renderUseCaseGrid() {
 }
 
 function selectUseCase(channelKey) {
+    trackUseCaseActivity(channelKey);
     prepChannel = channelKey;
     prepSelectedIds = {};
     var seededFromStarred = 0;

@@ -7034,6 +7034,105 @@ h2 { font-size: 1.3rem; color: #58a6ff; margin: 2rem 0 1rem; padding-bottom: 0.5
     return "\n".join(html_parts)
 
 
+# ── Use-Case Activity Tracking (Task #153) ─────────────────────────────────
+_UC_ACTIVITY_PATH = os.path.join(_app_dir, "data", "use_case_activity.json")
+_uc_activity_lock = threading.Lock()
+
+
+def _load_uc_activity() -> dict:
+    try:
+        with open(_UC_ACTIVITY_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_uc_activity(data: dict):
+    os.makedirs(os.path.dirname(_UC_ACTIVITY_PATH), exist_ok=True)
+    with open(_UC_ACTIVITY_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+
+@app.route("/api/use-case-activity", methods=["GET"])
+def get_use_case_activity():
+    """Return recently-used and most-used use-case keys for the current user.
+
+    Category: Use Cases
+
+    Response: {"recently_used": ["key1", ...], "most_used": ["key1"]}
+    """
+    user = session.get("user") or {}
+    user_key = user.get("email") or "anonymous"
+
+    with _uc_activity_lock:
+        data = _load_uc_activity()
+
+    events = data.get(user_key, [])
+
+    counts: dict = {}
+    for ev in events:
+        k = ev.get("key")
+        if k:
+            counts[k] = counts.get(k, 0) + 1
+
+    most_used: list = []
+    if counts:
+        max_count = max(counts.values())
+        most_used = [k for k, v in counts.items() if v == max_count][:1]
+
+    seen: set = set()
+    recently_used: list = []
+    for ev in reversed(events):
+        k = ev.get("key")
+        if k and k not in seen:
+            seen.add(k)
+            recently_used.append(k)
+            if len(recently_used) >= 3:
+                break
+
+    return jsonify({"recently_used": recently_used, "most_used": most_used})
+
+
+_VALID_USE_CASE_KEYS = {
+    "email_standalone", "notion_monthly", "email_newsletter",
+    "twitter", "linkedin", "inapp", "article_hmc",
+}
+
+
+@app.route("/api/use-case-activity", methods=["POST"])
+def record_use_case_activity():
+    """Record a use-case interaction for the current user.
+
+    Category: Use Cases
+
+    Request Body: {"key": "email_standalone"}
+    Response: {"success": true}
+    """
+    user = session.get("user") or {}
+    user_key = user.get("email") or "anonymous"
+    data_in = request.get_json() or {}
+    key = (data_in.get("key") or "").strip()
+
+    if not key:
+        return jsonify({"success": False, "error": "key is required"}), 400
+
+    if key not in _VALID_USE_CASE_KEYS:
+        return jsonify({"success": False, "error": f"unknown use-case key: {key}"}), 400
+
+    ts = datetime.now(timezone.utc).isoformat()
+
+    with _uc_activity_lock:
+        data = _load_uc_activity()
+        if user_key not in data:
+            data[user_key] = []
+        data[user_key].append({"key": key, "ts": ts})
+        if len(data[user_key]) > 200:
+            data[user_key] = data[user_key][-200:]
+        _save_uc_activity(data)
+
+    return jsonify({"success": True})
+
+
 if __name__ == "__main__":
     import threading
     import time
