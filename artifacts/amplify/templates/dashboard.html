@@ -826,12 +826,12 @@
             font-family: inherit; cursor: pointer; transition: opacity 0.15s;
         }
         .btn-email-sent-done:hover { opacity: 0.9; }
-        .btn-email-sent-resend {
-            background: transparent; color: var(--accent); border: 1px solid var(--accent);
-            border-radius: 6px; padding: 9px 28px; font-size: 13px; font-weight: 600;
-            font-family: inherit; cursor: pointer; transition: background 0.15s, color 0.15s;
+        .published-email-resend-item {
+            padding: 10px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
+            color: var(--text-body); border-radius: 6px; white-space: nowrap;
+            transition: background 0.12s;
         }
-        .btn-email-sent-resend:hover { background: var(--accent); color: #0a1f1a; }
+        .published-email-resend-item:hover { background: var(--accent-bg); color: var(--accent); }
         @media (max-width: 600px) { .email-sent-modal { max-width: 100%; } }
         @keyframes cardHighlight {
             0% { box-shadow: 0 0 0 2px rgba(0,201,167,0.6), 0 0 20px rgba(0,201,167,0.3); }
@@ -2664,7 +2664,12 @@
             <div class="publish-actions" id="publish-actions">
                 <button class="btn-publish-all-batch" onclick="batchPublishAllApproved()" style="background:#1DA1F2;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Publish All Approved</button>
                 <button class="btn-preview-all-batch" onclick="batchPreviewAllOnX()" style="background:transparent;color:#1DA1F2;border:1.5px solid #1DA1F2;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Preview on X &#x2197;</button>
-                <button class="btn-publish-combined-email" onclick="publishCombinedEmail()" style="display:none;background:#00C9A7;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Publish Email &#x1F4E7;</button>
+                <span id="published-email-btn-wrap" style="display:none;position:relative;">
+                    <button class="btn-publish-combined-email" onclick="publishCombinedEmail()" style="background:#00C9A7;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:600;">Publish Email &#x1F4E7;</button>
+                    <div id="published-email-resend-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.28);min-width:130px;z-index:300;">
+                        <div class="published-email-resend-item" onclick="resendCombinedEmail()">Resend &#x1F4E7;</div>
+                    </div>
+                </span>
                 <div class="custom-dropdown email-html-dropdown" id="email-html-dropdown" style="display:none;">
                     <button type="button" class="custom-dropdown-toggle btn-html-combined-email" onclick="toggleCustomDropdown('email-html-dropdown')">HTML<span class="dd-arrow">&#9662;</span></button>
                     <div class="custom-dropdown-menu">
@@ -3183,11 +3188,29 @@ function onEmailSentModalOverlayClick(event) {
     }
 }
 
-function resendFromEmailSentModal() {
-    closeEmailSentModal();
-    // Re-arm the Publish button in case it was frozen to "Published ✅"
+function togglePublishedEmailDropdown() {
+    var menu = document.getElementById('published-email-resend-menu');
+    if (!menu) return;
+    var isOpen = menu.style.display !== 'none';
+    menu.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) {
+        setTimeout(function() {
+            document.addEventListener('click', function _closePublishedEmailMenu(e) {
+                var wrap = document.getElementById('published-email-btn-wrap');
+                if (!wrap || !wrap.contains(e.target)) {
+                    menu.style.display = 'none';
+                }
+                document.removeEventListener('click', _closePublishedEmailMenu);
+            });
+        }, 0);
+    }
+}
+
+function resendCombinedEmail() {
+    var menu = document.getElementById('published-email-resend-menu');
+    if (menu) menu.style.display = 'none';
     var btn = document.querySelector('.btn-publish-combined-email');
-    if (btn) { btn.disabled = false; btn.textContent = 'Publish Email \uD83D\uDCE7'; }
+    if (btn) { btn.textContent = 'Publish Email \uD83D\uDCE7'; btn.onclick = publishCombinedEmail; }
     if (typeof publishCombinedEmail === 'function') publishCombinedEmail();
 }
 
@@ -15088,6 +15111,7 @@ function renderCombinedPreview() {
     var isSendableEmail = (prepChannel === 'email_standalone');
     var publishBtn = document.querySelector('.btn-publish-all-batch');
     var previewBtn = document.querySelector('.btn-preview-all-batch');
+    var emailPubBtnWrap = document.getElementById('published-email-btn-wrap');
     var emailPubBtn = document.querySelector('.btn-publish-combined-email');
     var emailHtmlDropdown = document.getElementById('email-html-dropdown');
     var isPublishable = !!PUBLISHABLE_CHANNELS[prepChannel];
@@ -15105,7 +15129,10 @@ function renderCombinedPreview() {
         }
     }
     if (previewBtn) previewBtn.style.display = (prepChannel === 'twitter') ? '' : 'none';
-    if (emailPubBtn) emailPubBtn.style.display = isSendableEmail ? '' : 'none';
+    if (emailPubBtnWrap) emailPubBtnWrap.style.display = isSendableEmail ? 'inline-block' : 'none';
+    if (emailPubBtn) { emailPubBtn.textContent = 'Publish Email \uD83D\uDCE7'; emailPubBtn.onclick = publishCombinedEmail; }
+    var _resendMenu = document.getElementById('published-email-resend-menu');
+    if (_resendMenu) _resendMenu.style.display = 'none';
     if (emailHtmlDropdown) emailHtmlDropdown.style.display = isSendableEmail ? 'inline-block' : 'none';
 
     var items = [];
@@ -16371,7 +16398,7 @@ function publishCombinedEmail() {
             if (resp.skipped_videos && resp.skipped_videos.length) {
                 showSkippedVideosNotice(resp.skipped_videos);
             }
-            if (btn) { btn.textContent = 'Published \u2705'; btn.disabled = true; }
+            if (btn) { btn.textContent = 'Published \u2705 \u25be'; btn.onclick = togglePublishedEmailDropdown; }
         })
         .catch(function(err) {
             combinedEmailPublishInFlight = false;
@@ -18153,7 +18180,6 @@ loadGeneratedContentIndex();
                 <p id="email-sent-modal-features" class="email-sent-modal-features" style="display:none;"></p>
             </div>
             <div class="email-sent-modal-footer">
-                <button type="button" class="btn-email-sent-resend" onclick="resendFromEmailSentModal()">Resend</button>
                 <button type="button" class="btn-email-sent-done" onclick="closeEmailSentModal()">Done</button>
             </div>
         </div>
