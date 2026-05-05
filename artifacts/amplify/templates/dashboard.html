@@ -12437,7 +12437,7 @@ function _clearSaveDraftFailureState() {
 // cannot easily undo. The first explicit "Save as Draft" click latches
 // _currentDraftId; from then on, edits silently sync.
 // ---------------------------------------------------------------------------
-var _SERVER_AUTOSAVE_DEBOUNCE_MS = 3000;
+var _SERVER_AUTOSAVE_DEBOUNCE_MS = 5000;
 var _SERVER_AUTOSAVE_MIN_INTERVAL_MS = 1500;
 var _serverAutoSaveTimer = null;
 var _serverAutoSaveInFlight = false;
@@ -12493,58 +12493,40 @@ function _refreshAutoSaveStatusPillTime() {
 setInterval(function() { try { _refreshAutoSaveStatusPillTime(); } catch (_e) {} }, 15000);
 
 function _scheduleServerAutoSave() {
-    // Only meaningful once a draft row exists. Silently skip if there is
-    // no current draft id — the pill stays hidden (idle) until the first
-    // save lands and arms the loop.
-    if (!window._currentDraftId) return;
+    // Always arm the timer regardless of whether a draft exists yet.
+    // _serverAutoSaveNow silently creates one on first fire when content
+    // is present, so the user never has to click Save to get autosave going.
     if (_serverAutoSaveTimer) clearTimeout(_serverAutoSaveTimer);
     _serverAutoSaveTimer = setTimeout(_serverAutoSaveNow, _SERVER_AUTOSAVE_DEBOUNCE_MS);
 }
 
 function _serverAutoSaveNow() {
     _serverAutoSaveTimer = null;
-    // If no draft exists yet but we have content, auto-create one now.
-    // This makes autosave work from the very first edit, not only after
-    // the user has manually clicked Save once.
-    if (!window._currentDraftId) {
-        if (!prepBatchResults || !prepBatchResults.length) return;
-        if (typeof saveCombinedAsDraft === 'function') saveCombinedAsDraft();
-        return;
-    }
-    if (_serverAutoSaveInFlight) {
-        // Another save is already in flight. Re-arm so the latest edits
-        // get persisted once it lands, instead of getting silently
-        // dropped on the floor.
-        _scheduleServerAutoSave();
-        return;
-    }
-    // Race avoidance: if the user just clicked Save as Draft (or Save
-    // as new draft), defer. The manual save's response will set
-    // _currentDraftLastSavedTs and refresh the pill, so we don't want
-    // a stale debounced snapshot to land on top of it.
+    // Never write an empty snapshot — guards against silently wiping a
+    // real draft after navigation resets in-memory state.
+    if (!prepBatchResults || !prepBatchResults.length) return;
+    // Defer if another save (auto or manual) is already in flight.
+    if (_serverAutoSaveInFlight) { _scheduleServerAutoSave(); return; }
     if (window._manualSaveInFlight && window._manualSaveInFlight > 0) {
-        _scheduleServerAutoSave();
-        return;
+        _scheduleServerAutoSave(); return;
     }
-    // Throttle: never fire two POSTs within the min interval, even if
-    // the debounce timer already elapsed (e.g. burst of edits right
-    // after a save lands). Re-arm to fire after the interval.
+    // Throttle: never fire two POSTs within the min interval.
     var sinceLast = Date.now() - _serverAutoSaveLastRunMs;
     if (_serverAutoSaveLastRunMs && sinceLast < _SERVER_AUTOSAVE_MIN_INTERVAL_MS) {
         _serverAutoSaveTimer = setTimeout(_serverAutoSaveNow, _SERVER_AUTOSAVE_MIN_INTERVAL_MS - sinceLast);
         return;
     }
     if (typeof _collectCombinedDraftSnapshot !== 'function') return;
-    // Mirrors the safety guard in _autoSaveBatchSnapshotNow: never
-    // overwrite a real saved draft with empty in-memory state. This
-    // avoids silently wiping the user's draft after a navigation that
-    // resets prepBatchResults but before restore has run.
-    if (!prepBatchResults || !prepBatchResults.length) return;
     var snapshot;
     try { snapshot = _collectCombinedDraftSnapshot(); } catch (_e) { return; }
+    // Pick a name: prefer existing draft name, then subject field, then timestamp.
+    var subjEl = document.getElementById('combined-email-subject');
+    var autoName = window._currentDraftName
+        || (subjEl && subjEl.value.trim() ? subjEl.value.trim().substring(0, 80) : null)
+        || ('Draft ' + new Date().toLocaleDateString());
     var payload = {
-        id: window._currentDraftId,
-        name: window._currentDraftName || ('Draft ' + new Date().toLocaleString()),
+        id: window._currentDraftId || null,
+        name: autoName,
         snapshot: snapshot
     };
     _serverAutoSaveInFlight = true;
@@ -12587,23 +12569,22 @@ function _serverAutoSaveNow() {
         var nowSecs = Math.floor(Date.now() / 1000);
         window._currentDraftLastSavedTs = nowSecs;
         window._serverAutoSaveLastSavedTs = nowSecs;
-        // Latch any server-side normalization (e.g. id format) so the
-        // next manual Save as Draft uses the canonical id.
-        if (env.body.id && env.body.id !== window._currentDraftId) {
+        // Latch the id — covers both update (same id) and silent create
+        // (inFlightDraftId was null, env.body.id is the new row's id).
+        if (env.body.id) {
             window._currentDraftId = env.body.id;
+            window._currentDraftStatus = window._currentDraftStatus || 'draft';
+            if (!window._currentDraftName) window._currentDraftName = autoName;
+            try { _setArtifactUrl(env.body.id); } catch (_e) {}
         }
         _updateAutoSaveStatusPill('saved', nowSecs);
-        // Keep the manual "what am I editing?" pill in sync so its
-        // "last saved" timestamp doesn't lag the auto-save pill.
         try { _updateDraftStatusPill(); } catch (_e) {}
-        // Cheap UI nudge so the My Content count badge reflects any
-        // category / status change carried by this snapshot.
         try { refreshMyArtifactsCount(); } catch (_e) {}
     })
     .catch(function(_err) {
         _serverAutoSaveInFlight = false;
         if (window._manualSaveInFlight && window._manualSaveInFlight > 0) return;
-        if (window._currentDraftId !== inFlightDraftId) return;
+        if (inFlightDraftId && window._currentDraftId !== inFlightDraftId) return;
         _serverAutoSaveRetryCount += 1;
         _updateAutoSaveStatusPill('failed');
     });

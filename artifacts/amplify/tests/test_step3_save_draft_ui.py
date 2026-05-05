@@ -88,19 +88,28 @@ class Step3SaveDraftUiTests(unittest.TestCase):
         self.assertNotIn('id="draft-status-pill"', self.html,
                          'draft-status-pill id element should be removed from the DOM')
 
-    def test_server_autosave_guarded_by_current_draft_id(self) -> None:
-        # The autosave loop must check _currentDraftId in both
-        # _scheduleServerAutoSave and _serverAutoSaveNow.
+    def test_server_autosave_schedules_always_and_creates_silently(self) -> None:
+        # _scheduleServerAutoSave must arm the timer unconditionally so
+        # autosave fires even before the user has ever clicked Save.
         sched = self.html.find('function _scheduleServerAutoSave')
         self.assertGreater(sched, 0, '_scheduleServerAutoSave function missing')
         sched_body = self.html[sched:sched + 400]
-        self.assertIn("if (!window._currentDraftId)", sched_body)
-        # _serverAutoSaveNow also checks independently and auto-creates a
-        # draft when there is content but no existing draft id.
+        # No early-return guard on _currentDraftId — the function always arms.
+        self.assertNotIn(
+            "if (!window._currentDraftId) return",
+            sched_body,
+            '_scheduleServerAutoSave must not skip when no draft exists yet',
+        )
+        self.assertIn('setTimeout(_serverAutoSaveNow', sched_body)
+        # _serverAutoSaveNow uses id: null when no draft exists so the
+        # server creates a new row silently — no window.prompt() call.
         now_fn = self.html.find('function _serverAutoSaveNow')
         self.assertGreater(now_fn, 0, '_serverAutoSaveNow function missing')
-        now_body = self.html[now_fn:now_fn + 400]
-        self.assertIn("if (!window._currentDraftId)", now_body)
+        now_body = self.html[now_fn:now_fn + 1600]
+        self.assertIn('window._currentDraftId || null', now_body,
+                      '_serverAutoSaveNow must send id:null when no draft exists')
+        self.assertNotIn('window.prompt(', now_body,
+                         '_serverAutoSaveNow must not call window.prompt (silent save)')
 
     def test_server_autosave_does_not_overwrite_with_empty_state(self) -> None:
         # Mirror of the localStorage path: never POST a snapshot when
