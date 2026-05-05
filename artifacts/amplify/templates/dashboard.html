@@ -6056,7 +6056,7 @@ function simpleMarkdown(text, opts) {
         var line = escHtml(lines[i]);
         line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         line = line.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(m, text, url) {
+        line = line.replace(/\[([^\]]+)\]\s*\(([^)]+)\)/g, function(m, text, url) {
             if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) {
                 return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
             }
@@ -9103,7 +9103,8 @@ function _rewriteUrlReferences(text, oldUrl, newUrl) {
     var out = text;
     if (oldUrl) {
         // 1) Markdown link hrefs: `](oldUrl)` -> `](newUrl)`.
-        var mdRe = new RegExp('(\\]\\()' + _escapeRegex(oldUrl) + '(\\))', 'g');
+        // Also handles the AI-generated `] (url)` variant (space before paren).
+        var mdRe = new RegExp('(\\]\\s*\\()' + _escapeRegex(oldUrl) + '(\\))', 'g');
         out = out.replace(mdRe, '$1' + newUrl + '$2');
         // 2) HTML <a href="oldUrl"> (single or double quotes) — covers any
         //    body that has been rendered to HTML rather than markdown.
