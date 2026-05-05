@@ -5,6 +5,13 @@ ASANA_ACCESS_TOKEN = os.environ.get("ASANA_ACCESS_TOKEN", "")
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "amplify-dev-secret")
 PORT = int(os.environ.get("PORT", 5000))
+
+# Google OAuth 2.0 credentials.
+# Create a project in Google Cloud Console, enable the Google Identity API,
+# and create an OAuth 2.0 Client ID (Web application).
+# Add <your-app-url>/auth/callback as an Authorized Redirect URI.
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "") or os.environ.get("SENDGRID_FROM_EMAIL", "")
 

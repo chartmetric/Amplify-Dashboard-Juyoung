@@ -11,3 +11,4 @@ resend
 Pillow
 imageio-ffmpeg
 boto3
+Authlib

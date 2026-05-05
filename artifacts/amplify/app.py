@@ -10,7 +10,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, session, redirect, url_for
 import config
 from sources.asana_source import AsanaSource
 from sources.slack_source import SlackSource
@@ -44,6 +44,30 @@ _app_dir = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(_app_dir, "templates"), static_folder=os.path.join(_app_dir, "static"))
 app.secret_key = config.SESSION_SECRET
 app.config["MAX_CONTENT_LENGTH"] = 75 * 1024 * 1024
+
+# Google OAuth authentication (Task #149)
+from auth_routes import bp as _auth_bp, init_oauth as _init_oauth
+app.register_blueprint(_auth_bp)
+_init_oauth(app)
+
+# Inject session user into all Jinja2 templates automatically
+@app.context_processor
+def _inject_session():
+    return {"session": session}
+
+# Paths that are always accessible without a login (auth flow + public email pages)
+_PUBLIC_PREFIXES = ("/login", "/auth/", "/logout", "/email/view/", "/email/unsubscribe")
+
+@app.before_request
+def _require_login():
+    if request.path.startswith(_PUBLIC_PREFIXES) or request.path.startswith("/static"):
+        return None
+    if "user" in session:
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"success": False, "error": "Authentication required"}), 401
+    session["next"] = request.url
+    return redirect(url_for("auth.login"))
 
 # In-app announcements admin (Task #91): registers /announcements page +
 # /api/admin/announcement* endpoints. Imported lazily to avoid disturbing the

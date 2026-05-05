@@ -216,6 +216,14 @@ tr:hover td { background: rgba(255,255,255,0.02); }
   <div class="links">
     <a href="/">Dashboard</a>
     <a href="/announcements" class="active">Announcements</a>
+    {% if session.get('user') %}
+    <span style="color:var(--text-dim);font-size:12px;">|</span>
+    {% if session['user'].get('picture') %}
+    <img src="{{ session['user']['picture'] }}" alt="" style="width:24px;height:24px;border-radius:50%;border:1px solid var(--border);vertical-align:middle;">
+    {% endif %}
+    <span style="font-size:12px;color:var(--text-muted);">{{ session['user'].get('name') or session['user'].get('email','') }}</span>
+    <a href="/logout" style="font-size:12px;color:var(--text-muted);">Sign out</a>
+    {% endif %}
   </div>
 </div>
 
