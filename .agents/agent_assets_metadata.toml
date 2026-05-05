@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "UsNQohKeR54JlzWCf-bZ4"
+uri = "file://.local/exports/task-150-chartmetric-crud-api.md"
+type = "text"
+title = "Task #150 — CRUD API for Linking to Chartmetric Announcements"

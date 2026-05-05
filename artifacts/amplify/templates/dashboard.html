@@ -1535,12 +1535,17 @@
         .prep-step-header { margin-bottom: 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .prep-step-header-save { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
         .btn-save-progress {
-            background: var(--accent, #00C9A7); color: #000; border: none;
-            padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 700;
-            cursor: pointer; white-space: nowrap; transition: opacity 0.15s;
+            background: transparent; color: var(--text-muted, #8899aa);
+            border: 1px solid rgba(136,153,170,0.35);
+            padding: 5px 13px; border-radius: 7px; font-size: 12px; font-weight: 600;
+            cursor: pointer; white-space: nowrap; transition: color 0.15s, border-color 0.15s, background 0.15s;
         }
-        .btn-save-progress:hover { opacity: 0.85; }
-        .btn-save-progress:disabled { opacity: 0.5; cursor: default; }
+        .btn-save-progress:hover {
+            color: var(--text-primary, #e2e8f0);
+            border-color: rgba(136,153,170,0.65);
+            background: rgba(136,153,170,0.08);
+        }
+        .btn-save-progress:disabled { opacity: 0.4; cursor: default; }
         .prep-title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin: 0; }
         .prep-subtitle { font-size: 14px; color: var(--text-muted); margin: 0; }
         .use-case-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
@@ -12411,7 +12416,7 @@ function _clearSaveDraftFailureState() {
     var clusters = document.querySelectorAll('.save-draft-cluster');
     for (var i = 0; i < btns.length; i++) {
         btns[i].classList.remove('save-failed');
-        btns[i].innerHTML = '+ Save as new draft';
+        btns[i].innerHTML = btns[i].classList.contains('btn-save-progress') ? 'Save' : '+ Save as new draft';
     }
     for (var c = 0; c < clusters.length; c++) {
         var d = clusters[c].querySelector('.save-fail-detail');
