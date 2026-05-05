@@ -5726,7 +5726,22 @@ function enterContentView(feature) {
                     refreshFeatureCardPublishStatus(fid);
                     showImageToggles();
                     restoreImageIncludes(fid, keys);
-                    if (contentViewFeatureLink) showInsertLinkButtons();
+                    if (contentViewFeatureLink) {
+                        showInsertLinkButtons();
+                        // Auto-apply the feature URL into any channel the AI
+                        // didn't already hyperlink, so users don't have to
+                        // manually click Insert Link after every generation.
+                        var _genUrl = contentViewFeatureLink;
+                        for (var _gi = 0; _gi < keys.length; _gi++) {
+                            var _gTa = document.getElementById('ta-' + keys[_gi]);
+                            if (!_gTa || !_gTa.value || _gTa.value.indexOf(_genUrl) !== -1) continue;
+                            _gTa.value = _gTa.value.replace(/\s+$/, '') + '\n[Link](' + _genUrl + ')';
+                            _gTa.dispatchEvent(new Event('input'));
+                            var _gIsEmail = (keys[_gi] === 'email_newsletter' || keys[_gi] === 'email_standalone');
+                            _refreshPreviewElement(document.getElementById('md-preview-' + keys[_gi]), _gTa.value, _gIsEmail);
+                            try { autoSaveDraft(keys[_gi]); } catch(e) {}
+                        }
+                    }
                     return;
                 }
                 var chKey = keys[idx];
@@ -8820,7 +8835,29 @@ function _settleContentViewFeatureUrl() {
     if (current) {
         persistFeatureLink(fid, current);
         var n = _contentViewLiveRewriteCount;
-        showToast(n > 0 ? ('Feature URL saved \u2014 updated ' + n + ' hyperlink' + (n === 1 ? '' : 's') + ' in body') : 'Feature URL saved', 'success');
+        // Auto-insert the URL into any channel body that doesn't already
+        // reference it (neither as a raw URL nor a markdown hyperlink).
+        // This fires when n===0 meaning no existing hyperlinks were rewritten,
+        // i.e. the AI didn't embed the link or the user typed a fresh URL.
+        var _cvAutoInserted = 0;
+        if (n === 0 && contentViewChannels) {
+            var _cvKeys = Object.keys(contentViewChannels);
+            for (var _cvi = 0; _cvi < _cvKeys.length; _cvi++) {
+                var _cvTa = document.getElementById('ta-' + _cvKeys[_cvi]);
+                if (!_cvTa || !_cvTa.value || _cvTa.value.indexOf(current) !== -1) continue;
+                _cvTa.value = _cvTa.value.replace(/\s+$/, '') + '\n[Link](' + current + ')';
+                _cvTa.dispatchEvent(new Event('input'));
+                var _cvIsEmail = (_cvKeys[_cvi] === 'email_newsletter' || _cvKeys[_cvi] === 'email_standalone');
+                _refreshPreviewElement(document.getElementById('md-preview-' + _cvKeys[_cvi]), _cvTa.value, _cvIsEmail);
+                try { autoSaveDraft(_cvKeys[_cvi]); } catch(e) {}
+                _cvAutoInserted++;
+            }
+        }
+        if (_cvAutoInserted > 0) {
+            showToast('Feature URL saved \u2014 link inserted in ' + _cvAutoInserted + ' channel' + (_cvAutoInserted === 1 ? '' : 's'), 'success');
+        } else {
+            showToast(n > 0 ? ('Feature URL saved \u2014 updated ' + n + ' hyperlink' + (n === 1 ? '' : 's') + ' in body') : 'Feature URL saved', 'success');
+        }
         _promptForUrlOverrideReasonIfChanged(fid, settled || '', current);
     } else {
         persistFeatureLink(fid, null);
@@ -8938,7 +8975,25 @@ function _settleBatchFeatureUrl(idx) {
     persistFeatureLink(fid, current || null);
     if (current) {
         var n = _batchLiveRewriteCount[idx] || 0;
-        showToast(n > 0 ? ('Feature URL saved \u2014 updated ' + n + ' hyperlink' + (n === 1 ? '' : 's') + ' in body') : 'Feature URL saved', 'success');
+        // Auto-insert into this batch item's textarea if the URL isn't there yet.
+        var _bAutoInserted = false;
+        if (n === 0) {
+            var _bTa = document.getElementById('batch-ta-' + idx);
+            if (_bTa && _bTa.value && _bTa.value.indexOf(current) === -1) {
+                _bTa.value = _bTa.value.replace(/\s+$/, '') + '\n[Link](' + current + ')';
+                _bTa.dispatchEvent(new Event('input'));
+                _refreshPreviewElement(document.getElementById('batch-md-preview-' + idx), _bTa.value, false);
+                if (window.prepBatchResults && window.prepBatchResults[idx]) {
+                    window.prepBatchResults[idx].content = _bTa.value;
+                }
+                _bAutoInserted = true;
+            }
+        }
+        if (_bAutoInserted) {
+            showToast('Feature URL saved \u2014 link inserted in content', 'success');
+        } else {
+            showToast(n > 0 ? ('Feature URL saved \u2014 updated ' + n + ' hyperlink' + (n === 1 ? '' : 's') + ' in body') : 'Feature URL saved', 'success');
+        }
         _promptForBatchUrlOverrideReasonIfChanged(idx, fid, settled || '', current);
     } else {
         showToast('Feature URL cleared', 'success');
