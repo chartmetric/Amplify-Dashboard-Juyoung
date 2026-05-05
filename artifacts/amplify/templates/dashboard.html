@@ -12491,10 +12491,14 @@ function _refreshAutoSaveStatusPillTime() {
     }
 }
 setInterval(function() { try { _refreshAutoSaveStatusPillTime(); } catch (_e) {} }, 15000);
-// Continuous 5-second save loop — runs regardless of whether the user
-// is editing. _serverAutoSaveNow skips silently when nothing has changed
-// (empty state guard) or when a save is already in flight.
-setInterval(function() { try { _serverAutoSaveNow(); } catch (_e) {} }, 5000);
+// Continuous 5-second update loop. Only fires when a draft already exists
+// (_currentDraftId is set) so we never accidentally create a second duplicate
+// draft — new-draft creation is handled by the edit-triggered debounce in
+// _scheduleServerAutoSave, which fires once after the first edit and latches
+// the id. After that this interval keeps the draft in sync every 5 seconds.
+setInterval(function() {
+    try { if (window._currentDraftId) _serverAutoSaveNow(); } catch (_e) {}
+}, 5000);
 
 function _scheduleServerAutoSave() {
     // Always arm the timer regardless of whether a draft exists yet.
