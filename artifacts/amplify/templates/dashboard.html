@@ -1534,6 +1534,15 @@
         .prep-step { max-width: 1000px; margin: 0 auto; padding: 20px 24px 100px; }
         .prep-step-header { margin-bottom: 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .prep-step-header-save { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        .channel-pill {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+            color: var(--text-muted, #8899aa);
+            background: rgba(136,153,170,0.1);
+            border: 1px solid rgba(136,153,170,0.2);
+            border-radius: 20px; padding: 3px 10px;
+            white-space: nowrap; flex-shrink: 0;
+        }
         .btn-save-progress {
             background: transparent; color: var(--text-muted, #8899aa);
             border: 1px solid rgba(136,153,170,0.35);
@@ -2613,6 +2622,7 @@
             <div class="prep-step-header">
                 <button class="btn-back" onclick="prepBatchResults=[];prepGoToStep(2)">&larr; Back to feature selection</button>
                 <h2 class="prep-title" id="step3-title"></h2>
+                <span class="channel-pill" id="step3-channel-pill" style="display:none;"></span>
                 <div class="prep-step-header-save">
                     <span class="auto-save-status auto-idle" data-auto-save-pill aria-live="polite" style="display:none;"><span class="auto-dot"></span><span class="auto-save-status-text"></span></span>
                     <button class="btn-save-progress" onclick="saveCombinedAsDraft()" title="Save progress">Save as draft</button>
@@ -2638,6 +2648,7 @@
             <div class="prep-step-header">
                 <button class="btn-back" onclick="prepGoToStep(3)">&larr; Back to review</button>
                 <h2 class="prep-title" id="step4-title"></h2>
+                <span class="channel-pill" id="step4-channel-pill" style="display:none;"></span>
                 <div class="prep-step-header-save">
                     <span class="auto-save-status auto-idle" data-auto-save-pill aria-live="polite" style="display:none;"><span class="auto-dot"></span><span class="auto-save-status-text"></span></span>
                     <button class="btn-save-progress" onclick="saveCombinedAsDraft()" title="Save progress">Save as draft</button>
@@ -13642,6 +13653,25 @@ function regenerateAllBatch() {
     startBatchGeneration();
 }
 
+function _updateChannelPill() {
+    var uc = null;
+    if (prepChannel) {
+        for (var i = 0; i < USE_CASES.length; i++) {
+            if (USE_CASES[i].key === prepChannel) { uc = USE_CASES[i]; break; }
+        }
+    }
+    ['step3-channel-pill', 'step4-channel-pill'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        if (uc) {
+            el.textContent = uc.icon + '\u00a0' + uc.name;
+            el.style.display = '';
+        } else {
+            el.style.display = 'none';
+        }
+    });
+}
+
 function prepGoToStep(step) {
     ['prep-step1','prep-step2','prep-step3','prep-step4'].forEach(function(id) {
         document.getElementById(id).style.display = 'none';
@@ -13666,6 +13696,7 @@ function prepGoToStep(step) {
             if (step2Bar) step2Bar.innerHTML = '';
         }
     }
+    if (step === 3 || step === 4) { try { _updateChannelPill(); } catch (_e) {} }
     if (step === 3) {
         if (prepBatchResults.length === 0) {
             // Only auto-trigger generation when there's something to
