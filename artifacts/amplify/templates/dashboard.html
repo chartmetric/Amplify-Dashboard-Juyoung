@@ -2615,7 +2615,7 @@
                 <h2 class="prep-title" id="step3-title"></h2>
                 <div class="prep-step-header-save">
                     <span class="auto-save-status auto-idle" data-auto-save-pill aria-live="polite" style="display:none;"><span class="auto-dot"></span><span class="auto-save-status-text"></span></span>
-                    <button class="btn-save-progress" onclick="saveCombinedAsDraft()" title="Save progress">Save</button>
+                    <button class="btn-save-progress" onclick="saveCombinedAsDraft()" title="Save progress">Save as draft</button>
                 </div>
             </div>
             <div class="batch-progress" id="batch-progress" style="display:none;">
@@ -2640,7 +2640,7 @@
                 <h2 class="prep-title" id="step4-title"></h2>
                 <div class="prep-step-header-save">
                     <span class="auto-save-status auto-idle" data-auto-save-pill aria-live="polite" style="display:none;"><span class="auto-dot"></span><span class="auto-save-status-text"></span></span>
-                    <button class="btn-save-progress" onclick="saveCombinedAsDraft()" title="Save progress">Save</button>
+                    <button class="btn-save-progress" onclick="saveCombinedAsDraft()" title="Save progress">Save as draft</button>
                 </div>
             </div>
             <div class="combined-preview-wrap">
@@ -12416,7 +12416,7 @@ function _clearSaveDraftFailureState() {
     var clusters = document.querySelectorAll('.save-draft-cluster');
     for (var i = 0; i < btns.length; i++) {
         btns[i].classList.remove('save-failed');
-        btns[i].innerHTML = btns[i].classList.contains('btn-save-progress') ? 'Save' : '+ Save as new draft';
+        btns[i].innerHTML = btns[i].classList.contains('btn-save-progress') ? 'Save as draft' : '+ Save as new draft';
     }
     for (var c = 0; c < clusters.length; c++) {
         var d = clusters[c].querySelector('.save-fail-detail');
