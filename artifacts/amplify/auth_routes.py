@@ -58,6 +58,7 @@ def firebase_verify():
         logger.warning("[auth] Firebase token verification failed: %s", exc)
         return jsonify({"success": False, "error": "Sign-in failed. Please try again."}), 401
 
+    session.permanent = True
     session["user"] = {
         "name": decoded.get("name", ""),
         "email": decoded.get("email", ""),

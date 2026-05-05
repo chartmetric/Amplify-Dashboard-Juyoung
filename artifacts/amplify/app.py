@@ -38,12 +38,13 @@ from ai.feature_url_overrides import (
     get_url_override_for_title,
 )
 from ai.feature_sets import save_set as save_feature_set, get_sets as get_feature_sets, delete_set as delete_feature_set
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 _app_dir = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(_app_dir, "templates"), static_folder=os.path.join(_app_dir, "static"))
 app.secret_key = config.SESSION_SECRET
 app.config["MAX_CONTENT_LENGTH"] = 75 * 1024 * 1024
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=config.SESSION_LIFETIME_DAYS)
 
 # Google OAuth authentication (Task #149)
 from auth_routes import bp as _auth_bp, init_oauth as _init_oauth
