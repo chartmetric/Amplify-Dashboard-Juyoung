@@ -1399,6 +1399,13 @@
             transition: border-color 0.15s, color 0.15s;
         }
         .home-draft-btn-convert:hover { border-color: #a78bfa; color: #a78bfa; }
+        .home-draft-btn-delete {
+            background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+            padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600;
+            cursor: pointer; font-family: inherit; white-space: nowrap;
+            transition: border-color 0.15s, color 0.15s;
+        }
+        .home-draft-btn-delete:hover { border-color: #f87171; color: #f87171; }
 
         /* Home use-case section title */
         .home-use-cases-title { font-size: 18px; font-weight: 700; color: var(--text-body); margin: 0 0 4px; }
@@ -11592,18 +11599,21 @@ function renderHomeContentStrip() {
         var fc        = (d.feature_count || 0);
         var meta      = fc + ' feature' + (fc === 1 ? '' : 's') + (when ? ' \u00b7 ' + when : '');
 
-        // Status + download chips
+        // Status + download + channel chips
         var chips = '';
-        if (isSent)        chips += '<span class="home-draft-chip chip-sent">Sent</span>';
+        if (isSent)          chips += '<span class="home-draft-chip chip-sent">Sent</span>';
         if (d.downloaded_ts) chips += '<span class="home-draft-chip chip-dl">Downloaded</span>';
         if (!isSent && !d.downloaded_ts) chips += '<span class="home-draft-chip">Draft</span>';
+        var chChip = (typeof _channelChipHtml === 'function') ? _channelChipHtml(d.channel) : '';
+        if (chChip) chips += chChip;
 
-        // Actions: Open (always) + Convert to Draft (artifact & downloaded tabs)
+        // Actions: Open (always) + Convert to Draft (artifact & downloaded tabs) + Delete
         var convertBtn = '';
         if (tab === 'artifact' || tab === 'downloaded') {
             convertBtn = '<button class="home-draft-btn-convert" data-hw-action="convert" data-hw-id="' + escAttr(safeId) + '" title="Reset status to Draft">Convert to Draft</button>';
         }
         var openBtn = '<button class="home-draft-btn-open" data-hw-action="open" data-hw-id="' + escAttr(safeId) + '">Open</button>';
+        var deleteBtn = '<button class="home-draft-btn-delete" data-hw-action="delete" data-hw-id="' + escAttr(safeId) + '">Delete</button>';
 
         return '<div class="home-draft-row">'
             + '<span class="home-draft-status-dot" style="background:' + dotColor + ';"></span>'
@@ -11612,7 +11622,7 @@ function renderHomeContentStrip() {
             +   '<div class="home-draft-meta">' + escHtml(meta) + '</div>'
             +   '<div class="home-draft-chips">' + chips + '</div>'
             + '</div>'
-            + '<div class="home-draft-actions">' + openBtn + convertBtn + '</div>'
+            + '<div class="home-draft-actions">' + openBtn + convertBtn + deleteBtn + '</div>'
             + '</div>';
     }).join('');
 
@@ -11634,6 +11644,8 @@ function _bindHomeWidgetDelegation(list, ID_RE) {
             _openArtifactFromList ? _openArtifactFromList(id) : loadEmailDraft(id);
         } else if (action === 'convert') {
             _homeConvertToDraft(id);
+        } else if (action === 'delete') {
+            _deleteArtifactFromList(id);
         }
     };
 }
@@ -11789,6 +11801,17 @@ function setMyArtifactsTab(tab) {
 function _channelChipHtml(channel) {
     if (!channel) return '';
     var raw = String(channel);
+    // Prefer the rich USE_CASES icon + name when the key matches exactly.
+    if (typeof USE_CASES !== 'undefined') {
+        for (var _uci = 0; _uci < USE_CASES.length; _uci++) {
+            if (USE_CASES[_uci].key === raw) {
+                var _uc = USE_CASES[_uci];
+                return '<span style="display:inline-block;background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.35);border-radius:10px;padding:1px 8px;font-size:10px;font-weight:600;letter-spacing:0.3px;">'
+                    + escHtml(_uc.icon + '\u00a0' + _uc.name) + '</span>';
+            }
+        }
+    }
+    // Fall back to a generic readable label.
     var label;
     if (/^email/i.test(raw)) label = 'Email';
     else if (/^notion/i.test(raw)) label = 'Notion';
@@ -11844,6 +11867,7 @@ function _renderArtifactRow(d, ID_RE) {
     if (d.channel) meta += ' \u00b7 ' + d.channel.replace(/_/g, ' ');
     if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
     var sentMeta = '<span style="color:#4ade80;font-size:11px;font-weight:600;">\u2713 Sent ' + escHtml(when) + (d.last_recipient_count ? ' \u00b7 ' + d.last_recipient_count + ' recipients' : '') + '</span>';
+    var _artChip = _channelChipHtml(d.channel);
     var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:12px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">' + escHtml(d.subject) + '</div>' : '';
     // One-click resend is only meaningful for email artifacts. For
     // non-email channels (twitter, in-app, notion) the publish flow is
@@ -11855,7 +11879,10 @@ function _renderArtifactRow(d, ID_RE) {
         : '';
     return '<div data-art-id="' + safeId + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);margin-bottom:8px;">'
         + '<div style="flex:1;min-width:0;">'
+        + '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;">'
         + '<div style="font-weight:600;color:var(--text-body);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
+        + (_artChip ? _artChip : '')
+        + '</div>'
         + subjLine
         + '<div style="margin-top:5px;color:var(--text-muted);font-size:11px;">' + escHtml(meta) + '</div>'
         + '<div style="margin-top:3px;">' + sentMeta + '</div>'
@@ -11882,6 +11909,7 @@ function _renderDownloadedRow(d, ID_RE) {
     if (d.channel) meta += ' \u00b7 ' + d.channel.replace(/_/g, ' ');
     if (d.audience_label && d.audience_label !== 'Pick a segment or custom...') meta += ' \u00b7 ' + d.audience_label;
     var dlMeta = '<span style="color:#60a5fa;font-size:11px;font-weight:600;">\u2913 Downloaded ' + escHtml(when) + '</span>';
+    var _dlChip = _channelChipHtml(d.channel);
     var subjLine = d.subject ? '<div style="color:var(--text-muted);font-size:12px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">' + escHtml(d.subject) + '</div>' : '';
     // Same email-only gating as the Sent row: the one-click resend
     // confirmation flow only makes sense for email artifacts.
@@ -11896,7 +11924,10 @@ function _renderDownloadedRow(d, ID_RE) {
         : '';
     return '<div data-art-id="' + safeId + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);margin-bottom:8px;">'
         + '<div style="flex:1;min-width:0;">'
+        + '<div style="display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;">'
         + '<div style="font-weight:600;color:var(--text-body);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(d.name || 'Untitled') + '</div>'
+        + (_dlChip ? _dlChip : '')
+        + '</div>'
         + subjLine
         + '<div style="margin-top:5px;color:var(--text-muted);font-size:11px;">' + escHtml(meta) + '</div>'
         + '<div style="margin-top:3px;">' + dlMeta + '</div>'
@@ -12074,6 +12105,7 @@ function _deleteArtifactFromList(id) {
             try { _updateAutoSaveStatusPill('idle'); } catch (_e) {}
         }
         renderMyArtifactsList();
+        try { renderHomeContentStrip(); } catch (_e) {}
         refreshMyArtifactsCount();
         showToast('Deleted');
     })
