@@ -58,16 +58,20 @@ def _inject_session():
 # Paths that are always accessible without a login (auth flow + public email pages)
 _PUBLIC_PREFIXES = ("/login", "/auth/", "/logout", "/email/view/", "/email/unsubscribe")
 
-@app.before_request
-def _require_login():
-    if request.path.startswith(_PUBLIC_PREFIXES) or request.path.startswith("/static"):
-        return None
-    if "user" in session:
-        return None
-    if request.path.startswith("/api/"):
-        return jsonify({"success": False, "error": "Authentication required"}), 401
-    session["next"] = request.url
-    return redirect(url_for("auth.login"))
+# NOTE: Auth enforcement is temporarily disabled. To re-enable, uncomment the
+# block below. Google OAuth credentials (GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET)
+# must be configured first.
+#
+# @app.before_request
+# def _require_login():
+#     if request.path.startswith(_PUBLIC_PREFIXES) or request.path.startswith("/static"):
+#         return None
+#     if "user" in session:
+#         return None
+#     if request.path.startswith("/api/"):
+#         return jsonify({"success": False, "error": "Authentication required"}), 401
+#     session["next"] = request.url
+#     return redirect(url_for("auth.login"))
 
 # In-app announcements admin (Task #91): registers /announcements page +
 # /api/admin/announcement* endpoints. Imported lazily to avoid disturbing the
