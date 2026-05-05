@@ -38,6 +38,7 @@ from ai.feature_url_overrides import (
     get_url_override_for_title,
 )
 from ai.feature_sets import save_set as save_feature_set, get_sets as get_feature_sets, delete_set as delete_feature_set
+from ai.user_stats_store import record_heartbeat, record_draft_saved, record_artifact_sent, get_stats as get_user_stats
 from datetime import datetime, timedelta, timezone
 
 _app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -211,6 +212,41 @@ def health():
             "resend": bool(config.RESEND_API_KEY),
         },
     })
+
+
+@app.route("/api/heartbeat", methods=["POST"])
+def user_heartbeat():
+    """Record a 1-minute heartbeat of active app usage for the logged-in user.
+
+    Category: UserStats
+
+    Response: {"success": true}
+    """
+    user = session.get("user") or {}
+    email = user.get("email", "")
+    if email:
+        record_heartbeat(email, minutes=1)
+    return jsonify({"success": True})
+
+
+@app.route("/api/user-stats")
+def user_stats():
+    """Return personal activity stats for the logged-in user.
+
+    Category: UserStats
+
+    Response:
+    {
+        "minutes_in_app": 42,
+        "drafts_saved": 5,
+        "artifacts_sent": 8,
+        "time_saved_minutes": 40
+    }
+    """
+    user = session.get("user") or {}
+    email = user.get("email", "")
+    stats = get_user_stats(email)
+    return jsonify(stats)
 
 
 @app.route("/api/sources")
@@ -1803,6 +1839,13 @@ def save_email_draft():
                 "error": "drafts store temporarily unavailable",
                 "detail": str(e),
             }), 503
+        # Track new draft saves (not updates) for user stats
+        if existing_idx < 0:
+            try:
+                _user_email = (session.get("user") or {}).get("email", "")
+                record_draft_saved(_user_email)
+            except Exception:
+                pass
         return jsonify({"success": True, "id": draft_id, "summary": _draft_summary(record)})
     except Exception as e:
         logger.error(f"[email-drafts] save error: {e}")
@@ -4303,6 +4346,10 @@ def publish_twitter():
         return jsonify({"success": False, "error": f"Server error: {type(_e).__name__}: {_e}"}), 500
     if result.get("success") and result.get("method") == "api" and feature_id:
         mark_published(feature_id, "twitter", tweet_url=result.get("tweet_url"))
+        try:
+            record_artifact_sent((session.get("user") or {}).get("email", ""), "twitter", 1)
+        except Exception:
+            pass
     status_code = 200 if result.get("success") else 500
     if result.get("success"):
         logger.info(f"[publish/twitter] OK method={result.get('method')!r} tweet_url={result.get('tweet_url','')!r}")
@@ -4497,11 +4544,17 @@ def publish_email():
         return jsonify({"success": False, "error": f"Server error: {type(_e).__name__}: {_e}"}), 500
 
     if result.get("success") and result.get("method") in ("sendgrid", "resend"):
+        _send_feature_count = len(feature_ids) if feature_ids else (1 if feature_id else 0)
         if feature_ids:
             for fid in feature_ids:
                 mark_published(fid, channel)
         elif feature_id:
             mark_published(feature_id, channel)
+        if _send_feature_count > 0:
+            try:
+                record_artifact_sent((session.get("user") or {}).get("email", ""), channel, _send_feature_count)
+            except Exception:
+                pass
     if not result.get("success") and (result.get("missing_images") or result.get("missing_videos")):
         # Unresolved [image:]/[video:] markers — return 400 so the UI
         # treats it as a user-fixable validation error, not a server
@@ -4951,6 +5004,10 @@ def publish_inapp():
 
     if result.get("success") and feature_id:
         mark_published(feature_id, "inapp")
+        try:
+            record_artifact_sent((session.get("user") or {}).get("email", ""), "inapp", 1)
+        except Exception:
+            pass
     status_code = 200 if result.get("success") else 500
     _dt = (_time.time() - _t0) * 1000
     if result.get("success"):
@@ -5007,6 +5064,10 @@ def publish_notion_endpoint():
 
     if result.get("success") and feature_id:
         mark_published(feature_id, channel, page_url=result.get("page_url"))
+        try:
+            record_artifact_sent((session.get("user") or {}).get("email", ""), channel, 1)
+        except Exception:
+            pass
 
     status_code = 200 if result.get("success") else 500
     _dt = (_time.time() - _t0) * 1000

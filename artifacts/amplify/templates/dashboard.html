@@ -1463,6 +1463,61 @@
             background: rgba(0,201,167,0.15); color: var(--accent);
         }
         .lab-dropdown-divider { height: 1px; background: var(--border); margin: 0; }
+        .my-stats-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500;
+            background: var(--bg-overlay); overflow-y: auto; transition: background-color 0.2s;
+        }
+        .my-stats-header {
+            padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--bg-panel);
+            display: flex; align-items: center; justify-content: space-between;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .my-stats-header-left { display: flex; align-items: center; gap: 12px; }
+        .my-stats-header-title { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+        .my-stats-close {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+            color: var(--text-muted); cursor: pointer; padding: 6px 12px; font-size: 13px;
+            font-family: inherit; transition: all 0.2s;
+        }
+        .my-stats-close:hover { border-color: var(--accent); color: var(--accent); }
+        .my-stats-body { max-width: 800px; margin: 0 auto; padding: 32px 24px; }
+        .my-stats-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+        }
+        @media (max-width: 700px) {
+            .my-stats-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 900px) and (min-width: 701px) {
+            .my-stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .my-stats-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px;
+            padding: 24px 20px; transition: border-color 0.2s, box-shadow 0.2s;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .my-stats-card:hover { border-color: var(--border-hover); box-shadow: 0 4px 20px var(--shadow); }
+        .my-stats-card-icon { font-size: 28px; margin-bottom: 4px; }
+        .my-stats-card-label {
+            font-size: 11px; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.6px;
+        }
+        .my-stats-card-value {
+            font-size: 36px; font-weight: 800; color: var(--text-primary); line-height: 1.1;
+        }
+        .my-stats-card-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .my-stats-loading {
+            text-align: center; color: var(--text-muted); font-size: 14px;
+            padding: 48px 0;
+        }
+        .my-stats-user-row {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 24px;
+        }
+        .my-stats-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            border: 2px solid var(--accent); object-fit: cover;
+        }
+        .my-stats-username { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+        .my-stats-usersub { font-size: 12px; color: var(--text-muted); }
         .analytics-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500;
             background: var(--bg-overlay); overflow-y: auto; transition: background-color 0.2s;
@@ -2152,6 +2207,11 @@
                         <span class="lab-item-label">Attachment Storage</span>
                         <span class="lab-item-status" id="lab-attachments-status"></span>
                     </button>
+                    <div class="lab-dropdown-divider"></div>
+                    <button class="lab-dropdown-item" onclick="labOpenMyStats()">
+                        <span class="lab-item-icon">&#127942;</span>
+                        <span class="lab-item-label">My Stats</span>
+                    </button>
                 </div>
             </div>
             <button class="btn-analytics" onclick="toggleAnalytics()">&#128202; Analytics</button>
@@ -2480,6 +2540,46 @@
             <button class="btn-generate btn-regenerate" id="btn-regenerate-all" onclick="regenerateAllChannels()" title="Regenerate every channel for this feature from scratch">&#8634; Regenerate All</button>
             <button class="btn-undo-all" id="btn-undo-all" onclick="undoAllApprovals()" style="display:none;">Undo All</button>
             <button class="btn-publish" id="btn-publish" disabled onclick="publishAllApproved()">Publish All Approved &rarr;</button>
+        </div>
+    </div>
+
+    <div id="my-stats-overlay" class="my-stats-overlay" style="display:none;">
+        <div class="my-stats-header">
+            <div class="my-stats-header-left">
+                <span style="font-size:20px;">&#127942;</span>
+                <span class="my-stats-header-title">My Stats</span>
+            </div>
+            <button class="my-stats-close" onclick="toggleMyStats()">&#10005; Close</button>
+        </div>
+        <div class="my-stats-body">
+            <div id="my-stats-user-row" class="my-stats-user-row" style="display:none;">
+                <img id="my-stats-avatar" class="my-stats-avatar" src="" alt="" style="display:none;">
+                <div>
+                    <div class="my-stats-username" id="my-stats-username"></div>
+                    <div class="my-stats-usersub" id="my-stats-usersub"></div>
+                </div>
+            </div>
+            <div id="my-stats-loading" class="my-stats-loading">Loading your stats&hellip;</div>
+            <div id="my-stats-grid" class="my-stats-grid" style="display:none;">
+                <div class="my-stats-card">
+                    <div class="my-stats-card-icon">&#9201;</div>
+                    <div class="my-stats-card-label">Time in Amplify</div>
+                    <div class="my-stats-card-value" id="stat-time-value">0</div>
+                    <div class="my-stats-card-sub" id="stat-time-sub">minutes active</div>
+                </div>
+                <div class="my-stats-card">
+                    <div class="my-stats-card-icon">&#128196;</div>
+                    <div class="my-stats-card-label">Drafts &amp; Artifacts Created</div>
+                    <div class="my-stats-card-value" id="stat-drafts-value">0</div>
+                    <div class="my-stats-card-sub" id="stat-drafts-sub">drafts saved &amp; content published</div>
+                </div>
+                <div class="my-stats-card">
+                    <div class="my-stats-card-icon">&#9889;</div>
+                    <div class="my-stats-card-label">Time Saved</div>
+                    <div class="my-stats-card-value" id="stat-saved-value">0</div>
+                    <div class="my-stats-card-sub" id="stat-saved-sub">estimated time saved</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -17648,6 +17748,106 @@ function labGenerateAll() {
     generateAllTopFeatures();
 }
 
+function labOpenMyStats() {
+    closeLabDropdown();
+    toggleMyStats();
+}
+
+// -----------------------------------------------------------------------
+// My Stats overlay (Task #154)
+// -----------------------------------------------------------------------
+function toggleMyStats() {
+    var overlay = document.getElementById('my-stats-overlay');
+    if (!overlay) return;
+    if (overlay.style.display === 'block') {
+        overlay.style.display = 'none';
+        document.body.style.overflow = '';
+    } else {
+        overlay.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        loadMyStats();
+    }
+}
+
+function _fmtTime(minutes) {
+    if (minutes < 60) {
+        return { value: String(minutes), sub: minutes === 1 ? 'minute active' : 'minutes active' };
+    }
+    var h = Math.floor(minutes / 60);
+    var m = minutes % 60;
+    var sub = h + 'h ' + (m > 0 ? m + 'm' : '') + ' active';
+    return { value: h + 'h' + (m > 0 ? ' ' + m + 'm' : ''), sub: sub.trim() };
+}
+
+function _fmtSaved(minutes) {
+    if (minutes < 60) {
+        return { value: String(minutes), sub: 'minutes saved' };
+    }
+    var h = Math.floor(minutes / 60);
+    var m = minutes % 60;
+    return { value: h + 'h' + (m > 0 ? ' ' + m + 'm' : ''), sub: 'estimated time saved' };
+}
+
+function loadMyStats() {
+    var loadingEl = document.getElementById('my-stats-loading');
+    var gridEl = document.getElementById('my-stats-grid');
+    if (loadingEl) { loadingEl.style.display = ''; }
+    if (gridEl) { gridEl.style.display = 'none'; }
+
+    fetch('/api/user-stats')
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(stats) {
+            if (!stats) return;
+            renderMyStats(stats);
+        })
+        .catch(function() {
+            if (loadingEl) { loadingEl.textContent = 'Could not load stats.'; }
+        });
+}
+
+function renderMyStats(stats) {
+    var loadingEl = document.getElementById('my-stats-loading');
+    var gridEl = document.getElementById('my-stats-grid');
+
+    var minutes = stats.minutes_in_app || 0;
+    var timeFmt = _fmtTime(minutes);
+    var timeEl = document.getElementById('stat-time-value');
+    var timeSubEl = document.getElementById('stat-time-sub');
+    if (timeEl) timeEl.textContent = timeFmt.value;
+    if (timeSubEl) timeSubEl.textContent = timeFmt.sub;
+
+    var totalCreated = (stats.drafts_saved || 0) + (stats.artifacts_sent || 0);
+    var draftsEl = document.getElementById('stat-drafts-value');
+    var draftsSubEl = document.getElementById('stat-drafts-sub');
+    if (draftsEl) draftsEl.textContent = String(totalCreated);
+    if (draftsSubEl) {
+        var parts = [];
+        if (stats.drafts_saved > 0) parts.push(stats.drafts_saved + ' draft' + (stats.drafts_saved !== 1 ? 's' : '') + ' saved');
+        if (stats.artifacts_sent > 0) parts.push(stats.artifacts_sent + ' published');
+        draftsSubEl.textContent = parts.length > 0 ? parts.join(' · ') : 'no activity yet';
+    }
+
+    var savedFmt = _fmtSaved(stats.time_saved_minutes || 0);
+    var savedEl = document.getElementById('stat-saved-value');
+    var savedSubEl = document.getElementById('stat-saved-sub');
+    if (savedEl) savedEl.textContent = savedFmt.value;
+    if (savedSubEl) savedSubEl.textContent = savedFmt.sub;
+
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (gridEl) gridEl.style.display = '';
+}
+
+// -----------------------------------------------------------------------
+// Heartbeat (Task #154): ping every 60 s while the tab is active
+// -----------------------------------------------------------------------
+(function() {
+    function sendHeartbeat() {
+        if (document.visibilityState === 'hidden') return;
+        fetch('/api/heartbeat', { method: 'POST' }).catch(function() {});
+    }
+    setInterval(sendHeartbeat, 60000);
+})();
+
 // ----------------------------------------------------------------------
 // Attachment Storage panel (Task #99)
 // ----------------------------------------------------------------------
@@ -18126,6 +18326,11 @@ document.addEventListener('keydown', function(e) {
         // the per-artifact URL (`/artifact/<id>`) and closing them
         // rewrites the URL back to `/`, which feels to the user like
         // the browser navigated back.
+        var myStatsOverlay = document.getElementById('my-stats-overlay');
+        if (myStatsOverlay && myStatsOverlay.style.display === 'block') {
+            toggleMyStats();
+            return;
+        }
         var analyticsOverlay = document.getElementById('analytics-overlay');
         if (analyticsOverlay && analyticsOverlay.style.display === 'block') {
             toggleAnalytics();
