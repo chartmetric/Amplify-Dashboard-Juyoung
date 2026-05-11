@@ -843,6 +843,17 @@ def _sync_live_categories(data: dict, live_cats: list[dict]) -> bool:
 # Every live read falls back to the local working copy on any client error
 # so an upstream outage never breaks the admin UI entirely.
 
+def _stamp_live_published(post: dict) -> dict:
+    """Mark a post returned directly from the Chartmetric prod endpoint as
+    published.  Posts that exist on the live API are, by definition, published
+    — the concept of 'draft' only exists in the Amplify local working copy."""
+    post = dict(post)
+    post["is_published"] = True
+    post.setdefault("status", "published")
+    post["status"] = "published"
+    return post
+
+
 def list_posts(status: str | None = None, category: str | None = None,
                search: str | None = None, offset: int = 0,
                limit: int = 25) -> dict:
@@ -850,8 +861,10 @@ def list_posts(status: str | None = None, category: str | None = None,
         return _stub_list_posts(status, category, search, offset, limit)
     from integrations import chartmetric_announcement_client as cmc
     try:
-        return cmc.list_posts(status=status, category=category,
-                               search=search, offset=offset, limit=limit)
+        result = cmc.list_posts(status=status, category=category,
+                                search=search, offset=offset, limit=limit)
+        result["items"] = [_stamp_live_published(p) for p in result.get("items") or []]
+        return result
     except cmc.ChartmetricClientError as exc:
         logger.warning(
             "[announcement_store] list_posts live fetch failed (%s); "
@@ -883,7 +896,8 @@ def get_post(post_id: int) -> dict | None:
         # Re-attach Amplify-only metadata so the editor form is complete.
         for field in _AMPLIFY_ONLY_POST_FIELDS:
             remote.setdefault(field, local.get(field))
-        return remote
+        # The post exists on the prod endpoint — it is published.
+        return _stamp_live_published(remote)
     except cmc.ChartmetricClientError as exc:
         logger.warning(
             "[announcement_store] get_post live fetch failed (%s); "
