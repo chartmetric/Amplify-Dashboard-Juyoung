@@ -340,21 +340,39 @@ def _short_error(body: Any) -> str:
 # Posts
 # ---------------------------------------------------------------------------
 
+_API_MAX_LIMIT = 50  # Live API rejects limit > 50
+
+
+def _fetch_page(offset: int, limit: int) -> tuple[list, int]:
+    """Fetch one page from /announcement/list; return (items, total)."""
+    params: dict[str, int] = {"limit": min(limit, _API_MAX_LIMIT)}
+    if offset:
+        params["offset"] = offset
+    code, body = _request("GET", POSTS_LIST_PATH, params=params)
+    raw = _ensure_2xx(code, body, POSTS_LIST_PATH) or {}
+    items = raw.get("data") or raw.get("items") or []
+    total = raw.get("total", len(items))
+    return list(items), int(total)
+
+
 def list_posts(*, status: str | None = None, category: str | None = None,
                search: str | None = None, offset: int = 0,
                limit: int = 25) -> dict:
-    # The live API only accepts offset/limit; status/category/search are not allowed.
-    params: dict = {}
-    if offset:
-        params["offset"] = offset
-    if limit != 25:
-        params["limit"] = limit
-    code, body = _request("GET", POSTS_LIST_PATH, params=params or None)
-    raw = _ensure_2xx(code, body, POSTS_LIST_PATH) or {}
-    # Live API returns {"data": [...], "total": N}; normalise to {"items": [...], "total": N}.
-    if isinstance(raw, dict) and "data" in raw and "items" not in raw:
-        raw = {"items": raw["data"], "total": raw.get("total", len(raw["data"]))}
-    return raw or {"items": [], "total": 0}
+    # The live API only accepts offset/limit (max 50 per page);
+    # status/category/search are not supported — filtering is done client-side
+    # when the store layer needs it.
+    all_items: list = []
+    remaining = limit
+    cur_offset = offset
+    total = 0
+    while remaining > 0:
+        page, total = _fetch_page(cur_offset, min(remaining, _API_MAX_LIMIT))
+        all_items.extend(page)
+        if len(page) < _API_MAX_LIMIT:
+            break  # reached the last page
+        cur_offset += len(page)
+        remaining -= len(page)
+    return {"items": all_items, "total": total}
 
 
 def get_post(post_id: int | str) -> dict | None:
