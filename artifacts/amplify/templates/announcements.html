@@ -270,7 +270,7 @@ tr:hover td { background: rgba(255,255,255,0.02); }
             <tr>
               <th style="width:30%">Title</th>
               <th>Categories</th>
-              <th>Format</th>
+              <th>Boost</th>
               <th>Status</th>
               <th>Updated</th>
               <th style="width:1%"></th>
@@ -369,14 +369,14 @@ tr:hover td { background: rgba(255,255,255,0.02); }
       <div class="helper">English is the source. Click "✨ Auto-translate" to fill all six languages with Claude (preserving block structure and product names).</div>
     </div>
 
-    <div class="form-row grid-3">
+    <div class="form-row grid-2">
       <div>
-        <label>Display format</label>
-        <select id="f-display-format">
-          <option value="banner">Banner (top-of-app strip)</option>
-          <option value="popup">Popup (modal on first sight)</option>
-          <option value="inline">Inline (embedded in feed)</option>
-        </select>
+        <label>Boost types <span style="font-weight:normal;font-size:11px;color:var(--text-muted)">(none = inline panel only)</span></label>
+        <div class="toggle-row" style="margin-top:6px;gap:16px">
+          <label class="toggle"><input type="checkbox" class="f-boost-type" value="banner" onchange="schedulePreview()" /> Banner</label>
+          <label class="toggle"><input type="checkbox" class="f-boost-type" value="popup" onchange="schedulePreview()" /> Popup</label>
+          <label class="toggle"><input type="checkbox" class="f-boost-type" value="email" onchange="schedulePreview()" /> Email</label>
+        </div>
       </div>
       <div>
         <label>Status</label>
@@ -386,10 +386,11 @@ tr:hover td { background: rgba(255,255,255,0.02); }
           <option value="schedule">Schedule for later</option>
         </select>
       </div>
-      <div id="schedule-wrap" style="display:none">
-        <label>Scheduled publish at (UTC)</label>
-        <input type="datetime-local" id="f-scheduled-at" />
-      </div>
+    </div>
+
+    <div class="form-row" id="schedule-wrap" style="display:none">
+      <label>Scheduled publish at (UTC)</label>
+      <input type="datetime-local" id="f-scheduled-at" />
     </div>
 
     <div class="form-row">
@@ -409,7 +410,6 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 
     <div class="form-row toggle-row">
       <label class="toggle"><input type="checkbox" id="f-pinned" /> Pin to top</label>
-      <label class="toggle"><input type="checkbox" id="f-boosted" /> Boost (priority feed)</label>
     </div>
 
     <div class="actions">
@@ -421,14 +421,6 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 
    <aside class="preview-col">
     <h3>Live preview</h3>
-
-    <div class="preview-toggle-row">
-      <div>
-        <div class="label">Boost as popup</div>
-        <div class="hint" id="boost-hint">Boosted posts surface as a centered modal on first sight.</div>
-      </div>
-      <label class="toggle"><input type="checkbox" id="f-boosted-mirror" onchange="onBoostMirror(this.checked)" /></label>
-    </div>
 
     <div>
       <div class="preview-frame-label" id="preview-frame-label">In-drawer card</div>
@@ -633,7 +625,7 @@ function renderPosts(items) {
       <td><div style="font-weight:600">${escapeHtml(p.title||'(untitled)')}${pinned}</div>
           <div class="dim" style="font-size:11px">id ${p.id}</div></td>
       <td>${cats || '<span class="dim">—</span>'}</td>
-      <td><span class="badge format">${escapeHtml(p.display_format||'banner')}</span></td>
+      <td>${(p.boost_types||[]).length ? (p.boost_types).map(b=>`<span class="badge format">${escapeHtml(b)}</span>`).join(' ') : '<span class="dim">—</span>'}</td>
       <td><span class="badge ${p.status}">${escapeHtml(p.status)}</span></td>
       <td class="muted">${escapeHtml(updated)}</td>
       <td class="row-actions">
@@ -715,13 +707,12 @@ function openPostEditor(id) {
   $('post-modal-title').textContent = id ? 'Edit Post #' + id : 'New Post';
   $('f-title').value = '';
   $('f-body').innerHTML = '';
-  $('f-display-format').value = 'banner';
+  document.querySelectorAll('.f-boost-type').forEach(cb => { cb.checked = false; });
   $('f-status').value = 'draft';
   $('f-scheduled-at').value = '';
   $('f-image-url').value = '';
   $('f-image-preview').style.display = 'none';
   $('f-pinned').checked = false;
-  $('f-boosted').checked = false;
   $('btn-save-publish').textContent = 'Save';
   onStatusChange();
   renderCategoryCheckboxes([]);
@@ -744,7 +735,8 @@ async function loadPostIntoEditor(id) {
     };
     $('f-title').value = p.title || '';
     $('f-body').innerHTML = await slateToHtml(p.content || []);
-    $('f-display-format').value = p.display_format || 'banner';
+    const boostTypes = p.boost_types || [];
+    document.querySelectorAll('.f-boost-type').forEach(cb => { cb.checked = boostTypes.includes(cb.value); });
     if (p.status === 'published') {
       $('f-status').value = 'publish_now';
       $('btn-save-publish').textContent = 'Update (republish)';
@@ -758,7 +750,6 @@ async function loadPostIntoEditor(id) {
     $('f-image-url').value = p.image_url || '';
     if (p.image_url) { $('f-image-preview').src = p.image_url; $('f-image-preview').style.display='inline-block'; }
     $('f-pinned').checked = !!p.is_pinned;
-    $('f-boosted').checked = !!p.is_boosted;
     renderCategoryCheckboxes((p.categories||[]).map(c=>c.id));
     // Load translations into state
     _translationsState = {};
@@ -792,7 +783,8 @@ function renderPreview() {
   const bodyHtml = $('f-body').innerHTML || '';
   const imageUrl = $('f-image-url').value.trim();
   const isPinned = $('f-pinned').checked;
-  const isBoosted = $('f-boosted').checked;
+  const boostTypesChecked = Array.from(document.querySelectorAll('.f-boost-type:checked')).map(i => i.value);
+  const isBoosted = boostTypesChecked.length > 0;
   $('preview-title').textContent = title + (isPinned ? '  📌' : '');
   $('preview-body').innerHTML = bodyHtml || '<span class="dim">Body preview will appear here…</span>';
   if (imageUrl) {
@@ -811,75 +803,14 @@ function renderPreview() {
   // Boost render mode
   const mock = $('preview-mock');
   const label = $('preview-frame-label');
-  if (isBoosted) {
+  if (boostTypesChecked.includes('popup')) {
     mock.classList.add('popup');
     label.textContent = 'Popup (modal on first sight)';
   } else {
     mock.classList.remove('popup');
-    label.textContent = 'In-drawer card (announcement feed)';
-  }
-  // Mirror into preview-pane checkbox
-  const mirror = $('f-boosted-mirror');
-  if (mirror && mirror.checked !== isBoosted) mirror.checked = isBoosted;
-}
-
-async function onBoostMirror(checked) {
-  // Entry point shared by the preview-pane mirror checkbox AND the
-  // editor's Boost checkbox — keep both in sync, then run the
-  // gated immediate-PATCH flow exactly once. Re-entry is guarded so
-  // a programmatic rollback inside the catch() doesn't bounce back
-  // through the change listener.
-  if (window._boostMirrorBusy) return;
-  window._boostMirrorBusy = true;
-  const cb = $('f-boosted');
-  const mirror = $('f-boosted-mirror');
-  if (cb && cb.checked !== checked) cb.checked = checked;
-  if (mirror && mirror.checked !== checked) mirror.checked = checked;
-  schedulePreview();
-  // The immediate boost endpoint is *only* for posts that are already
-  // published AND already synced to Chartmetric. For new posts, drafts,
-  // and scheduled posts we just stage the value in the form — it will
-  // be persisted as part of the next Save / Publish.
-  const meta = _editingPostMeta;
-  // Gate on BOTH the persisted status (only published posts may boost
-  // server-side) AND the current dropdown value — if the editor has
-  // an unsaved switch to draft/scheduled, treat the boost as staged
-  // and let the next Save persist it through the normal write path.
-  const formStatus = $('f-status') ? $('f-status').value : '';
-  const formStillPublished = (formStatus === '' || formStatus === 'publish_now');
-  const canFireLive = !!(_editingPostId
-                          && meta
-                          && meta.status === 'published'
-                          && formStillPublished
-                          && (meta.chartmetric_id || _modeInfo && _modeInfo.stub_mode));
-  if (!canFireLive) {
-    toast('Boost staged — will save with the post', 'info');
-    window._boostMirrorBusy = false;
-    return;
-  }
-  try {
-    const r = await apiJson('/api/admin/announcements/' + _editingPostId + '/boost',
-      { method: 'POST', body: JSON.stringify({ is_boosted: checked }) });
-    if (r.post) {
-      _editingPostMeta = {
-        status: r.post.status,
-        chartmetric_id: r.post.chartmetric_id || null,
-        is_boosted: !!r.post.is_boosted,
-      };
-    }
-    const live = !(_modeInfo && _modeInfo.stub_mode);
-    if (live) {
-      toast(checked ? 'Boost ON — pushed to Chartmetric' : 'Boost OFF — pushed to Chartmetric');
-    } else {
-      toast(checked ? 'Boost ON (stub mode — saved locally only)' : 'Boost OFF (stub mode — saved locally only)');
-    }
-  } catch(e) {
-    if (cb) cb.checked = !checked;
-    if (mirror) mirror.checked = !checked;
-    schedulePreview();
-    toast('Boost failed: '+e.message,'error');
-  } finally {
-    window._boostMirrorBusy = false;
+    label.textContent = isBoosted
+      ? 'Boosted — ' + boostTypesChecked.join(', ')
+      : 'In-drawer card (announcement feed)';
   }
 }
 
@@ -888,14 +819,6 @@ function bindPreviewListeners() {
   window._previewBound = true;
   ['f-title','f-image-url'].forEach(id => $(id).addEventListener('input', schedulePreview));
   $('f-pinned').addEventListener('change', schedulePreview);
-  // Flipping the form's Boost checkbox should behave identically to
-  // flipping the preview-pane mirror: same gating, same immediate
-  // PATCH for published+synced posts, same staged-toast for everything
-  // else. We delegate to onBoostMirror() and let it sync the mirror.
-  $('f-boosted').addEventListener('change', (ev) => {
-    if (ev && ev.isTrusted === false) return;  // ignore programmatic flips
-    onBoostMirror($('f-boosted').checked);
-  });
   $('f-body').addEventListener('input', schedulePreview);
   // Fire when categories change
   document.addEventListener('change', e => {
@@ -1067,9 +990,8 @@ async function savePost(forceStatus) {
     title, content, translations,
     category_ids: cat_ids,
     image_url: $('f-image-url').value.trim() || null,
-    display_format: $('f-display-format').value,
+    boost_types: Array.from(document.querySelectorAll('.f-boost-type:checked')).map(i => i.value),
     is_pinned: $('f-pinned').checked,
-    is_boosted: $('f-boosted').checked,
     status,
     scheduled_publish_at: scheduled,
   };

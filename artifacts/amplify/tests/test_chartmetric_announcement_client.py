@@ -3,7 +3,7 @@
 These tests verify the *exact* payload shape Amplify sends to the Chartmetric
 admin REST API once the live wiring is enabled — namely:
 
-  * Amplify-only fields (display_format / scheduled_publish_at / source_*) are
+  * Amplify-only fields (boost_types / scheduled_publish_at / source_*) are
     stripped before the wire call.
   * The local-id ↔ Chartmetric-id mapping is persisted on the working copy.
   * Categories are auto-resolved by name (case-insensitive); missing names
@@ -334,9 +334,8 @@ class CreatePostFlowTests(_LiveModeTestCase):
                                                   "children": [{"text": "Welt"}]}]}},
             "category_ids": [cat_id],
             "image_url": None,
-            "display_format": "popup",
+            "boost_types": ["popup"],
             "is_pinned": True,
-            "is_boosted": False,
             "status": "publish_now",
             "scheduled_publish_at": None,
             "source_feature_id": "ABC123",
@@ -344,7 +343,8 @@ class CreatePostFlowTests(_LiveModeTestCase):
         })
 
         # 1. Amplify-side: chartmetric_id wired up, Amplify-only fields kept locally.
-        self.assertEqual(post["display_format"], "popup")
+        self.assertEqual(post["boost_types"], ["popup"])
+        self.assertTrue(post["is_boosted"])
         self.assertEqual(post["source_feature_id"], "ABC123")
         self.assertIsNotNone(post["chartmetric_id"])
 
@@ -353,7 +353,7 @@ class CreatePostFlowTests(_LiveModeTestCase):
         post_creates = [c for c in post_creates if c["path"] == "/announcement"]
         self.assertEqual(len(post_creates), 1, "Expected exactly one post-create call")
         body = post_creates[0]["json"]
-        self.assertNotIn("display_format", body)
+        self.assertNotIn("boost_types", body)
         self.assertNotIn("scheduled_publish_at", body)
         self.assertNotIn("source_feature_id", body)
         self.assertNotIn("source_feature_set_id", body)

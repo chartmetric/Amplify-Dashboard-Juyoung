@@ -11,7 +11,7 @@ Two modes, switched automatically by environment configuration:
   * **Proxy / live** — picked when BOTH ``CHARTMETRIC_ADMIN_API_BASE_URL``
     and ``CHARTMETRIC_ADMIN_API_TOKEN`` are set. The local JSON store
     remains the *working copy* (it tracks Amplify-only metadata such
-    as ``display_format``, ``scheduled_publish_at``, ``source_feature_*``,
+    as ``boost_types``, ``scheduled_publish_at``, ``source_feature_*``,
     plus the local-id ↔ Chartmetric-id mapping) and every create /
     update / delete is also pushed to the live Chartmetric REST API
     via ``integrations.chartmetric_announcement_client``.
@@ -42,7 +42,7 @@ logger = logging.getLogger("amplify.announcement_store")
 _STORE_FILE = os.path.join(os.path.dirname(__file__), "..", ".announcement_store.json")
 _lock = threading.Lock()
 
-VALID_DISPLAY_FORMATS = ("banner", "popup", "inline")
+VALID_BOOST_TYPES = ("banner", "popup", "email")
 VALID_STATUSES = ("draft", "publish_now", "schedule")
 HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 TARGET_LOCALES = ("de", "es", "fr", "ja", "ko", "pt")
@@ -304,9 +304,10 @@ def _validate_post_input(payload: dict) -> dict:
     image_url = payload.get("image_url") or None
     if image_url is not None and not isinstance(image_url, str):
         raise ValidationError("image_url must be a string or null")
-    display_format = payload.get("display_format") or "banner"
-    if display_format not in VALID_DISPLAY_FORMATS:
-        raise ValidationError(f"display_format must be one of {VALID_DISPLAY_FORMATS}")
+    boost_types_raw = payload.get("boost_types") or []
+    if not isinstance(boost_types_raw, list):
+        raise ValidationError("boost_types must be an array")
+    boost_types = [b for b in boost_types_raw if b in VALID_BOOST_TYPES]
     status = payload.get("status") or "draft"
     if status not in VALID_STATUSES:
         raise ValidationError(f"status must be one of {VALID_STATUSES}")
@@ -323,9 +324,9 @@ def _validate_post_input(payload: dict) -> dict:
                                                 ("title", "content")),
         "category_ids": category_ids,
         "image_url": image_url,
-        "display_format": display_format,
+        "boost_types": boost_types,
         "is_pinned": bool(payload.get("is_pinned")),
-        "is_boosted": bool(payload.get("is_boosted")),
+        "is_boosted": len(boost_types) > 0,
         "status": status,
         "scheduled_publish_at": scheduled_at,
         "source_feature_id": payload.get("source_feature_id") or None,
@@ -425,7 +426,7 @@ def _stub_create_post(payload: dict) -> dict:
             "translations": cleaned["translations"],
             "category_ids": cleaned["category_ids"],
             "image_url": cleaned["image_url"],
-            "display_format": cleaned["display_format"],
+            "boost_types": cleaned["boost_types"],
             "is_pinned": cleaned["is_pinned"],
             "is_boosted": cleaned["is_boosted"],
             "created_at": now,
@@ -454,7 +455,7 @@ def _stub_update_post(post_id: int, payload: dict) -> dict | None:
         existing["translations"] = cleaned["translations"]
         existing["category_ids"] = cleaned["category_ids"]
         existing["image_url"] = cleaned["image_url"]
-        existing["display_format"] = cleaned["display_format"]
+        existing["boost_types"] = cleaned["boost_types"]
         existing["is_pinned"] = cleaned["is_pinned"]
         existing["is_boosted"] = cleaned["is_boosted"]
         existing["source_feature_id"] = cleaned["source_feature_id"]
@@ -559,7 +560,7 @@ def _stub_delete_category(cat_id: int) -> dict:
 #
 # In live (non-stub) mode the local JSON store is still the working copy —
 # it owns the local id space, all Amplify-only metadata
-# (display_format, scheduled_publish_at, source_feature_id,
+# (boost_types, scheduled_publish_at, source_feature_id,
 # source_feature_set_id) and the local-id ↔ Chartmetric-id mapping.
 # Each public CRUD entry-point performs the local mutation first, then
 # pushes the *cleaned* payload to Chartmetric via the dedicated client.
@@ -571,7 +572,7 @@ def _stub_delete_category(cat_id: int) -> dict:
 # tables (announcement_post / announcement_category) don't have these
 # columns. They live only in the Amplify working copy.
 _AMPLIFY_ONLY_POST_FIELDS = (
-    "display_format",
+    "boost_types",
     "scheduled_publish_at",
     "source_feature_id",
     "source_feature_set_id",
@@ -863,7 +864,7 @@ def get_post(post_id: int) -> dict | None:
         return _stub_get_post(post_id)
     # In live mode, look up the chartmetric_id stored in the local record,
     # then fetch the canonical row from the production API.  Amplify-only
-    # fields (display_format / scheduled_publish_at / source_feature_*)
+    # fields (boost_types / scheduled_publish_at / source_feature_*)
     # are merged back from the local record so the editor still has them.
     with _lock:
         data = _load()
@@ -928,7 +929,7 @@ def create_post(payload: dict) -> dict:
             "translations": cleaned["translations"],
             "category_ids": cleaned["category_ids"],
             "image_url": cleaned["image_url"],
-            "display_format": cleaned["display_format"],
+            "boost_types": cleaned["boost_types"],
             "is_pinned": cleaned["is_pinned"],
             "is_boosted": cleaned["is_boosted"],
             "created_at": now,
@@ -963,7 +964,7 @@ def update_post(post_id: int, payload: dict) -> dict | None:
         existing["translations"] = cleaned["translations"]
         existing["category_ids"] = cleaned["category_ids"]
         existing["image_url"] = cleaned["image_url"]
-        existing["display_format"] = cleaned["display_format"]
+        existing["boost_types"] = cleaned["boost_types"]
         existing["is_pinned"] = cleaned["is_pinned"]
         existing["is_boosted"] = cleaned["is_boosted"]
         existing["source_feature_id"] = cleaned["source_feature_id"]
