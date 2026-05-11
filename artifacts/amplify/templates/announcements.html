@@ -272,12 +272,13 @@ tr:hover td { background: rgba(255,255,255,0.02); }
               <th>Categories</th>
               <th>Boost</th>
               <th>Status</th>
+              <th>Published</th>
               <th>Updated</th>
               <th style="width:1%"></th>
             </tr>
           </thead>
           <tbody id="posts-tbody">
-            <tr><td colspan="6" class="empty-state">Loading…</td></tr>
+            <tr><td colspan="7" class="empty-state">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -620,6 +621,7 @@ function renderPosts(items) {
       `<span class="cat-pill" style="background:${escapeAttr(c.color||'#888')}">${escapeHtml(c.name||'')}</span>`
     ).join('');
     const updated = (p.modified_at||p.created_at||'').slice(0,16).replace('T',' ');
+    const published = p.published_at ? p.published_at.slice(0,16).replace('T',' ') : '—';
     const pinned = p.is_pinned ? ' 📌' : '';
     return `<tr>
       <td><div style="font-weight:600">${escapeHtml(p.title||'(untitled)')}${pinned}</div>
@@ -627,6 +629,7 @@ function renderPosts(items) {
       <td>${cats || '<span class="dim">—</span>'}</td>
       <td>${(p.boost_types||[]).length ? (p.boost_types).map(b=>`<span class="badge format">${escapeHtml(b)}</span>`).join(' ') : '<span class="dim">—</span>'}</td>
       <td><span class="badge ${p.status}">${escapeHtml(p.status)}</span></td>
+      <td class="muted">${escapeHtml(published)}</td>
       <td class="muted">${escapeHtml(updated)}</td>
       <td class="row-actions">
         <div class="row-actions-inner">
