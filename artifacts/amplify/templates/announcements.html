@@ -86,7 +86,8 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .cat-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
   font-weight: 600; margin-right: 4px; color: #0d1620; }
 .empty-state { padding: 60px 24px; text-align: center; color: var(--text-dim); }
-.row-actions { display: flex; gap: 6px; align-items: center; vertical-align: middle; }
+.row-actions { vertical-align: middle; white-space: nowrap; }
+.row-actions-inner { display: flex; gap: 6px; align-items: center; }
 /* Modal / drawer */
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100;
   display: none; align-items: center; justify-content: center; padding: 24px; }
@@ -636,8 +637,10 @@ function renderPosts(items) {
       <td><span class="badge ${p.status}">${escapeHtml(p.status)}</span></td>
       <td class="muted">${escapeHtml(updated)}</td>
       <td class="row-actions">
-        <button class="btn small secondary" onclick="openPostEditor(${p.id})">Edit</button>
-        <button class="btn small danger" onclick="deletePost(${p.id})">Delete</button>
+        <div class="row-actions-inner">
+          <button class="btn small secondary" onclick="openPostEditor(${p.id})">Edit</button>
+          <button class="btn small danger" onclick="deletePost(${p.id})">Delete</button>
+        </div>
       </td>
     </tr>`;
   }).join('');
