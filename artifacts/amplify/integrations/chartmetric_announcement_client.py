@@ -35,8 +35,9 @@ import config
 logger = logging.getLogger("amplify.chartmetric_announcement_client")
 
 # Path constants — adjust here if Chartmetric finalises a different prefix.
-ADMIN_PREFIX = "/admin/announcement"
-POSTS_PATH = ADMIN_PREFIX                  # POST/GET list, /<id> for detail
+ADMIN_PREFIX = "/announcement"
+POSTS_PATH = ADMIN_PREFIX                  # POST /<id> for create/detail
+POSTS_LIST_PATH = f"{ADMIN_PREFIX}/list"   # GET list endpoint
 CATEGORIES_PATH = f"{ADMIN_PREFIX}/categories"
 POST_CATEGORIES_LINK_PATH = "{post_id}/categories"   # PUT replaces link rows
 POST_BOOST_PATH = "{post_id}/boost"        # PATCH is_boosted only
@@ -135,7 +136,7 @@ def _login_service_account() -> str:
     try:
         resp = req_lib.request(
             "POST", url,
-            json={"email": email, "password": password},
+            json={"username": email, "password": password},
             headers={
                 "Accept": "application/json",
                 "Content-Type": "application/json",
@@ -342,15 +343,18 @@ def _short_error(body: Any) -> str:
 def list_posts(*, status: str | None = None, category: str | None = None,
                search: str | None = None, offset: int = 0,
                limit: int = 25) -> dict:
-    params = {
-        "status": status or "all",
-        "category": category or "",
-        "search": search or "",
-        "offset": offset,
-        "limit": limit,
-    }
-    code, body = _request("GET", POSTS_PATH, params=params)
-    return _ensure_2xx(code, body, POSTS_PATH) or {"items": [], "total": 0}
+    # The live API only accepts offset/limit; status/category/search are not allowed.
+    params: dict = {}
+    if offset:
+        params["offset"] = offset
+    if limit != 25:
+        params["limit"] = limit
+    code, body = _request("GET", POSTS_LIST_PATH, params=params or None)
+    raw = _ensure_2xx(code, body, POSTS_LIST_PATH) or {}
+    # Live API returns {"data": [...], "total": N}; normalise to {"items": [...], "total": N}.
+    if isinstance(raw, dict) and "data" in raw and "items" not in raw:
+        raw = {"items": raw["data"], "total": raw.get("total", len(raw["data"]))}
+    return raw or {"items": [], "total": 0}
 
 
 def get_post(post_id: int | str) -> dict | None:

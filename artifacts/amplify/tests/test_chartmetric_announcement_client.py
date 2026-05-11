@@ -97,7 +97,7 @@ class FakeChartmetric:
 
     # -- routing --------------------------------------------------------
     def _dispatch(self, method, path, body):
-        if path == "/admin/announcement/categories":
+        if path == "/announcement/categories":
             if method == "GET":
                 return _FakeResponse(200, list(self.categories.values()))
             if method == "POST":
@@ -106,7 +106,7 @@ class FakeChartmetric:
                 cat = {"id": cid, **body}
                 self.categories[cid] = cat
                 return _FakeResponse(201, cat)
-        if path.startswith("/admin/announcement/categories/"):
+        if path.startswith("/announcement/categories/"):
             cid = int(path.rsplit("/", 1)[-1])
             if method == "PUT":
                 if cid not in self.categories:
@@ -116,25 +116,26 @@ class FakeChartmetric:
             if method == "DELETE":
                 self.categories.pop(cid, None)
                 return _FakeResponse(204, None)
-        if path == "/admin/announcement":
+        if path == "/announcement/list":
+            if method == "GET":
+                return _FakeResponse(200, {"data": list(self.posts.values()),
+                                           "total": len(self.posts)})
+        if path == "/announcement":
             if method == "POST":
                 pid = self.next_post_id
                 self.next_post_id += 1
                 row = {"id": pid, **body}
                 self.posts[pid] = row
                 return _FakeResponse(201, row)
-            if method == "GET":
-                return _FakeResponse(200, {"items": list(self.posts.values()),
-                                            "total": len(self.posts)})
-        if path.startswith("/admin/announcement/") and path.endswith("/boost"):
+        if path.startswith("/announcement/") and path.endswith("/boost"):
             pid = int(path.split("/")[-2])
             if method == "PATCH":
                 if pid not in self.posts:
                     return _FakeResponse(404, {"error": "not found"})
                 self.posts[pid]["is_boosted"] = bool(body.get("is_boosted"))
                 return _FakeResponse(200, {"id": pid,
-                                            "is_boosted": self.posts[pid]["is_boosted"]})
-        if path.startswith("/admin/announcement/") and path.endswith("/categories"):
+                                           "is_boosted": self.posts[pid]["is_boosted"]})
+        if path.startswith("/announcement/") and path.endswith("/categories"):
             pid = int(path.split("/")[-2])
             if method == "PUT":
                 ids = body.get("category_ids") or []
@@ -142,9 +143,9 @@ class FakeChartmetric:
                 return _FakeResponse(200, {"id": pid, "category_ids": ids})
         # Fall-through: detail / update / delete on a post.
         parts = path.split("/")
-        if len(parts) == 4 and parts[:3] == ["", "admin", "announcement"]:
+        if len(parts) == 3 and parts[:2] == ["", "announcement"]:
             try:
-                pid = int(parts[3])
+                pid = int(parts[2])
             except ValueError:
                 pid = None
             if pid is not None:
@@ -348,8 +349,8 @@ class CreatePostFlowTests(_LiveModeTestCase):
         self.assertIsNotNone(post["chartmetric_id"])
 
         # 2. The push to Chartmetric must have a clean payload — NO Amplify-only fields.
-        post_creates = self._calls(method="POST", path_contains="/admin/announcement")
-        post_creates = [c for c in post_creates if c["path"] == "/admin/announcement"]
+        post_creates = self._calls(method="POST", path_contains="/announcement")
+        post_creates = [c for c in post_creates if c["path"] == "/announcement"]
         self.assertEqual(len(post_creates), 1, "Expected exactly one post-create call")
         body = post_creates[0]["json"]
         self.assertNotIn("display_format", body)
@@ -367,7 +368,7 @@ class CreatePostFlowTests(_LiveModeTestCase):
 
         # 4. Category was auto-created on Chartmetric and its id was used in the body.
         cat_creates = self._calls(method="POST",
-                                   path_contains="/admin/announcement/categories")
+                                   path_contains="/announcement/categories")
         self.assertEqual(len(cat_creates), 1)
         remote_cat_id = list(self.fake.categories.keys())[0]
         self.assertEqual(body["category_ids"], [remote_cat_id])
@@ -375,9 +376,9 @@ class CreatePostFlowTests(_LiveModeTestCase):
         # 5. Link-table replace fired right after.
         link_calls = self._calls(method="PUT", path_contains="/categories")
         link_calls = [c for c in link_calls
-                      if c["path"].startswith("/admin/announcement/")
+                      if c["path"].startswith("/announcement/")
                       and c["path"].endswith("/categories")
-                      and c["path"].count("/") == 4]
+                      and c["path"].count("/") == 3]
         self.assertEqual(len(link_calls), 1)
         self.assertEqual(link_calls[0]["json"], {"category_ids": [remote_cat_id]})
 
@@ -396,7 +397,7 @@ class CreatePostFlowTests(_LiveModeTestCase):
         })
         first_cat_creates = len([c for c in self.fake.calls
                                   if c["method"] == "POST"
-                                  and c["path"] == "/admin/announcement/categories"])
+                                  and c["path"] == "/announcement/categories"])
         announcement_store.create_post({
             "title": "Second", "content": [{"type": "p"}],
             "category_ids": [cat_id], "status": "draft",
@@ -404,7 +405,7 @@ class CreatePostFlowTests(_LiveModeTestCase):
         })
         second_cat_creates = len([c for c in self.fake.calls
                                    if c["method"] == "POST"
-                                   and c["path"] == "/admin/announcement/categories"])
+                                   and c["path"] == "/announcement/categories"])
         # No additional category-create — the cached chartmetric_id was reused.
         self.assertEqual(first_cat_creates, 1)
         self.assertEqual(second_cat_creates, 1)
@@ -425,7 +426,7 @@ class TransactionalWriteTests(_LiveModeTestCase):
         # Force the post-create POST to 500.
         original = self.fake._dispatch
         def boom(method, path, body):
-            if method == "POST" and path == "/admin/announcement":
+            if method == "POST" and path == "/announcement":
                 return _FakeResponse(500, {"error": "kaboom"})
             return original(method, path, body)
         self.fake._dispatch = boom
@@ -463,7 +464,7 @@ class TransactionalWriteTests(_LiveModeTestCase):
         })
         list_calls = [c for c in self.fake.calls
                        if c["method"] == "GET"
-                       and c["path"] == "/admin/announcement/categories"]
+                       and c["path"] == "/announcement/categories"]
         self.assertLessEqual(len(list_calls), 1,
                               f"Expected at most 1 GET /categories per save; got {len(list_calls)}")
 
@@ -492,7 +493,7 @@ class UpdatePostFlowTests(_LiveModeTestCase):
         link_calls = [c for c in self.fake.calls
                       if c["method"] == "PUT"
                       and c["path"].endswith("/categories")
-                      and c["path"].count("/") == 4]
+                      and c["path"].count("/") == 3]
         self.assertEqual(len(link_calls), 1)
         # The body should contain exactly one (different) remote id.
         self.assertEqual(len(link_calls[0]["json"]["category_ids"]), 1)
@@ -549,7 +550,7 @@ class DeleteFlowTests(_LiveModeTestCase):
         self.assertTrue(ok)
         deletes = [c for c in self.fake.calls if c["method"] == "DELETE"]
         self.assertEqual(len(deletes), 1)
-        self.assertEqual(deletes[0]["path"], f"/admin/announcement/{remote_id}")
+        self.assertEqual(deletes[0]["path"], f"/announcement/{remote_id}")
 
 
 class LegacyPublishQuickTests(_LiveModeTestCase):
@@ -560,10 +561,10 @@ class LegacyPublishQuickTests(_LiveModeTestCase):
             title="Quick publish", body="<p>hi there</p>",
             feature_id="FEAT-1", category="New Feature")
         self.assertTrue(result["success"], msg=result)
-        # The shim must end up POSTing to /admin/announcement.
+        # The shim must end up POSTing to /announcement.
         post_creates = [c for c in self.fake.calls
                          if c["method"] == "POST"
-                         and c["path"] == "/admin/announcement"]
+                         and c["path"] == "/announcement"]
         self.assertEqual(len(post_creates), 1)
         body = post_creates[0]["json"]
         self.assertEqual(body["title"], "Quick publish")
