@@ -777,14 +777,68 @@ def _delete_category_on_chartmetric(remote_id: int | None) -> None:
 # ---------------------------------------------------------------------------
 #
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Live-category sync helper
+# ---------------------------------------------------------------------------
+
+def _sync_live_categories(data: dict, live_cats: list[dict]) -> bool:
+    """Merge categories fetched from the live API into the local store.
+
+    Strategy:
+    - Match on ``chartmetric_id``.  If a local entry already carries that id,
+      update name / color / translations in-place.
+    - If no local entry exists yet, insert a new one using the next available
+      local id so existing local ids are never disturbed.
+    Returns True if the data dict was mutated (caller must _save).
+    """
+    cm_to_local: dict[int, str] = {}
+    for local_id, cat in data["categories"].items():
+        cid = cat.get("chartmetric_id")
+        if cid is not None:
+            cm_to_local[int(cid)] = local_id
+
+    dirty = False
+    for live in live_cats:
+        live_id = live.get("id")
+        if live_id is None:
+            continue
+        live_id = int(live_id)
+
+        if live_id in cm_to_local:
+            cat = data["categories"][cm_to_local[live_id]]
+            for field, val in (
+                ("name", live.get("name") or cat.get("name", "")),
+                ("color", live.get("color") or cat.get("color", "#888")),
+                ("translations", live.get("translations") or cat.get("translations") or {}),
+            ):
+                if cat.get(field) != val:
+                    cat[field] = val
+                    dirty = True
+        else:
+            new_id = data.get("next_category_id", 1)
+            while str(new_id) in data["categories"]:
+                new_id += 1
+            data["next_category_id"] = new_id + 1
+            data["categories"][str(new_id)] = {
+                "id": new_id,
+                "name": live.get("name") or "",
+                "color": live.get("color") or "#888",
+                "translations": live.get("translations") or {},
+                "chartmetric_id": live_id,
+            }
+            dirty = True
+
+    return dirty
+
+
 # Read paths
 # ---------------------------------------------------------------------------
 # In stub mode all three reads come from the local working copy.
 # In live mode list_posts / get_post proxy through the Chartmetric API so
-# the admin panel shows canonical production data.  list_categories stays
-# local-only because it drives the local category validation and seeding
-# logic; a live fetch there would bypass _ensure_seed_categories and break
-# the category-id mapping used by create / update.
+# the admin panel shows canonical production data.  list_categories syncs
+# the live category list into the local store so the local-id↔chartmetric-id
+# mapping stays up-to-date for create / update, then returns the merged
+# local result (which includes Amplify-only fields like posts_count).
 # Every live read falls back to the local working copy on any client error
 # so an upstream outage never breaks the admin UI entirely.
 
@@ -837,9 +891,18 @@ def get_post(post_id: int) -> dict | None:
 
 
 def list_categories() -> list[dict]:
-    # Always served from the local working copy — the local store is the
-    # authoritative source for the local-id ↔ chartmetric-id mapping used
-    # by category validation in create / update.
+    if _live_mode_enabled():
+        from integrations import chartmetric_announcement_client as cmc
+        try:
+            live_cats = cmc.list_categories()
+            with _lock:
+                data = _load()
+                if _sync_live_categories(data, live_cats):
+                    _save(data)
+        except Exception as exc:
+            logger.warning(
+                "[announcement_store] list_categories live fetch failed (%s); "
+                "using local store", exc)
     return _stub_list_categories()
 
 

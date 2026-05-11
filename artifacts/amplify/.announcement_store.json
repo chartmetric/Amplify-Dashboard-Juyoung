@@ -17,9 +17,87 @@
       "id": 3,
       "name": "Heads up",
       "translations": {}
+    },
+    "4": {
+      "chartmetric_id": 1,
+      "color": "#6392D9",
+      "id": 4,
+      "name": "New Feature",
+      "translations": {
+        "de": {
+          "name": "Neue Funktion"
+        },
+        "es": {
+          "name": "Nueva Funci\u00f3n"
+        },
+        "fr": {
+          "name": "Nouvelle fonctionnalit\u00e9"
+        },
+        "ja": {
+          "name": "\u65b0\u6a5f\u80fd"
+        },
+        "ko": {
+          "name": "\uc0c8\ub85c\uc6b4 \uae30\ub2a5"
+        },
+        "pt": {
+          "name": "Nova Funcionalidade"
+        }
+      }
+    },
+    "5": {
+      "chartmetric_id": 2,
+      "color": "#63C8D9",
+      "id": 5,
+      "name": "Improvement",
+      "translations": {
+        "de": {
+          "name": "Verbesserung"
+        },
+        "es": {
+          "name": "Mejora"
+        },
+        "fr": {
+          "name": "Am\u00e9lioration"
+        },
+        "ja": {
+          "name": "\u6539\u5584"
+        },
+        "ko": {
+          "name": "\uac1c\uc120\uc0ac\ud56d"
+        },
+        "pt": {
+          "name": "Melhoria"
+        }
+      }
+    },
+    "6": {
+      "chartmetric_id": 3,
+      "color": "#FF3C3C",
+      "id": 6,
+      "name": "Announcement",
+      "translations": {
+        "de": {
+          "name": "Ank\u00fcndigung"
+        },
+        "es": {
+          "name": "Anuncio"
+        },
+        "fr": {
+          "name": "Annonce"
+        },
+        "ja": {
+          "name": "\u304a\u77e5\u3089\u305b"
+        },
+        "ko": {
+          "name": "\uacf5\uc9c0\uc0ac\ud56d"
+        },
+        "pt": {
+          "name": "An\u00fancio"
+        }
+      }
     }
   },
-  "next_category_id": 4,
+  "next_category_id": 7,
   "next_post_id": 2,
   "posts": {
     "1": {
