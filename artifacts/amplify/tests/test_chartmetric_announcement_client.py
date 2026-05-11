@@ -37,15 +37,23 @@ _AMPLIFY_DIR = os.path.dirname(_HERE)
 if _AMPLIFY_DIR not in sys.path:
     sys.path.insert(0, _AMPLIFY_DIR)
 
-# Force live mode BEFORE importing the store — live mode now activates
-# automatically when both env vars are set (no kill switch needed).
+# Force legacy bearer-token live mode BEFORE importing the store.
+# CM_* vars are cleared so real environment secrets don't leak into tests
+# and accidentally trigger the cookie-based auth path (which would attempt
+# a real /login against the fake URL and fail with 500).
 os.environ["CHARTMETRIC_ADMIN_API_BASE_URL"] = "https://api.chartmetric.test"
 os.environ["CHARTMETRIC_ADMIN_API_TOKEN"] = "test-token"
 os.environ.pop("ANNOUNCEMENTS_STUB_MODE", None)
+os.environ.pop("CM_API_BASE_URL", None)
+os.environ.pop("CM_SERVICE_ACCOUNT_EMAIL", None)
+os.environ.pop("CM_SERVICE_ACCOUNT_PASSWORD", None)
 
 import config  # noqa: E402
 config.CHARTMETRIC_ADMIN_API_BASE_URL = "https://api.chartmetric.test"
 config.CHARTMETRIC_ADMIN_API_TOKEN = "test-token"
+config.CM_API_BASE_URL = ""
+config.CM_SERVICE_ACCOUNT_EMAIL = ""
+config.CM_SERVICE_ACCOUNT_PASSWORD = ""
 
 from ai import announcement_store  # noqa: E402
 from integrations import chartmetric_announcement_client as cmc  # noqa: E402
@@ -170,6 +178,9 @@ class _LiveModeTestCase(unittest.TestCase):
         self.fake = FakeChartmetric()
         self._patcher = mock.patch("requests.request", side_effect=self.fake)
         self._patcher.start()
+        # Reset service-account token cache so cookie-auth state from a
+        # previous test (or real env) can't bleed in.
+        cmc.clear_service_account_token_cache()
         self.addCleanup(self._patcher.stop)
         self.addCleanup(self._cleanup_store)
 
@@ -204,10 +215,20 @@ class ModeSwitchTests(unittest.TestCase):
         self._orig_base = config.CHARTMETRIC_ADMIN_API_BASE_URL
         self._orig_token = config.CHARTMETRIC_ADMIN_API_TOKEN
         self._orig_env = os.environ.get("ANNOUNCEMENTS_STUB_MODE")
+        # Save and clear CM vars so they don't interfere with bearer-token tests.
+        self._orig_cm_base = config.CM_API_BASE_URL
+        self._orig_cm_email = config.CM_SERVICE_ACCOUNT_EMAIL
+        self._orig_cm_password = config.CM_SERVICE_ACCOUNT_PASSWORD
+        config.CM_API_BASE_URL = ""
+        config.CM_SERVICE_ACCOUNT_EMAIL = ""
+        config.CM_SERVICE_ACCOUNT_PASSWORD = ""
 
     def tearDown(self):
         config.CHARTMETRIC_ADMIN_API_BASE_URL = self._orig_base
         config.CHARTMETRIC_ADMIN_API_TOKEN = self._orig_token
+        config.CM_API_BASE_URL = self._orig_cm_base
+        config.CM_SERVICE_ACCOUNT_EMAIL = self._orig_cm_email
+        config.CM_SERVICE_ACCOUNT_PASSWORD = self._orig_cm_password
         if self._orig_env is None:
             os.environ.pop("ANNOUNCEMENTS_STUB_MODE", None)
         else:

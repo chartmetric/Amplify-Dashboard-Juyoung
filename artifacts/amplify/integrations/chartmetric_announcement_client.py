@@ -5,29 +5,36 @@ documented in ``docs/chartmetric-announcement-admin-api.md`` so the rest
 of the Amplify codebase doesn't have to know anything about wire shape,
 auth, or error decoding.
 
-Configuration (read from ``config`` / env at call time):
+Auth (two modes, auto-detected):
 
-  * ``CHARTMETRIC_ADMIN_API_BASE_URL`` — base URL, e.g.
-    ``https://api.chartmetric.com``. Trailing slash tolerated.
-  * ``CHARTMETRIC_ADMIN_API_TOKEN`` — bearer token sent on every request.
+  1. **Cookie / service-account** — used when ALL THREE of
+     ``CM_API_BASE_URL``, ``CM_SERVICE_ACCOUNT_EMAIL``, and
+     ``CM_SERVICE_ACCOUNT_PASSWORD`` are set (Update Hub proxy pattern).
+     The client POSTs to ``/login`` once, caches the ``Set-Cookie`` token
+     in memory, and forwards it as ``Cookie: <token>`` on every request.
+     On 401/403 the token is cleared and re-fetched automatically.
 
-When either is empty the client refuses to hit the network and raises
+  2. **Bearer token (legacy)** — used when ``CHARTMETRIC_ADMIN_API_TOKEN``
+     is set but the service-account credentials are absent. Sends
+     ``Authorization: Bearer <token>`` on every request; no auto-refresh.
+
+When neither auth path is configured the client raises
 ``ChartmetricClientError`` so the caller can fall back to stub mode.
 
-Path prefixes are kept as module-level constants so the contract can be
-re-targeted without touching call sites if Chartmetric finalizes a
-different prefix.
+Base URL resolution: ``CM_API_BASE_URL`` takes precedence over the legacy
+``CHARTMETRIC_ADMIN_API_BASE_URL`` (``config.py`` already aliases them).
 """
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any, Iterable
 
 import config
 
 logger = logging.getLogger("amplify.chartmetric_announcement_client")
 
-# Path constants — adjust here if Chartmetric finalizes a different prefix.
+# Path constants — adjust here if Chartmetric finalises a different prefix.
 ADMIN_PREFIX = "/admin/announcement"
 POSTS_PATH = ADMIN_PREFIX                  # POST/GET list, /<id> for detail
 CATEGORIES_PATH = f"{ADMIN_PREFIX}/categories"
@@ -35,6 +42,13 @@ POST_CATEGORIES_LINK_PATH = "{post_id}/categories"   # PUT replaces link rows
 POST_BOOST_PATH = "{post_id}/boost"        # PATCH is_boosted only
 
 DEFAULT_TIMEOUT = 15.0
+
+# ---------------------------------------------------------------------------
+# Service-account token cache (cookie-based auth)
+# ---------------------------------------------------------------------------
+
+_cached_service_token: str | None = None
+_token_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -75,15 +89,101 @@ def _base_url() -> str:
     return (getattr(config, "CHARTMETRIC_ADMIN_API_BASE_URL", "") or "").rstrip("/")
 
 
-def _token() -> str:
+def _bearer_token() -> str:
     return getattr(config, "CHARTMETRIC_ADMIN_API_TOKEN", "") or ""
 
 
+def _service_account_email() -> str:
+    return (getattr(config, "CM_SERVICE_ACCOUNT_EMAIL", "") or "").strip()
+
+
+def _service_account_password() -> str:
+    return (getattr(config, "CM_SERVICE_ACCOUNT_PASSWORD", "") or "").strip()
+
+
+def _use_cookie_auth() -> bool:
+    """True when service-account cookie auth is fully configured."""
+    return bool(_base_url() and _service_account_email() and _service_account_password())
+
+
 def is_configured() -> bool:
-    """Live wiring is only considered configured when both the base URL
-    AND the bearer token are set — matches the store's mode logic so the
-    two never disagree."""
-    return bool(_base_url() and _token())
+    """Live wiring is considered configured when either auth method is ready."""
+    if _use_cookie_auth():
+        return True
+    return bool(_base_url() and _bearer_token())
+
+
+def _login_service_account() -> str:
+    """POST /login with service-account credentials; return cookie string.
+
+    Extracts all ``Set-Cookie`` values from the response and joins them into
+    a single ``Cookie: <name>=<value>; ...`` header string, matching the
+    pattern from the Update Hub proxy guide.
+    """
+    import requests as req_lib
+
+    base = _base_url()
+    email = _service_account_email()
+    password = _service_account_password()
+    if not (base and email and password):
+        raise ChartmetricClientError(
+            "Service-account credentials not configured "
+            "(CM_API_BASE_URL / CM_SERVICE_ACCOUNT_EMAIL / CM_SERVICE_ACCOUNT_PASSWORD)",
+            status=0)
+
+    url = f"{base}/login"
+    try:
+        resp = req_lib.request(
+            "POST", url,
+            json={"email": email, "password": password},
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            timeout=DEFAULT_TIMEOUT,
+        )
+    except req_lib.RequestException as e:
+        raise ChartmetricClientError(
+            f"Service-account login transport error: {e!r}",
+            status=0, url=url) from e
+
+    if resp.status_code < 200 or resp.status_code >= 300:
+        raise ChartmetricClientError(
+            f"Service-account login failed (HTTP {resp.status_code})",
+            status=resp.status_code, url=url)
+
+    # Build Cookie header string from the response cookie jar.
+    cookie_str = "; ".join(f"{c.name}={c.value}" for c in resp.cookies)
+    if not cookie_str:
+        raise ChartmetricClientError(
+            "Service-account login succeeded but no session cookie was returned",
+            status=resp.status_code, url=url)
+
+    return cookie_str
+
+
+def _get_session_token(force: bool = False) -> str:
+    """Return a cached service-account cookie token, logging in if needed.
+
+    Thread-safe via double-checked locking. ``force=True`` bypasses the
+    cache entirely (used by the 401/403 auto-refresh path).
+    """
+    global _cached_service_token
+    if not force and _cached_service_token:
+        return _cached_service_token
+    with _token_lock:
+        if not force and _cached_service_token:
+            return _cached_service_token
+        token = _login_service_account()
+        _cached_service_token = token
+        return token
+
+
+def clear_service_account_token_cache() -> None:
+    """Evict the cached service-account token (for testing / admin use)."""
+    global _cached_service_token
+    with _token_lock:
+        _cached_service_token = None
 
 
 def _request(method: str, path: str, *,
@@ -93,55 +193,76 @@ def _request(method: str, path: str, *,
              allow_404: bool = False) -> tuple[int, Any]:
     """Issue an HTTP request and return ``(status_code, parsed_body)``.
 
+    Auth is selected automatically:
+    - Cookie / service-account when CM creds are configured.
+    - Bearer token fallback when only CHARTMETRIC_ADMIN_API_TOKEN is set.
+
     Raises ``ChartmetricClientError`` on transport errors. 4xx/5xx are
     NOT raised here — callers decide whether a non-2xx is fatal.
-    Set ``allow_404`` to skip the body parse on a 404 (which often returns
-    an HTML page from gateways).
     """
-    import requests
+    import requests as req_lib
 
     base = _base_url()
-    tok = _token()
-    if not base or not tok:
+    if not base:
+        raise ChartmetricClientError(
+            "Chartmetric base URL not configured "
+            "(CM_API_BASE_URL or CHARTMETRIC_ADMIN_API_BASE_URL)",
+            status=0, url=path)
+
+    def _do(auth_header: dict) -> tuple[int, Any]:
+        url = f"{base}{path}"
+        headers: dict[str, str] = {"Accept": "application/json; charset=utf-8"}
+        headers.update(auth_header)
+        if body is not None:
+            headers["Content-Type"] = "application/json; charset=utf-8"
+        try:
+            resp = req_lib.request(
+                method.upper(), url,
+                params=params,
+                json=body if body is not None else None,
+                headers=headers,
+                timeout=timeout,
+            )
+        except req_lib.RequestException as e:
+            raise ChartmetricClientError(
+                f"Transport error talking to Chartmetric: {e!r}",
+                status=0, body=None, url=url) from e
+
+        if resp.status_code == 404 and allow_404:
+            return resp.status_code, None
+        parsed: Any
+        if resp.content:
+            try:
+                parsed = resp.json()
+            except Exception:
+                parsed = resp.text
+        else:
+            parsed = None
+        return resp.status_code, parsed
+
+    if _use_cookie_auth():
+        tok = _get_session_token()
+        code, parsed = _do({"Cookie": tok})
+        if code in (401, 403):
+            logger.warning(
+                "Cookie session expired (HTTP %s on %s); refreshing service-account token",
+                code, path)
+            global _cached_service_token
+            _cached_service_token = None
+            tok = _get_session_token(force=True)
+            code, parsed = _do({"Cookie": tok})
+        return code, parsed
+
+    tok = _bearer_token()
+    if not tok:
         missing = []
         if not base:
             missing.append("CHARTMETRIC_ADMIN_API_BASE_URL")
-        if not tok:
-            missing.append("CHARTMETRIC_ADMIN_API_TOKEN")
+        missing.append("CHARTMETRIC_ADMIN_API_TOKEN")
         raise ChartmetricClientError(
             "Missing required env var(s): " + ", ".join(missing),
             status=0, url=path)
-    url = f"{base}{path}"
-    headers = {
-        "Accept": "application/json; charset=utf-8",
-        "Authorization": f"Bearer {tok}",
-    }
-    if body is not None:
-        headers["Content-Type"] = "application/json; charset=utf-8"
-    try:
-        resp = requests.request(
-            method.upper(), url,
-            params=params,
-            json=body if body is not None else None,
-            headers=headers,
-            timeout=timeout,
-        )
-    except requests.RequestException as e:
-        raise ChartmetricClientError(
-            f"Transport error talking to Chartmetric: {e!r}",
-            status=0, body=None, url=url) from e
-
-    if resp.status_code == 404 and allow_404:
-        return resp.status_code, None
-    parsed: Any
-    if resp.content:
-        try:
-            parsed = resp.json()
-        except Exception:
-            parsed = resp.text
-    else:
-        parsed = None
-    return resp.status_code, parsed
+    return _do({"Authorization": f"Bearer {tok}"})
 
 
 def _ensure_2xx(status: int, body: Any, url: str) -> Any:
@@ -160,21 +281,23 @@ def ping() -> dict:
     """Probe the Chartmetric admin API by listing categories.
 
     Returns a dict with ``ok`` (bool), ``status`` (HTTP), ``base_url``,
-    ``token_configured``, plus either ``count`` (categories returned) or
-    ``error`` (preview of the failure body).
+    ``auth_method`` (``"cookie"`` or ``"bearer"``), plus either
+    ``count`` (categories returned) or ``error`` (failure preview).
     """
     info: dict[str, Any] = {
         "base_url": _base_url() or None,
-        "token_configured": bool(_token()),
+        "auth_method": "cookie" if _use_cookie_auth() else "bearer",
+        "token_configured": bool(_bearer_token()),
+        "service_account_configured": bool(_service_account_email() and _service_account_password()),
     }
     if not is_configured():
         info["ok"] = False
         info["status"] = 0
         missing = []
         if not _base_url():
-            missing.append("CHARTMETRIC_ADMIN_API_BASE_URL")
-        if not _token():
-            missing.append("CHARTMETRIC_ADMIN_API_TOKEN")
+            missing.append("CM_API_BASE_URL / CHARTMETRIC_ADMIN_API_BASE_URL")
+        if not _use_cookie_auth() and not _bearer_token():
+            missing.append("CM_SERVICE_ACCOUNT_* or CHARTMETRIC_ADMIN_API_TOKEN")
         info["error"] = "Missing required env var(s): " + ", ".join(missing)
         return info
     try:
@@ -278,7 +401,7 @@ def replace_post_categories(post_id: int | str,
                              category_ids: Iterable[int]) -> dict:
     """Replace the ``l_announcement_post_category`` rows for a post.
 
-    The endpoint is expected to honor *replace* semantics — any existing
+    The endpoint is expected to honour *replace* semantics — any existing
     links not in ``category_ids`` MUST be removed. We use PUT to make
     the intent explicit.
     """

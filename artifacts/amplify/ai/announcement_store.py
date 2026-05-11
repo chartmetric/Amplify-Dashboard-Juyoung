@@ -61,15 +61,31 @@ DEFAULT_CATEGORIES = [
 def _stub_mode_enabled() -> bool:
     """Decide whether Amplify is in stub mode for this call.
 
-    Live mode is enabled automatically when BOTH the Chartmetric admin
-    base URL and bearer token are configured. Either being absent forces
-    stub mode. ``ANNOUNCEMENTS_STUB_MODE`` only matters as a *kill
-    switch* — set it to ``1`` / ``true`` / ``yes`` / ``on`` to pin
-    Amplify to the local working copy even when the env vars are wired.
+    Live mode is enabled automatically when EITHER:
+      * The new cookie-based auth is fully configured:
+        ``CM_API_BASE_URL`` + ``CM_SERVICE_ACCOUNT_EMAIL``
+        + ``CM_SERVICE_ACCOUNT_PASSWORD`` are all set, OR
+      * The legacy bearer-token pair is set:
+        ``CHARTMETRIC_ADMIN_API_BASE_URL`` + ``CHARTMETRIC_ADMIN_API_TOKEN``.
+
+    ``ANNOUNCEMENTS_STUB_MODE`` is a kill switch — set it to
+    ``1`` / ``true`` / ``yes`` / ``on`` to pin Amplify to the local
+    working copy even when the env vars are wired (incident response).
     """
-    base_url = (getattr(config, "CHARTMETRIC_ADMIN_API_BASE_URL", "") or "").strip()
-    token = (getattr(config, "CHARTMETRIC_ADMIN_API_TOKEN", "") or "").strip()
-    if not base_url or not token:
+    # New cookie-based auth (CM_API_BASE_URL already aliased into
+    # CHARTMETRIC_ADMIN_API_BASE_URL by config.py, so check the CM_ vars
+    # independently to gate on service-account credentials being present).
+    cm_base = (getattr(config, "CM_API_BASE_URL", "") or "").strip()
+    cm_email = (getattr(config, "CM_SERVICE_ACCOUNT_EMAIL", "") or "").strip()
+    cm_password = (getattr(config, "CM_SERVICE_ACCOUNT_PASSWORD", "") or "").strip()
+    cookie_auth_ready = bool(cm_base and cm_email and cm_password)
+
+    # Legacy bearer-token auth.
+    old_base = (getattr(config, "CHARTMETRIC_ADMIN_API_BASE_URL", "") or "").strip()
+    old_token = (getattr(config, "CHARTMETRIC_ADMIN_API_TOKEN", "") or "").strip()
+    bearer_auth_ready = bool(old_base and old_token)
+
+    if not (cookie_auth_ready or bearer_auth_ready):
         return True
     raw = os.environ.get("ANNOUNCEMENTS_STUB_MODE")
     if raw is None:
@@ -78,10 +94,23 @@ def _stub_mode_enabled() -> bool:
 
 
 def get_mode_info() -> dict:
+    cm_base = (getattr(config, "CM_API_BASE_URL", "") or "").strip()
+    old_base = (getattr(config, "CHARTMETRIC_ADMIN_API_BASE_URL", "") or "").strip()
     return {
         "stub_mode": _stub_mode_enabled(),
-        "base_url": getattr(config, "CHARTMETRIC_ADMIN_API_BASE_URL", "") or None,
+        "base_url": cm_base or old_base or None,
+        "auth_method": (
+            "cookie" if (
+                cm_base
+                and (getattr(config, "CM_SERVICE_ACCOUNT_EMAIL", "") or "").strip()
+                and (getattr(config, "CM_SERVICE_ACCOUNT_PASSWORD", "") or "").strip()
+            ) else "bearer"
+        ),
         "token_configured": bool(getattr(config, "CHARTMETRIC_ADMIN_API_TOKEN", "")),
+        "service_account_configured": bool(
+            (getattr(config, "CM_SERVICE_ACCOUNT_EMAIL", "") or "").strip()
+            and (getattr(config, "CM_SERVICE_ACCOUNT_PASSWORD", "") or "").strip()
+        ),
         "media_upload_url": getattr(config, "CHARTMETRIC_MEDIA_UPLOAD_URL", "") or None,
         "store_path": os.path.abspath(_STORE_FILE),
     }
@@ -747,22 +776,70 @@ def _delete_category_on_chartmetric(remote_id: int | None) -> None:
 # Public API
 # ---------------------------------------------------------------------------
 #
-# Read paths (list_posts, get_post, list_categories) are served from the
-# local working copy in BOTH modes — the working copy is a strict
-# superset of what the wire stores (it includes display_format /
-# scheduled_publish_at / source_feature_*).
+# ---------------------------------------------------------------------------
+# Read paths
+# ---------------------------------------------------------------------------
+# In stub mode all three reads come from the local working copy.
+# In live mode list_posts / get_post proxy through the Chartmetric API so
+# the admin panel shows canonical production data.  list_categories stays
+# local-only because it drives the local category validation and seeding
+# logic; a live fetch there would bypass _ensure_seed_categories and break
+# the category-id mapping used by create / update.
+# Every live read falls back to the local working copy on any client error
+# so an upstream outage never breaks the admin UI entirely.
 
 def list_posts(status: str | None = None, category: str | None = None,
                search: str | None = None, offset: int = 0,
                limit: int = 25) -> dict:
-    return _stub_list_posts(status, category, search, offset, limit)
+    if _stub_mode_enabled():
+        return _stub_list_posts(status, category, search, offset, limit)
+    from integrations import chartmetric_announcement_client as cmc
+    try:
+        return cmc.list_posts(status=status, category=category,
+                               search=search, offset=offset, limit=limit)
+    except cmc.ChartmetricClientError as exc:
+        logger.warning(
+            "[announcement_store] list_posts live fetch failed (%s); "
+            "falling back to local store", exc.short())
+        return _stub_list_posts(status, category, search, offset, limit)
 
 
 def get_post(post_id: int) -> dict | None:
-    return _stub_get_post(post_id)
+    if _stub_mode_enabled():
+        return _stub_get_post(post_id)
+    # In live mode, look up the chartmetric_id stored in the local record,
+    # then fetch the canonical row from the production API.  Amplify-only
+    # fields (display_format / scheduled_publish_at / source_feature_*)
+    # are merged back from the local record so the editor still has them.
+    with _lock:
+        data = _load()
+        local = data["posts"].get(str(post_id))
+    if not local:
+        return None
+    cm_id = local.get("chartmetric_id")
+    if not cm_id:
+        # Post has never been pushed — serve from the local working copy.
+        return _hydrate_post(local, data["categories"])
+    from integrations import chartmetric_announcement_client as cmc
+    try:
+        remote = cmc.get_post(cm_id)
+        if remote is None:
+            return None
+        # Re-attach Amplify-only metadata so the editor form is complete.
+        for field in _AMPLIFY_ONLY_POST_FIELDS:
+            remote.setdefault(field, local.get(field))
+        return remote
+    except cmc.ChartmetricClientError as exc:
+        logger.warning(
+            "[announcement_store] get_post live fetch failed (%s); "
+            "falling back to local store", exc.short())
+        return _hydrate_post(local, data["categories"])
 
 
 def list_categories() -> list[dict]:
+    # Always served from the local working copy — the local store is the
+    # authoritative source for the local-id ↔ chartmetric-id mapping used
+    # by category validation in create / update.
     return _stub_list_categories()
 
 
