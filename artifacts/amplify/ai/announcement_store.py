@@ -912,12 +912,26 @@ def list_categories() -> list[dict]:
             live_cats = cmc.list_categories()
             with _lock:
                 data = _load()
-                if _sync_live_categories(data, live_cats):
-                    _save(data)
+                _sync_live_categories(data, live_cats)
+                _save(data)
+                # Return only categories that exist on the prod endpoint,
+                # mapped to their local IDs so the post editor stays consistent.
+                usage: dict[str, int] = {}
+                for p in data["posts"].values():
+                    for cid in p.get("category_ids") or []:
+                        usage[str(cid)] = usage.get(str(cid), 0) + 1
+                out = []
+                for c in data["categories"].values():
+                    if c.get("chartmetric_id") is not None:
+                        out.append({**c,
+                                    "translations": c.get("translations") or {},
+                                    "posts_count": usage.get(str(c["id"]), 0)})
+                out.sort(key=lambda c: c["name"].lower())
+                return out
         except Exception as exc:
             logger.warning(
                 "[announcement_store] list_categories live fetch failed (%s); "
-                "using local store", exc)
+                "falling back to local store", exc)
     return _stub_list_categories()
 
 

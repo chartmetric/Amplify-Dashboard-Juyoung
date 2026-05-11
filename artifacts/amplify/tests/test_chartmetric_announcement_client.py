@@ -177,6 +177,14 @@ class _LiveModeTestCase(unittest.TestCase):
         self._orig_store_file = announcement_store._STORE_FILE
         announcement_store._STORE_FILE = os.path.join(self._tmp, "store.json")
         self.fake = FakeChartmetric()
+        # Pre-seed prod categories so list_categories() (live mode) returns them.
+        self.fake.categories = {
+            1: {"id": 1, "name": "Product Update", "color": "#00C9A7",
+                "translations": {}},
+            2: {"id": 2, "name": "Feature Release", "color": "#6392F0",
+                "translations": {}},
+        }
+        self.fake.next_cat_id = 3
         self._patcher = mock.patch("requests.request", side_effect=self.fake)
         self._patcher.start()
         # Reset service-account token cache so cookie-auth state from a
@@ -366,12 +374,14 @@ class CreatePostFlowTests(_LiveModeTestCase):
         self.assertNotIn("en", body["translations"])
         self.assertIn("de", body["translations"])
 
-        # 4. Category was auto-created on Chartmetric and its id was used in the body.
+        # 4. Category already exists on Chartmetric (pre-seeded); its id was
+        #    reused directly — no new category-create call expected.
         cat_creates = self._calls(method="POST",
                                    path_contains="/announcement/categories")
-        self.assertEqual(len(cat_creates), 1)
-        remote_cat_id = list(self.fake.categories.keys())[0]
-        self.assertEqual(body["category_ids"], [remote_cat_id])
+        self.assertEqual(len(cat_creates), 0)
+        # Verify exactly one category id was sent and it is a valid Chartmetric id.
+        self.assertEqual(len(body["category_ids"]), 1)
+        self.assertIn(body["category_ids"][0], self.fake.categories)
 
         # 5. Link-table replace fired right after.
         link_calls = self._calls(method="PUT", path_contains="/categories")
@@ -380,7 +390,7 @@ class CreatePostFlowTests(_LiveModeTestCase):
                       and c["path"].endswith("/categories")
                       and c["path"].count("/") == 3]
         self.assertEqual(len(link_calls), 1)
-        self.assertEqual(link_calls[0]["json"], {"category_ids": [remote_cat_id]})
+        self.assertEqual(link_calls[0]["json"], {"category_ids": body["category_ids"]})
 
         # 6. Auth header on every call.
         for c in self.fake.calls:
@@ -406,9 +416,10 @@ class CreatePostFlowTests(_LiveModeTestCase):
         second_cat_creates = len([c for c in self.fake.calls
                                    if c["method"] == "POST"
                                    and c["path"] == "/announcement/categories"])
-        # No additional category-create — the cached chartmetric_id was reused.
-        self.assertEqual(first_cat_creates, 1)
-        self.assertEqual(second_cat_creates, 1)
+        # Categories are pre-seeded with chartmetric_ids — no creation needed
+        # for either post; the existing remote id is reused each time.
+        self.assertEqual(first_cat_creates, 0)
+        self.assertEqual(second_cat_creates, 0)
 
 
 class TransactionalWriteTests(_LiveModeTestCase):
