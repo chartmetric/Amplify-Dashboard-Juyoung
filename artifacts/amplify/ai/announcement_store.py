@@ -193,6 +193,8 @@ def _resolve_status(status: str, scheduled_at: str | None) -> dict:
 
 
 def _derived_status(post: dict) -> str:
+    if post.get("deleted_at"):
+        return "deleted"
     if post.get("is_published"):
         return "published"
     if post.get("scheduled_publish_at"):
@@ -876,83 +878,94 @@ def list_posts(status: str | None = None, category: str | None = None,
                limit: int = 25) -> dict:
     if _stub_mode_enabled():
         return _stub_list_posts(status, category, search, offset, limit)
-    from integrations import chartmetric_announcement_client as cmc
-    # Collect locally-deleted posts so we can (a) exclude them from the live
-    # API response and (b) append them as a separate "deleted" section.
-    with _lock:
-        data = _load()
-        deleted_posts = [
-            _hydrate_post(p, data["categories"])
-            for p in data["posts"].values()
-            if p.get("deleted_at")
-        ]
-        deleted_cm_ids: set[int] = {
-            p["chartmetric_id"]
-            for p in data["posts"].values()
-            if p.get("deleted_at") and p.get("chartmetric_id")
-        }
+    # Live mode — read directly from the prod DB so we bypass the Chartmetric
+    # REST API (which returns 500 since we added the deleted_at column).
+    from integrations import prod_db
     try:
-        result = cmc.list_posts(status=status, category=category,
-                                search=search, offset=offset, limit=limit)
-        items = [_stamp_live_published(p) for p in result.get("items") or []]
-        # Filter deleted posts out of the live API response, then append the
-        # locally-tracked deleted records so the UI can show a Restore button.
-        if deleted_cm_ids:
-            items = [p for p in items if p.get("id") not in deleted_cm_ids]
-        items.extend(deleted_posts)
-        result["items"] = items
-        result["total"] = len(items)
-        return result
-    except cmc.ChartmetricClientError as exc:
+        result = prod_db.list_posts()
+        items = result.get("items") or []
+
+        # Also surface local-only posts that have never been pushed to
+        # Chartmetric (chartmetric_id is None) so the editor can reach them.
+        with _lock:
+            data = _load()
+            for p in data["posts"].values():
+                if not p.get("chartmetric_id"):
+                    items.append(_hydrate_post(p, data["categories"]))
+
+        # Apply optional filters.
+        if status and status != "all":
+            items = [p for p in items if p.get("status") == status]
+        if category:
+            s = category.strip().lower()
+            items = [
+                p for p in items
+                if any((c.get("name") or "").lower() == s
+                       for c in (p.get("categories") or []))
+            ]
+        if search:
+            s = search.strip().lower()
+            items = [p for p in items
+                     if s in (p.get("title") or "").lower()]
+
+        total = len(items)
+        return {"items": items[offset: offset + limit], "total": total}
+    except Exception as exc:
         logger.warning(
             "[announcement_store] list_posts live fetch failed (%s); "
-            "falling back to local store", exc.short())
+            "falling back to local store", exc)
         return _stub_list_posts(status, category, search, offset, limit)
+
 
 
 def get_post(post_id: int) -> dict | None:
     if _stub_mode_enabled():
         return _stub_get_post(post_id)
-    # In live mode, look up the chartmetric_id stored in the local record,
-    # then fetch the canonical row from the production API.  Amplify-only
-    # fields (boost_types / scheduled_publish_at / source_feature_*)
-    # are merged back from the local record so the editor still has them.
+    # Live mode — read the canonical row from the prod DB.
+    # post_id is the Chartmetric DB id when coming from the UI (list returns
+    # DB ids).  Fall back to local-only records for posts not yet pushed.
+    from integrations import prod_db
+    try:
+        remote = prod_db.get_post(post_id)
+        if remote is not None:
+            if remote.get("deleted_at"):
+                return None
+            # Re-attach any Amplify-only metadata stored locally.
+            with _lock:
+                data = _load()
+            local = next(
+                (p for p in data["posts"].values()
+                 if p.get("chartmetric_id") == post_id),
+                None,
+            )
+            if local:
+                for field in _AMPLIFY_ONLY_POST_FIELDS:
+                    remote.setdefault(field, local.get(field))
+            return remote
+    except Exception as exc:
+        logger.warning(
+            "[announcement_store] get_post DB fetch failed (%s); "
+            "falling back to local store", exc)
+
+    # Local-only fallback (post_id may be the local Amplify id).
     with _lock:
         data = _load()
         local = data["posts"].get(str(post_id))
     if not local or local.get("deleted_at"):
         return None
-    cm_id = local.get("chartmetric_id")
-    if not cm_id:
-        # Post has never been pushed — serve from the local working copy.
-        return _hydrate_post(local, data["categories"])
-    from integrations import chartmetric_announcement_client as cmc
-    try:
-        remote = cmc.get_post(cm_id)
-        if remote is None:
-            return None
-        # Re-attach Amplify-only metadata so the editor form is complete.
-        for field in _AMPLIFY_ONLY_POST_FIELDS:
-            remote.setdefault(field, local.get(field))
-        # The post exists on the prod endpoint — it is published.
-        return _stamp_live_published(remote)
-    except cmc.ChartmetricClientError as exc:
-        logger.warning(
-            "[announcement_store] get_post live fetch failed (%s); "
-            "falling back to local store", exc.short())
-        return _hydrate_post(local, data["categories"])
+    return _hydrate_post(local, data["categories"])
 
 
 def list_categories() -> list[dict]:
     if _live_mode_enabled():
-        from integrations import chartmetric_announcement_client as cmc
+        from integrations import prod_db
         try:
-            live_cats = cmc.list_categories()
+            live_cats = prod_db.list_categories()
             with _lock:
                 data = _load()
                 _sync_live_categories(data, live_cats)
                 _save(data)
-                # Return only categories that exist on the prod endpoint,
+                # Return only categories that exist in the prod DB,
                 # mapped to their local IDs so the post editor stays consistent.
                 usage: dict[str, int] = {}
                 for p in data["posts"].values():

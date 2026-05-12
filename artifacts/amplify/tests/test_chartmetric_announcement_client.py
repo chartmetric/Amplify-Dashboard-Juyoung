@@ -193,6 +193,91 @@ class _LiveModeTestCase(unittest.TestCase):
         self.addCleanup(self._patcher.stop)
         self.addCleanup(self._cleanup_store)
 
+        # --- prod_db read-path mocks ---
+        # The live-mode read paths (list_posts, get_post, list_categories) now
+        # call prod_db directly instead of the Chartmetric REST API.  We mock
+        # those here so tests never touch the real prod DB.
+        fake = self.fake  # capture for closures
+
+        def _db_list_categories():
+            return list(fake.categories.values())
+
+        def _db_list_posts():
+            """Return fake posts with deleted_at populated from the local store."""
+            import json as _json
+            import os as _os
+            local_deleted: dict[int, str] = {}
+            try:
+                store_path = announcement_store._STORE_FILE
+                if _os.path.exists(store_path):
+                    with open(store_path) as _f:
+                        _d = _json.load(_f)
+                    for _p in _d.get("posts", {}).values():
+                        _cm = _p.get("chartmetric_id")
+                        if _cm and _p.get("deleted_at"):
+                            local_deleted[_cm] = _p["deleted_at"]
+            except Exception:
+                pass
+            cats_by_id = {c["id"]: c for c in fake.categories.values()}
+            items = []
+            for fp in fake.posts.values():
+                pid = fp["id"]
+                deleted_at = local_deleted.get(pid)
+                cat_ids = fp.get("category_ids") or []
+                categories = [
+                    {"id": cid,
+                     "name": cats_by_id[cid]["name"],
+                     "color": cats_by_id[cid]["color"],
+                     "translations": cats_by_id[cid].get("translations") or {}}
+                    for cid in cat_ids if cid in cats_by_id
+                ]
+                if deleted_at:
+                    status = "deleted"
+                elif fp.get("is_published"):
+                    status = "published"
+                else:
+                    status = "draft"
+                items.append({
+                    **fp,
+                    "categories": categories,
+                    "boost_types": [],
+                    "status": status,
+                    "deleted_at": deleted_at,
+                })
+            return {"items": items, "total": len(items)}
+
+        def _db_get_post(cm_id):
+            """Return a single fake post by Chartmetric id, or None."""
+            fp = fake.posts.get(cm_id)
+            if fp is None:
+                return None
+            cats_by_id = {c["id"]: c for c in fake.categories.values()}
+            cat_ids = fp.get("category_ids") or []
+            categories = [
+                {"id": cid,
+                 "name": cats_by_id[cid]["name"],
+                 "color": cats_by_id[cid]["color"],
+                 "translations": cats_by_id[cid].get("translations") or {}}
+                for cid in cat_ids if cid in cats_by_id
+            ]
+            is_pub = bool(fp.get("is_published"))
+            return {
+                **fp,
+                "categories": categories,
+                "boost_types": [],
+                "status": "published" if is_pub else "draft",
+                "deleted_at": None,
+            }
+
+        for target, side_effect in (
+            ("integrations.prod_db.list_categories", _db_list_categories),
+            ("integrations.prod_db.list_posts",      _db_list_posts),
+            ("integrations.prod_db.get_post",         _db_get_post),
+        ):
+            p = mock.patch(target, side_effect=side_effect)
+            p.start()
+            self.addCleanup(p.stop)
+
     def _cleanup_store(self):
         announcement_store._STORE_FILE = self._orig_store_file
         shutil.rmtree(self._tmp, ignore_errors=True)
@@ -575,11 +660,13 @@ class DeleteFlowTests(_LiveModeTestCase):
         # Post must appear in the list with deleted_at set (so UI can show Restore).
         result = announcement_store.list_posts()
         deleted_items = [p for p in result["items"] if p.get("deleted_at")]
-        deleted_cm_ids = [p.get("chartmetric_id") for p in deleted_items]
-        self.assertIn(cm_id, deleted_cm_ids)
+        # In live mode the list uses the Chartmetric DB id (p["id"]), not
+        # p["chartmetric_id"], so check against that field.
+        deleted_ids = [p.get("id") for p in deleted_items]
+        self.assertIn(cm_id, deleted_ids)
         # Active (non-deleted) items must not include the post.
-        active_cm_ids = [p.get("chartmetric_id") for p in result["items"] if not p.get("deleted_at")]
-        self.assertNotIn(cm_id, active_cm_ids)
+        active_ids = [p.get("id") for p in result["items"] if not p.get("deleted_at")]
+        self.assertNotIn(cm_id, active_ids)
         # get_post via local ID must return None (editor must not open deleted posts).
         self.assertIsNone(announcement_store.get_post(post["id"]))
 
