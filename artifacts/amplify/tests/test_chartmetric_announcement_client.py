@@ -549,7 +549,8 @@ class BoostToggleTests(_LiveModeTestCase):
 
 class DeleteFlowTests(_LiveModeTestCase):
 
-    def test_delete_post_calls_chartmetric_with_remote_id(self):
+    def test_delete_post_soft_deletes_in_prod_db(self):
+        """Soft delete writes deleted_at to the prod DB and hides the post."""
         announcement_store.list_categories()
         post = announcement_store.create_post({
             "title": "doomed", "content": [{"type": "p"}],
@@ -557,11 +558,37 @@ class DeleteFlowTests(_LiveModeTestCase):
         })
         remote_id = post["chartmetric_id"]
         self.fake.calls.clear()
-        ok = announcement_store.delete_post(post["id"])
+
+        with mock.patch(
+            "integrations.prod_db.soft_delete_post", return_value=True
+        ) as mock_soft_delete:
+            ok = announcement_store.delete_post(post["id"])
+
         self.assertTrue(ok)
-        deletes = [c for c in self.fake.calls if c["method"] == "DELETE"]
-        self.assertEqual(len(deletes), 1)
-        self.assertEqual(deletes[0]["path"], f"/announcement/{remote_id}")
+        # prod_db.soft_delete_post must be called with the chartmetric id.
+        mock_soft_delete.assert_called_once_with(remote_id)
+        # No hard DELETE must have crossed the Chartmetric REST wire.
+        rest_deletes = [c for c in self.fake.calls if c["method"] == "DELETE"]
+        self.assertEqual(rest_deletes, [])
+        # Post must now be invisible in the list.
+        result = announcement_store.list_posts()
+        ids = [p["id"] for p in result["items"]]
+        self.assertNotIn(post["id"], ids)
+        # get_post must also return None for deleted posts.
+        self.assertIsNone(announcement_store.get_post(post["id"]))
+
+    def test_delete_post_already_deleted_returns_false(self):
+        """Calling delete on an already-deleted post is a no-op."""
+        announcement_store.list_categories()
+        post = announcement_store.create_post({
+            "title": "doomed twice", "content": [{"type": "p"}],
+            "category_ids": [], "status": "draft", "translations": {},
+        })
+        with mock.patch("integrations.prod_db.soft_delete_post", return_value=True):
+            announcement_store.delete_post(post["id"])
+            # Second call should return False (already deleted).
+            ok = announcement_store.delete_post(post["id"])
+        self.assertFalse(ok)
 
 
 class LegacyPublishQuickTests(_LiveModeTestCase):

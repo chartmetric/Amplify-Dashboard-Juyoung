@@ -636,7 +636,7 @@ function renderPosts(items) {
 }
 
 async function deletePost(id) {
-  if (!confirm('Delete this announcement? This cannot be undone.')) return;
+  if (!confirm('Soft-delete this announcement? It will be hidden from the feed but can be recovered from the database.')) return;
   try {
     await apiJson('/api/admin/announcements/' + id, { method: 'DELETE' });
     toast('Deleted'); reloadPosts();

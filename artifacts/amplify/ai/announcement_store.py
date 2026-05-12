@@ -367,7 +367,9 @@ def _stub_list_posts(status: str | None, category: str | None,
         # Build name->id resolver for the optional category filter.
         cat_name_to_id = {c["name"].lower(): str(c["id"])
                           for c in cats_by_id.values()}
-        items = [_hydrate_post(p, cats_by_id) for p in data["posts"].values()]
+        items = [_hydrate_post(p, cats_by_id)
+                 for p in data["posts"].values()
+                 if not p.get("deleted_at")]
     if status and status != "all":
         items = [p for p in items if p["status"] == status]
     if category:
@@ -403,7 +405,7 @@ def _stub_get_post(post_id: int) -> dict | None:
     with _lock:
         data = _load()
         post = data["posts"].get(str(post_id))
-        if not post:
+        if not post or post.get("deleted_at"):
             return None
         return _hydrate_post(post, data["categories"])
 
@@ -476,9 +478,13 @@ def _stub_update_post(post_id: int, payload: dict) -> dict | None:
 def _stub_delete_post(post_id: int) -> bool:
     with _lock:
         data = _load()
-        if str(post_id) not in data["posts"]:
+        post = data["posts"].get(str(post_id))
+        if not post:
             return False
-        data["posts"].pop(str(post_id))
+        if post.get("deleted_at"):
+            return False
+        post["deleted_at"] = _now_iso()
+        post["modified_at"] = _now_iso()
         _save(data)
         return True
 
@@ -860,10 +866,23 @@ def list_posts(status: str | None = None, category: str | None = None,
     if _stub_mode_enabled():
         return _stub_list_posts(status, category, search, offset, limit)
     from integrations import chartmetric_announcement_client as cmc
+    # Collect locally-deleted chartmetric ids so we can filter them out of
+    # the proxied API response (the prod API doesn't yet filter deleted_at).
+    with _lock:
+        data = _load()
+        deleted_cm_ids: set[int] = {
+            p["chartmetric_id"]
+            for p in data["posts"].values()
+            if p.get("deleted_at") and p.get("chartmetric_id")
+        }
     try:
         result = cmc.list_posts(status=status, category=category,
                                 search=search, offset=offset, limit=limit)
-        result["items"] = [_stamp_live_published(p) for p in result.get("items") or []]
+        items = [_stamp_live_published(p) for p in result.get("items") or []]
+        if deleted_cm_ids:
+            items = [p for p in items if p.get("id") not in deleted_cm_ids]
+        result["items"] = items
+        result["total"] = result.get("total", len(items))
         return result
     except cmc.ChartmetricClientError as exc:
         logger.warning(
@@ -882,7 +901,7 @@ def get_post(post_id: int) -> dict | None:
     with _lock:
         data = _load()
         local = data["posts"].get(str(post_id))
-    if not local:
+    if not local or local.get("deleted_at"):
         return None
     cm_id = local.get("chartmetric_id")
     if not cm_id:
@@ -1017,10 +1036,21 @@ def delete_post(post_id: int) -> bool:
     with _lock:
         data = _load()
         existing = data["posts"].get(str(post_id))
-        if not existing:
+        if not existing or existing.get("deleted_at"):
             return False
-        _delete_post_on_chartmetric(existing.get("chartmetric_id"))
-        data["posts"].pop(str(post_id))
+        chartmetric_id = existing.get("chartmetric_id")
+        if chartmetric_id:
+            from integrations import prod_db
+            try:
+                prod_db.soft_delete_post(chartmetric_id)
+            except Exception as e:
+                raise ValidationError(
+                    f"Prod DB soft-delete failed: {e}",
+                    "db_error", 502) from e
+        # Mark deleted in local working copy so the list is updated immediately.
+        now = _now_iso()
+        existing["deleted_at"] = now
+        existing["modified_at"] = now
         _save(data)
         return True
 
