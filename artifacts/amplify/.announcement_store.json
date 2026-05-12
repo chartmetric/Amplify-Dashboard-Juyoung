@@ -101,31 +101,23 @@
   "next_post_id": 2,
   "posts": {
     "1": {
+      "boost_types": [],
       "category_ids": [],
-      "content": [
-        {
-          "children": [
-            {
-              "text": "**Get enterprise-grade music data analytics for your team.**\n\nReady to scale your music data operations? Our new Ultra plan brings you everything you need for professional-grade music analytics, whether you're managing a roster, running A&R, or building data-driven strategies.\n\n\u2022 Access all Premium features plus enhanced data limits, priority support, and advanced collaboration tools designed for teams and power users.\n\u2022 Perfect for labels, management companies, publishers, and agencies who need deeper insights and more comprehensive data coverage.\n\nCheck it out on [the Pricing page](https://chartmetric.com/pricing) to see if Ultra fits your workflow!"
-            }
-          ],
-          "type": "paragraph"
-        }
-      ],
-      "created_at": "2026-04-30T18:14:25.701564+00:00",
-      "deleted_at": "2026-05-12T07:04:11.454659+00:00",
-      "display_format": "banner",
+      "chartmetric_id": 1,
+      "content": [],
+      "created_at": "2026-05-12T07:27:31.531531+00:00",
+      "deleted_at": null,
       "id": 1,
       "image_url": null,
       "is_boosted": false,
       "is_pinned": false,
       "is_published": true,
-      "modified_at": "2026-05-12T07:04:11.454659+00:00",
-      "published_at": "2026-04-30T18:14:25.701581+00:00",
+      "modified_at": "2026-05-12T07:30:10.639623+00:00",
+      "published_at": null,
       "scheduled_publish_at": null,
-      "source_feature_id": "slack-1775769876.054459-0",
+      "source_feature_id": null,
       "source_feature_set_id": null,
-      "title": "Ultra plan launch!",
+      "title": "",
       "translations": {}
     }
   }

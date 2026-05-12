@@ -269,10 +269,53 @@ class _LiveModeTestCase(unittest.TestCase):
                 "deleted_at": None,
             }
 
+        def _db_create_post(*, title, content, translations, image_url,
+                            is_pinned, is_boosted, is_published, published_at,
+                            category_ids, boost_names):
+            """Insert a post into the fake store and return its new id."""
+            pid = fake.next_post_id
+            fake.next_post_id += 1
+            row = {
+                "id": pid,
+                "title": title,
+                "content": content,
+                "translations": translations,
+                "image_url": image_url,
+                "is_pinned": is_pinned,
+                "is_boosted": is_boosted,
+                "is_published": is_published,
+                "published_at": published_at,
+                "category_ids": list(category_ids or []),
+            }
+            fake.posts[pid] = row
+            return {"id": pid}
+
+        def _db_update_post(cm_id, *, title, content, translations, image_url,
+                            is_pinned, is_boosted, is_published, published_at,
+                            category_ids, boost_names):
+            """Update a post in the fake store; return True/False."""
+            if cm_id not in fake.posts:
+                return False
+            fake.posts[cm_id].update({
+                "title": title,
+                "content": content,
+                "translations": translations,
+                "image_url": image_url,
+                "is_pinned": is_pinned,
+                "is_boosted": is_boosted,
+                "is_published": is_published,
+                "published_at": published_at,
+                "category_ids": list(category_ids or []),
+            })
+            fake.links[cm_id] = list(category_ids or [])
+            return True
+
         for target, side_effect in (
             ("integrations.prod_db.list_categories", _db_list_categories),
             ("integrations.prod_db.list_posts",      _db_list_posts),
             ("integrations.prod_db.get_post",         _db_get_post),
+            ("integrations.prod_db.create_post",      _db_create_post),
+            ("integrations.prod_db.update_post",      _db_update_post),
         ):
             p = mock.patch(target, side_effect=side_effect)
             p.start()
@@ -412,7 +455,7 @@ class TranslationValidationTests(unittest.TestCase):
 
 class CreatePostFlowTests(_LiveModeTestCase):
 
-    def test_create_post_strips_amplify_only_fields_and_pushes(self):
+    def test_create_post_writes_to_prod_db(self):
         # Seed local categories first (auto-seeds on first call).
         announcement_store.list_categories()
         cats = announcement_store.list_categories()
@@ -441,45 +484,33 @@ class CreatePostFlowTests(_LiveModeTestCase):
         self.assertEqual(post["source_feature_id"], "ABC123")
         self.assertIsNotNone(post["chartmetric_id"])
 
-        # 2. The push to Chartmetric must have a clean payload — NO Amplify-only fields.
-        post_creates = self._calls(method="POST", path_contains="/announcement")
-        post_creates = [c for c in post_creates if c["path"] == "/announcement"]
-        self.assertEqual(len(post_creates), 1, "Expected exactly one post-create call")
-        body = post_creates[0]["json"]
-        self.assertNotIn("boost_types", body)
-        self.assertNotIn("scheduled_publish_at", body)
-        self.assertNotIn("source_feature_id", body)
-        self.assertNotIn("source_feature_set_id", body)
-        self.assertNotIn("status", body, "Local 'status' enum must not leak to wire")
-        self.assertEqual(body["title"], "Hello live world")
-        self.assertTrue(body["is_published"])
-        self.assertTrue(body["is_pinned"])
+        # 2. The prod DB row must have the correct content.
+        cm_id = post["chartmetric_id"]
+        db_row = self.fake.posts[cm_id]
+        self.assertEqual(db_row["title"], "Hello live world")
+        self.assertTrue(db_row["is_published"])
+        self.assertTrue(db_row["is_pinned"])
 
-        # 3. Translations passed through; no "en" key.
-        self.assertNotIn("en", body["translations"])
-        self.assertIn("de", body["translations"])
+        # 3. Amplify-only fields must NOT appear in the DB row.
+        self.assertNotIn("boost_types", db_row)
+        self.assertNotIn("scheduled_publish_at", db_row)
+        self.assertNotIn("source_feature_id", db_row)
+        self.assertNotIn("source_feature_set_id", db_row)
+        self.assertNotIn("status", db_row)
 
-        # 4. Category already exists on Chartmetric (pre-seeded); its id was
-        #    reused directly — no new category-create call expected.
-        cat_creates = self._calls(method="POST",
-                                   path_contains="/announcement/categories")
-        self.assertEqual(len(cat_creates), 0)
-        # Verify exactly one category id was sent and it is a valid Chartmetric id.
-        self.assertEqual(len(body["category_ids"]), 1)
-        self.assertIn(body["category_ids"][0], self.fake.categories)
+        # 4. Translations passed through; no "en" key.
+        self.assertNotIn("en", db_row["translations"])
+        self.assertIn("de", db_row["translations"])
 
-        # 5. Link-table replace fired right after.
-        link_calls = self._calls(method="PUT", path_contains="/categories")
-        link_calls = [c for c in link_calls
-                      if c["path"].startswith("/announcement/")
-                      and c["path"].endswith("/categories")
-                      and c["path"].count("/") == 3]
-        self.assertEqual(len(link_calls), 1)
-        self.assertEqual(link_calls[0]["json"], {"category_ids": body["category_ids"]})
+        # 5. Category sent to DB must be the chartmetric cat id (not local id).
+        cats_map = {c["id"]: c for c in cats}
+        cm_cat_id = cats_map[cat_id]["chartmetric_id"]
+        self.assertIn(cm_cat_id, db_row.get("category_ids", []))
 
-        # 6. Auth header on every call.
-        for c in self.fake.calls:
-            self.assertEqual(c["headers"].get("Authorization"), "Bearer test-token")
+        # 6. No REST wire calls for post create/update (bypassed entirely).
+        rest_creates = [c for c in self.fake.calls
+                        if c["method"] == "POST" and c["path"] == "/announcement"]
+        self.assertEqual(len(rest_creates), 0)
 
     def test_second_post_reuses_existing_chartmetric_category(self):
         announcement_store.list_categories()
@@ -510,40 +541,31 @@ class CreatePostFlowTests(_LiveModeTestCase):
 class TransactionalWriteTests(_LiveModeTestCase):
 
     def test_create_post_failure_rolls_back_local_store(self):
-        """If the Chartmetric push fails, NOTHING about the failed save
-        should land in the on-disk working copy — no orphan post, no
-        category chartmetric_id mapping."""
+        """If the prod DB insert fails, NOTHING should land in the on-disk
+        working copy — no orphan post, no dangling local tracking entry."""
         announcement_store.list_categories()
         cat_id = announcement_store.list_categories()[0]["id"]
         # Snapshot the on-disk store before the failed save.
         with open(announcement_store._STORE_FILE) as f:
             before = json.load(f)
 
-        # Force the post-create POST to 500.
-        original = self.fake._dispatch
-        def boom(method, path, body):
-            if method == "POST" and path == "/announcement":
-                return _FakeResponse(500, {"error": "kaboom"})
-            return original(method, path, body)
-        self.fake._dispatch = boom
-
-        with self.assertRaises(announcement_store.ValidationError) as ctx:
-            announcement_store.create_post({
-                "title": "Will fail", "content": [{"type": "p"}],
-                "category_ids": [cat_id], "status": "draft", "translations": {},
-            })
-        self.assertEqual(ctx.exception.code, "chartmetric_error")
+        # Force prod_db.create_post to raise a DB error.
+        with mock.patch(
+            "integrations.prod_db.create_post",
+            side_effect=Exception("DB kaboom"),
+        ):
+            with self.assertRaises(announcement_store.ValidationError) as ctx:
+                announcement_store.create_post({
+                    "title": "Will fail", "content": [{"type": "p"}],
+                    "category_ids": [cat_id], "status": "draft", "translations": {},
+                })
+        self.assertEqual(ctx.exception.code, "db_error")
 
         with open(announcement_store._STORE_FILE) as f:
             after = json.load(f)
-        # On-disk store unchanged: no new post, category mapping not
-        # persisted (categories may have been pre-resolved on Chartmetric
-        # but the local record's chartmetric_id must not have been saved
-        # because the parent _save() never ran).
+        # On-disk store unchanged: the _save() after prod_db.create_post
+        # never ran, so no new post entry should exist.
         self.assertEqual(before["posts"], after["posts"])
-        for cid, c in after["categories"].items():
-            self.assertEqual(c.get("chartmetric_id"),
-                             before["categories"][cid].get("chartmetric_id"))
 
     def test_multi_category_save_lists_categories_at_most_once(self):
         """A single save touching N categories must trigger at most one
@@ -571,28 +593,32 @@ class UpdatePostFlowTests(_LiveModeTestCase):
         announcement_store.list_categories()
         cats = announcement_store.list_categories()
         a, b = cats[0]["id"], cats[1]["id"]
+        cats_map = {c["id"]: c for c in cats}
+        cm_cat_a = cats_map[a]["chartmetric_id"]
+        cm_cat_b = cats_map[b]["chartmetric_id"]
 
         post = announcement_store.create_post({
             "title": "T", "content": [{"type": "p"}],
             "category_ids": [a], "status": "draft", "translations": {},
         })
-        self.fake.calls.clear()
+        cm_id = post["chartmetric_id"]
 
-        announcement_store.update_post(post["id"], {
+        # Update with category b instead of a.
+        announcement_store.update_post(cm_id, {
             "title": "T", "content": [{"type": "p"}],
             "category_ids": [b], "status": "draft", "translations": {},
         })
 
-        # An update must PUT the post then PUT the link table — the link
-        # call is the source-of-truth for category replacement (drops `a`,
-        # adds the remote id for `b`).
-        link_calls = [c for c in self.fake.calls
-                      if c["method"] == "PUT"
-                      and c["path"].endswith("/categories")
-                      and c["path"].count("/") == 3]
-        self.assertEqual(len(link_calls), 1)
-        # The body should contain exactly one (different) remote id.
-        self.assertEqual(len(link_calls[0]["json"]["category_ids"]), 1)
+        # The prod DB row must now carry only the chartmetric id for b.
+        db_row = self.fake.posts[cm_id]
+        self.assertIn(cm_cat_b, db_row.get("category_ids", []))
+        self.assertNotIn(cm_cat_a, db_row.get("category_ids", []))
+
+        # No REST wire calls for the update (bypassed entirely).
+        rest_puts = [c for c in self.fake.calls
+                     if c["method"] == "PUT"
+                     and c["path"].startswith("/announcement/")]
+        self.assertEqual(len(rest_puts), 0)
 
 
 class BoostToggleTests(_LiveModeTestCase):
@@ -689,19 +715,23 @@ class LegacyPublishQuickTests(_LiveModeTestCase):
 
     def test_publish_announcement_quick_uses_live_path(self):
         announcement_store.list_categories()
+        before_posts = dict(self.fake.posts)
         result = announcement_store.publish_announcement_quick(
             title="Quick publish", body="<p>hi there</p>",
-            feature_id="FEAT-1", category="New Feature")
+            feature_id="FEAT-1", category="Product Update")
         self.assertTrue(result["success"], msg=result)
-        # The shim must end up POSTing to /announcement.
-        post_creates = [c for c in self.fake.calls
-                         if c["method"] == "POST"
-                         and c["path"] == "/announcement"]
-        self.assertEqual(len(post_creates), 1)
-        body = post_creates[0]["json"]
-        self.assertEqual(body["title"], "Quick publish")
-        # source_feature_id is Amplify-only and must NOT be sent.
-        self.assertNotIn("source_feature_id", body)
+        # A new row must have been inserted into the fake prod DB.
+        new_posts = {pid: p for pid, p in self.fake.posts.items()
+                     if pid not in before_posts}
+        self.assertEqual(len(new_posts), 1)
+        db_row = list(new_posts.values())[0]
+        self.assertEqual(db_row["title"], "Quick publish")
+        # source_feature_id is Amplify-only and must NOT appear in the DB row.
+        self.assertNotIn("source_feature_id", db_row)
+        # No REST wire call to POST /announcement (bypassed entirely).
+        rest_creates = [c for c in self.fake.calls
+                        if c["method"] == "POST" and c["path"] == "/announcement"]
+        self.assertEqual(len(rest_creates), 0)
 
 
 class PingTests(_LiveModeTestCase):

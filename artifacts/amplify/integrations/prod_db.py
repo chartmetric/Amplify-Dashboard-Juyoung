@@ -270,6 +270,196 @@ def list_posts() -> dict:
         conn.close()
 
 
+def create_post(
+    *,
+    title: str,
+    content: list,
+    translations: dict,
+    image_url: str | None,
+    is_pinned: bool,
+    is_boosted: bool,
+    is_published: bool,
+    published_at: str | None,
+    category_ids: list[int],
+    boost_names: list[str],
+) -> dict:
+    """Insert a new announcement_post and its link-table rows.
+
+    Returns ``{"id": <new chartmetric id>}``.
+    Raises on DB errors — caller wraps in ValidationError.
+    """
+    import json as _json
+
+    conn = _get_conn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    INSERT INTO {_SCHEMA}.announcement_post
+                        (title, content, translations, image_url,
+                         is_pinned, is_boosted, is_published, published_at)
+                    VALUES (%s, %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        title,
+                        _json.dumps(content),
+                        _json.dumps(translations),
+                        image_url,
+                        is_pinned,
+                        is_boosted,
+                        is_published,
+                        published_at,
+                    ),
+                )
+                new_id = cur.fetchone()[0]
+
+                for cat_id in (category_ids or []):
+                    cur.execute(
+                        f"""
+                        INSERT INTO {_SCHEMA}.l_announcement_post_category
+                            (announcement_post_id, announcement_category_id)
+                        VALUES (%s, %s)
+                        ON CONFLICT DO NOTHING
+                        """,
+                        (new_id, cat_id),
+                    )
+
+                if boost_names:
+                    cur.execute(
+                        f"""
+                        SELECT id FROM {_SCHEMA}.announcement_boost_type
+                         WHERE boost_name = ANY(%s)
+                        """,
+                        (list(boost_names),),
+                    )
+                    for (bt_id,) in cur.fetchall():
+                        cur.execute(
+                            f"""
+                            INSERT INTO {_SCHEMA}.l_announcement_post_boost_type
+                                (announcement_post_id, announcement_boost_type_id)
+                            VALUES (%s, %s)
+                            ON CONFLICT DO NOTHING
+                            """,
+                            (new_id, bt_id),
+                        )
+
+        logger.info("[prod_db] create_post new_id=%s", new_id)
+        return {"id": new_id}
+    finally:
+        conn.close()
+
+
+def update_post(
+    cm_id: int,
+    *,
+    title: str,
+    content: list,
+    translations: dict,
+    image_url: str | None,
+    is_pinned: bool,
+    is_boosted: bool,
+    is_published: bool,
+    published_at: str | None,
+    category_ids: list[int],
+    boost_names: list[str],
+) -> bool:
+    """Update an existing announcement_post and replace its link-table rows.
+
+    Returns True if a row was updated, False if no row matched / was deleted.
+    Raises on DB errors.
+
+    Requires DELETE on l_announcement_post_category and
+    l_announcement_post_boost_type.  Grant with:
+        GRANT DELETE ON chartmetric.l_announcement_post_category,
+                        chartmetric.l_announcement_post_boost_type
+          TO amplify_announcement_admin_app;
+    """
+    import json as _json
+
+    conn = _get_conn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE {_SCHEMA}.announcement_post
+                       SET title        = %s,
+                           content      = %s::jsonb,
+                           translations = %s::jsonb,
+                           image_url    = %s,
+                           is_pinned    = %s,
+                           is_boosted   = %s,
+                           is_published = %s,
+                           published_at = %s,
+                           modified_at  = NOW()
+                     WHERE id          = %s
+                       AND deleted_at  IS NULL
+                    """,
+                    (
+                        title,
+                        _json.dumps(content),
+                        _json.dumps(translations),
+                        image_url,
+                        is_pinned,
+                        is_boosted,
+                        is_published,
+                        published_at,
+                        cm_id,
+                    ),
+                )
+                if cur.rowcount == 0:
+                    return False
+
+                # Replace category associations (requires DELETE permission).
+                cur.execute(
+                    f"DELETE FROM {_SCHEMA}.l_announcement_post_category"
+                    f" WHERE announcement_post_id = %s",
+                    (cm_id,),
+                )
+                for cat_id in (category_ids or []):
+                    cur.execute(
+                        f"""
+                        INSERT INTO {_SCHEMA}.l_announcement_post_category
+                            (announcement_post_id, announcement_category_id)
+                        VALUES (%s, %s)
+                        ON CONFLICT DO NOTHING
+                        """,
+                        (cm_id, cat_id),
+                    )
+
+                # Replace boost-type associations (requires DELETE permission).
+                cur.execute(
+                    f"DELETE FROM {_SCHEMA}.l_announcement_post_boost_type"
+                    f" WHERE announcement_post_id = %s",
+                    (cm_id,),
+                )
+                if boost_names:
+                    cur.execute(
+                        f"""
+                        SELECT id FROM {_SCHEMA}.announcement_boost_type
+                         WHERE boost_name = ANY(%s)
+                        """,
+                        (list(boost_names),),
+                    )
+                    for (bt_id,) in cur.fetchall():
+                        cur.execute(
+                            f"""
+                            INSERT INTO {_SCHEMA}.l_announcement_post_boost_type
+                                (announcement_post_id, announcement_boost_type_id)
+                            VALUES (%s, %s)
+                            ON CONFLICT DO NOTHING
+                            """,
+                            (cm_id, bt_id),
+                        )
+
+        logger.info("[prod_db] update_post cm_id=%s", cm_id)
+        return True
+    finally:
+        conn.close()
+
+
 def get_post(chartmetric_id: int) -> dict | None:
     """Return a single announcement post by its Chartmetric DB id, or None."""
     conn = _get_conn()

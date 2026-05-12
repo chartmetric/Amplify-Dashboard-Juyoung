@@ -677,6 +677,47 @@ def _resolve_remote_category_ids(local_cat_ids: list[int],
     return out
 
 
+def _local_to_cm_category_ids(local_cat_ids: list[int], data: dict) -> list[int]:
+    """Map local category IDs to their Chartmetric DB counterparts.
+
+    Categories without a ``chartmetric_id`` (never synced to the prod DB)
+    are silently skipped so an unsaved category can't break a post save.
+    """
+    out: list[int] = []
+    for cid in (local_cat_ids or []):
+        cat = data["categories"].get(str(cid))
+        if cat:
+            cm_id = cat.get("chartmetric_id")
+            if cm_id is not None:
+                out.append(int(cm_id))
+    return out
+
+
+def _remap_categories_to_local(post: dict, data: dict) -> dict:
+    """Replace chartmetric category IDs in a prod_db post dict with local IDs.
+
+    prod_db returns categories keyed by their Chartmetric DB id.  The post
+    editor's category checkboxes use local Amplify IDs (from
+    ``_categoriesCache``), so we remap here so the editor pre-fills correctly
+    and ``savePost()`` sends local IDs that the store can then map back.
+    """
+    cm_to_local: dict[int, int] = {}
+    for cat in data["categories"].values():
+        cm_id = cat.get("chartmetric_id")
+        if cm_id is not None:
+            cm_to_local[int(cm_id)] = int(cat["id"])
+
+    post = dict(post)
+    post["category_ids"] = [
+        cm_to_local.get(cid, cid) for cid in (post.get("category_ids") or [])
+    ]
+    post["categories"] = [
+        {**c, "id": cm_to_local.get(c["id"], c["id"])}
+        for c in (post.get("categories") or [])
+    ]
+    return post
+
+
 def _coerce_remote_id(payload: dict | None, *, kind: str) -> int:
     """Pull ``id`` out of a Chartmetric success body and coerce to int.
 
@@ -941,7 +982,8 @@ def get_post(post_id: int) -> dict | None:
             if local:
                 for field in _AMPLIFY_ONLY_POST_FIELDS:
                     remote.setdefault(field, local.get(field))
-            return remote
+            # Remap chartmetric category IDs → local IDs for the post editor.
+            return _remap_categories_to_local(remote, data)
     except Exception as exc:
         logger.warning(
             "[announcement_store] get_post DB fetch failed (%s); "
@@ -989,8 +1031,11 @@ def list_categories() -> list[dict]:
 def create_post(payload: dict) -> dict:
     if _stub_mode_enabled():
         return _stub_create_post(payload)
-    # Live mode — local mutation first, then push.
+    # Live mode — write directly to the prod DB; keep a local tracking record
+    # for Amplify-only metadata (boost_types, scheduled_publish_at, source
+    # fields) and the local-id↔chartmetric-id mapping.
     cleaned = _validate_post_input(payload)
+    from integrations import prod_db
     with _lock:
         data = _load()
         _ensure_seed_categories(data)
@@ -998,11 +1043,33 @@ def create_post(payload: dict) -> dict:
             if str(cid) not in data["categories"]:
                 raise ValidationError(f"Unknown category id: {cid}",
                                       "not_found", 404)
+        cm_cat_ids = _local_to_cm_category_ids(cleaned["category_ids"], data)
+        new_state = _resolve_status(cleaned["status"],
+                                     cleaned["scheduled_publish_at"])
+        published_at = _now_iso() if new_state["is_published"] else None
+        try:
+            cm_result = prod_db.create_post(
+                title=cleaned["title"],
+                content=cleaned["content"],
+                translations=cleaned["translations"],
+                image_url=cleaned["image_url"],
+                is_pinned=cleaned["is_pinned"],
+                is_boosted=cleaned["is_boosted"],
+                is_published=new_state["is_published"],
+                published_at=published_at,
+                category_ids=cm_cat_ids,
+                boost_names=cleaned["boost_types"],
+            )
+        except Exception as e:
+            raise ValidationError(
+                f"Prod DB create failed: {e}", "db_error", 502) from e
+        cm_id = cm_result["id"]
         pid = data["next_post_id"]
         data["next_post_id"] = pid + 1
         now = _now_iso()
         post = {
             "id": pid,
+            "chartmetric_id": cm_id,
             "title": cleaned["title"],
             "content": cleaned["content"],
             "translations": cleaned["translations"],
@@ -1011,16 +1078,16 @@ def create_post(payload: dict) -> dict:
             "boost_types": cleaned["boost_types"],
             "is_pinned": cleaned["is_pinned"],
             "is_boosted": cleaned["is_boosted"],
-            "created_at": now,
-            "modified_at": now,
+            "is_published": new_state["is_published"],
+            "published_at": published_at,
+            "scheduled_publish_at": cleaned["scheduled_publish_at"],
             "source_feature_id": cleaned["source_feature_id"],
             "source_feature_set_id": cleaned["source_feature_set_id"],
-            "chartmetric_id": None,
+            "created_at": now,
+            "modified_at": now,
+            "deleted_at": None,
         }
-        post.update(_resolve_status(cleaned["status"],
-                                     cleaned["scheduled_publish_at"]))
         data["posts"][str(pid)] = post
-        _push_post_to_chartmetric(post, data)
         _save(data)
         return _hydrate_post(post, data["categories"])
 
@@ -1028,38 +1095,90 @@ def create_post(payload: dict) -> dict:
 def update_post(post_id: int, payload: dict) -> dict | None:
     if _stub_mode_enabled():
         return _stub_update_post(post_id, payload)
+    # In live mode post_id is the Chartmetric DB id (the UI's _editingPostId
+    # comes from list_posts which now returns prod DB ids).
     cleaned = _validate_post_input(payload)
+    from integrations import prod_db
     with _lock:
         data = _load()
-        existing = data["posts"].get(str(post_id))
-        if not existing:
-            return None
-        for cid in cleaned["category_ids"]:
-            if str(cid) not in data["categories"]:
-                raise ValidationError(f"Unknown category id: {cid}",
-                                      "not_found", 404)
-        existing["title"] = cleaned["title"]
-        existing["content"] = cleaned["content"]
-        existing["translations"] = cleaned["translations"]
-        existing["category_ids"] = cleaned["category_ids"]
-        existing["image_url"] = cleaned["image_url"]
-        existing["boost_types"] = cleaned["boost_types"]
-        existing["is_pinned"] = cleaned["is_pinned"]
-        existing["is_boosted"] = cleaned["is_boosted"]
-        existing["source_feature_id"] = cleaned["source_feature_id"]
-        existing["source_feature_set_id"] = cleaned["source_feature_set_id"]
-        existing["modified_at"] = _now_iso()
-        prev_published = existing.get("is_published", False)
+        local_key, existing = _find_local_post_by_cm_id(data, post_id)
+        cm_cat_ids = _local_to_cm_category_ids(cleaned["category_ids"], data)
+        prev_published = (existing or {}).get("is_published", False)
         new_state = _resolve_status(cleaned["status"],
                                      cleaned["scheduled_publish_at"])
         if new_state["is_published"] and not prev_published:
-            new_state["published_at"] = _now_iso()
-        elif new_state["is_published"] and prev_published and existing.get("published_at"):
-            new_state["published_at"] = existing["published_at"]
-        existing.update(new_state)
-        _push_post_to_chartmetric(existing, data)
+            published_at = _now_iso()
+        elif new_state["is_published"] and prev_published and existing:
+            published_at = existing.get("published_at")
+        else:
+            published_at = new_state.get("published_at")
+        try:
+            ok = prod_db.update_post(
+                post_id,
+                title=cleaned["title"],
+                content=cleaned["content"],
+                translations=cleaned["translations"],
+                image_url=cleaned["image_url"],
+                is_pinned=cleaned["is_pinned"],
+                is_boosted=cleaned["is_boosted"],
+                is_published=new_state["is_published"],
+                published_at=published_at,
+                category_ids=cm_cat_ids,
+                boost_names=cleaned["boost_types"],
+            )
+        except Exception as e:
+            raise ValidationError(
+                f"Prod DB update failed: {e}", "db_error", 502) from e
+        if not ok:
+            return None
+        now = _now_iso()
+        if existing:
+            existing["title"] = cleaned["title"]
+            existing["content"] = cleaned["content"]
+            existing["translations"] = cleaned["translations"]
+            existing["category_ids"] = cleaned["category_ids"]
+            existing["image_url"] = cleaned["image_url"]
+            existing["boost_types"] = cleaned["boost_types"]
+            existing["is_pinned"] = cleaned["is_pinned"]
+            existing["is_boosted"] = cleaned["is_boosted"]
+            existing["is_published"] = new_state["is_published"]
+            existing["published_at"] = published_at
+            existing["scheduled_publish_at"] = cleaned["scheduled_publish_at"]
+            existing["source_feature_id"] = cleaned["source_feature_id"]
+            existing["source_feature_set_id"] = cleaned["source_feature_set_id"]
+            existing["modified_at"] = now
+        else:
+            # No local tracking record — create one so Amplify-only fields and
+            # the local-id↔chartmetric-id link are preserved for future calls.
+            new_pid = data["next_post_id"]
+            data["next_post_id"] = new_pid + 1
+            data["posts"][str(new_pid)] = {
+                "id": new_pid,
+                "chartmetric_id": post_id,
+                "title": cleaned["title"],
+                "content": cleaned["content"],
+                "translations": cleaned["translations"],
+                "category_ids": cleaned["category_ids"],
+                "image_url": cleaned["image_url"],
+                "boost_types": cleaned["boost_types"],
+                "is_pinned": cleaned["is_pinned"],
+                "is_boosted": cleaned["is_boosted"],
+                "is_published": new_state["is_published"],
+                "published_at": published_at,
+                "scheduled_publish_at": cleaned["scheduled_publish_at"],
+                "source_feature_id": cleaned["source_feature_id"],
+                "source_feature_set_id": cleaned["source_feature_set_id"],
+                "created_at": now,
+                "modified_at": now,
+                "deleted_at": None,
+            }
         _save(data)
-        return _hydrate_post(existing, data["categories"])
+    # Re-fetch from prod DB for the canonical result, then remap category IDs.
+    updated = prod_db.get_post(post_id)
+    if updated is None:
+        return None
+    data = _load()
+    return _remap_categories_to_local(updated, data)
 
 
 def _find_local_post_by_cm_id(data: dict, cm_id: int) -> tuple[str | None, dict | None]:
