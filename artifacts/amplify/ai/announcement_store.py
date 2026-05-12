@@ -1049,25 +1049,38 @@ def update_post(post_id: int, payload: dict) -> dict | None:
         return _hydrate_post(existing, data["categories"])
 
 
+def _find_local_post_by_cm_id(data: dict, cm_id: int) -> tuple[str | None, dict | None]:
+    """Return (local_key, post_dict) for the post whose chartmetric_id matches cm_id.
+
+    In live mode the UI works with Chartmetric IDs.  Posts that were created
+    directly in the Chartmetric DB (not through Amplify) won't have a local
+    record at all, so this may return (None, None).
+    """
+    for k, p in data["posts"].items():
+        if p.get("chartmetric_id") == cm_id:
+            return k, p
+    return None, None
+
+
 def restore_post(post_id: int) -> bool:
     if _stub_mode_enabled():
         return _stub_restore_post(post_id)
+    # In live mode post_id is the Chartmetric ID (from the API response).
+    from integrations import prod_db
     with _lock:
         data = _load()
-        existing = data["posts"].get(str(post_id))
-        if not existing or not existing.get("deleted_at"):
-            return False
-        chartmetric_id = existing.get("chartmetric_id")
-        if chartmetric_id:
-            from integrations import prod_db
-            try:
-                prod_db.restore_post(chartmetric_id)
-            except Exception as e:
-                raise ValidationError(
-                    f"Prod DB restore failed: {e}",
-                    "db_error", 502) from e
-        existing["deleted_at"] = None
-        existing["modified_at"] = _now_iso()
+        local_key, existing = _find_local_post_by_cm_id(data, post_id)
+        if existing and not existing.get("deleted_at"):
+            return False  # not deleted — nothing to restore
+        try:
+            prod_db.restore_post(post_id)
+        except Exception as e:
+            raise ValidationError(
+                f"Prod DB restore failed: {e}", "db_error", 502) from e
+        now = _now_iso()
+        if existing:
+            existing["deleted_at"] = None
+            existing["modified_at"] = now
         _save(data)
         return True
 
@@ -1075,24 +1088,45 @@ def restore_post(post_id: int) -> bool:
 def delete_post(post_id: int) -> bool:
     if _stub_mode_enabled():
         return _stub_delete_post(post_id)
+    # In live mode post_id is the Chartmetric ID (from the API response).
+    from integrations import prod_db
     with _lock:
         data = _load()
-        existing = data["posts"].get(str(post_id))
-        if not existing or existing.get("deleted_at"):
-            return False
-        chartmetric_id = existing.get("chartmetric_id")
-        if chartmetric_id:
-            from integrations import prod_db
-            try:
-                prod_db.soft_delete_post(chartmetric_id)
-            except Exception as e:
-                raise ValidationError(
-                    f"Prod DB soft-delete failed: {e}",
-                    "db_error", 502) from e
-        # Mark deleted in local working copy so the list is updated immediately.
+        local_key, existing = _find_local_post_by_cm_id(data, post_id)
+        if existing and existing.get("deleted_at"):
+            return False  # already deleted
+        try:
+            prod_db.soft_delete_post(post_id)
+        except Exception as e:
+            raise ValidationError(
+                f"Prod DB soft-delete failed: {e}", "db_error", 502) from e
         now = _now_iso()
-        existing["deleted_at"] = now
-        existing["modified_at"] = now
+        if existing:
+            existing["deleted_at"] = now
+            existing["modified_at"] = now
+        else:
+            # Post exists on Chartmetric but has no local record — create a
+            # minimal tracking entry so the list can show the Restore button.
+            data["posts"][str(post_id)] = {
+                "id": post_id,
+                "chartmetric_id": post_id,
+                "title": "",
+                "content": [],
+                "translations": {},
+                "category_ids": [],
+                "boost_types": [],
+                "image_url": None,
+                "is_pinned": False,
+                "is_boosted": False,
+                "is_published": True,
+                "published_at": None,
+                "scheduled_publish_at": None,
+                "source_feature_id": None,
+                "source_feature_set_id": None,
+                "created_at": now,
+                "modified_at": now,
+                "deleted_at": now,
+            }
         _save(data)
         return True
 

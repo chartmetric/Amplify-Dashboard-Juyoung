@@ -556,29 +556,31 @@ class DeleteFlowTests(_LiveModeTestCase):
             "title": "doomed", "content": [{"type": "p"}],
             "category_ids": [], "status": "draft", "translations": {},
         })
-        remote_id = post["chartmetric_id"]
+        # In live mode the UI passes the Chartmetric ID (from the API response),
+        # not the local Amplify ID.
+        cm_id = post["chartmetric_id"]
         self.fake.calls.clear()
 
         with mock.patch(
             "integrations.prod_db.soft_delete_post", return_value=True
         ) as mock_soft_delete:
-            ok = announcement_store.delete_post(post["id"])
+            ok = announcement_store.delete_post(cm_id)
 
         self.assertTrue(ok)
         # prod_db.soft_delete_post must be called with the chartmetric id.
-        mock_soft_delete.assert_called_once_with(remote_id)
+        mock_soft_delete.assert_called_once_with(cm_id)
         # No hard DELETE must have crossed the Chartmetric REST wire.
         rest_deletes = [c for c in self.fake.calls if c["method"] == "DELETE"]
         self.assertEqual(rest_deletes, [])
         # Post must appear in the list with deleted_at set (so UI can show Restore).
         result = announcement_store.list_posts()
         deleted_items = [p for p in result["items"] if p.get("deleted_at")]
-        deleted_ids = [p["id"] for p in deleted_items]
-        self.assertIn(post["id"], deleted_ids)
+        deleted_cm_ids = [p.get("chartmetric_id") for p in deleted_items]
+        self.assertIn(cm_id, deleted_cm_ids)
         # Active (non-deleted) items must not include the post.
-        active_ids = [p["id"] for p in result["items"] if not p.get("deleted_at")]
-        self.assertNotIn(post["id"], active_ids)
-        # get_post must return None for deleted posts (editor must not open them).
+        active_cm_ids = [p.get("chartmetric_id") for p in result["items"] if not p.get("deleted_at")]
+        self.assertNotIn(cm_id, active_cm_ids)
+        # get_post via local ID must return None (editor must not open deleted posts).
         self.assertIsNone(announcement_store.get_post(post["id"]))
 
     def test_delete_post_already_deleted_returns_false(self):
@@ -588,10 +590,11 @@ class DeleteFlowTests(_LiveModeTestCase):
             "title": "doomed twice", "content": [{"type": "p"}],
             "category_ids": [], "status": "draft", "translations": {},
         })
+        cm_id = post["chartmetric_id"]
         with mock.patch("integrations.prod_db.soft_delete_post", return_value=True):
-            announcement_store.delete_post(post["id"])
+            announcement_store.delete_post(cm_id)
             # Second call should return False (already deleted).
-            ok = announcement_store.delete_post(post["id"])
+            ok = announcement_store.delete_post(cm_id)
         self.assertFalse(ok)
 
 
