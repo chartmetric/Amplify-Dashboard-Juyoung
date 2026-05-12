@@ -155,6 +155,20 @@ def delete_post_endpoint(post_id: int):
     return jsonify({"success": True, "id": post_id}), 200
 
 
+@bp.route("/api/admin/announcements/<int:post_id>/restore", methods=["POST"])
+def restore_post_endpoint(post_id: int):
+    try:
+        ok = announcement_store.restore_post(post_id)
+    except ValidationError as e:
+        return _validation_response(e)
+    except Exception as e:
+        logger.exception("[announcements] restore %s failed: %s", post_id, e)
+        return jsonify({"success": False, "error": str(e)}), 500
+    if not ok:
+        return jsonify({"success": False, "error": "Not found or not deleted"}), 404
+    return jsonify({"success": True, "id": post_id}), 200
+
+
 @bp.route("/api/admin/announcements/<int:post_id>/boost", methods=["POST"])
 def set_post_boost_endpoint(post_id: int):
     """Flip ``is_boosted`` on a post. Only valid for published+synced

@@ -570,11 +570,15 @@ class DeleteFlowTests(_LiveModeTestCase):
         # No hard DELETE must have crossed the Chartmetric REST wire.
         rest_deletes = [c for c in self.fake.calls if c["method"] == "DELETE"]
         self.assertEqual(rest_deletes, [])
-        # Post must now be invisible in the list.
+        # Post must appear in the list with deleted_at set (so UI can show Restore).
         result = announcement_store.list_posts()
-        ids = [p["id"] for p in result["items"]]
-        self.assertNotIn(post["id"], ids)
-        # get_post must also return None for deleted posts.
+        deleted_items = [p for p in result["items"] if p.get("deleted_at")]
+        deleted_ids = [p["id"] for p in deleted_items]
+        self.assertIn(post["id"], deleted_ids)
+        # Active (non-deleted) items must not include the post.
+        active_ids = [p["id"] for p in result["items"] if not p.get("deleted_at")]
+        self.assertNotIn(post["id"], active_ids)
+        # get_post must return None for deleted posts (editor must not open them).
         self.assertIsNone(announcement_store.get_post(post["id"]))
 
     def test_delete_post_already_deleted_returns_false(self):

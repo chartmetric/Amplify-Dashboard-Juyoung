@@ -87,6 +87,37 @@ def soft_delete_post(chartmetric_id: int) -> bool:
         conn.close()
 
 
+def restore_post(chartmetric_id: int) -> bool:
+    """Clear deleted_at on the given announcement_post row (restore it).
+
+    Returns True if a row was updated, False if no row matched the id.
+    Raises on DB errors.
+    """
+    conn = _get_conn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE {_SCHEMA}.announcement_post
+                       SET deleted_at  = NULL,
+                           modified_at = NOW()
+                     WHERE id = %s
+                       AND deleted_at IS NOT NULL
+                    """,
+                    (chartmetric_id,),
+                )
+                updated = cur.rowcount
+        logger.info(
+            "[prod_db] restore_post chartmetric_id=%s rows_updated=%s",
+            chartmetric_id,
+            updated,
+        )
+        return updated > 0
+    finally:
+        conn.close()
+
+
 def get_deleted_post_ids() -> set[int]:
     """Return the set of chartmetric announcement_post ids that are soft-deleted."""
     conn = _get_conn()

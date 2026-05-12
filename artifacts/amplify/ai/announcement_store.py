@@ -368,8 +368,7 @@ def _stub_list_posts(status: str | None, category: str | None,
         cat_name_to_id = {c["name"].lower(): str(c["id"])
                           for c in cats_by_id.values()}
         items = [_hydrate_post(p, cats_by_id)
-                 for p in data["posts"].values()
-                 if not p.get("deleted_at")]
+                 for p in data["posts"].values()]
     if status and status != "all":
         items = [p for p in items if p["status"] == status]
     if category:
@@ -484,6 +483,18 @@ def _stub_delete_post(post_id: int) -> bool:
         if post.get("deleted_at"):
             return False
         post["deleted_at"] = _now_iso()
+        post["modified_at"] = _now_iso()
+        _save(data)
+        return True
+
+
+def _stub_restore_post(post_id: int) -> bool:
+    with _lock:
+        data = _load()
+        post = data["posts"].get(str(post_id))
+        if not post or not post.get("deleted_at"):
+            return False
+        post["deleted_at"] = None
         post["modified_at"] = _now_iso()
         _save(data)
         return True
@@ -866,10 +877,15 @@ def list_posts(status: str | None = None, category: str | None = None,
     if _stub_mode_enabled():
         return _stub_list_posts(status, category, search, offset, limit)
     from integrations import chartmetric_announcement_client as cmc
-    # Collect locally-deleted chartmetric ids so we can filter them out of
-    # the proxied API response (the prod API doesn't yet filter deleted_at).
+    # Collect locally-deleted posts so we can (a) exclude them from the live
+    # API response and (b) append them as a separate "deleted" section.
     with _lock:
         data = _load()
+        deleted_posts = [
+            _hydrate_post(p, data["categories"])
+            for p in data["posts"].values()
+            if p.get("deleted_at")
+        ]
         deleted_cm_ids: set[int] = {
             p["chartmetric_id"]
             for p in data["posts"].values()
@@ -879,10 +895,13 @@ def list_posts(status: str | None = None, category: str | None = None,
         result = cmc.list_posts(status=status, category=category,
                                 search=search, offset=offset, limit=limit)
         items = [_stamp_live_published(p) for p in result.get("items") or []]
+        # Filter deleted posts out of the live API response, then append the
+        # locally-tracked deleted records so the UI can show a Restore button.
         if deleted_cm_ids:
             items = [p for p in items if p.get("id") not in deleted_cm_ids]
+        items.extend(deleted_posts)
         result["items"] = items
-        result["total"] = result.get("total", len(items))
+        result["total"] = len(items)
         return result
     except cmc.ChartmetricClientError as exc:
         logger.warning(
@@ -1028,6 +1047,29 @@ def update_post(post_id: int, payload: dict) -> dict | None:
         _push_post_to_chartmetric(existing, data)
         _save(data)
         return _hydrate_post(existing, data["categories"])
+
+
+def restore_post(post_id: int) -> bool:
+    if _stub_mode_enabled():
+        return _stub_restore_post(post_id)
+    with _lock:
+        data = _load()
+        existing = data["posts"].get(str(post_id))
+        if not existing or not existing.get("deleted_at"):
+            return False
+        chartmetric_id = existing.get("chartmetric_id")
+        if chartmetric_id:
+            from integrations import prod_db
+            try:
+                prod_db.restore_post(chartmetric_id)
+            except Exception as e:
+                raise ValidationError(
+                    f"Prod DB restore failed: {e}",
+                    "db_error", 502) from e
+        existing["deleted_at"] = None
+        existing["modified_at"] = _now_iso()
+        _save(data)
+        return True
 
 
 def delete_post(post_id: int) -> bool:

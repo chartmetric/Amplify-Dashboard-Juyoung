@@ -607,39 +607,54 @@ async function reloadPosts() {
 function renderPosts(items) {
   const tbody = $('posts-tbody');
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No announcements yet. Create your first one with the “+ New Post” button above.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No announcements yet. Create your first one with the "+ New Post" button above.</td></tr>';
     return;
   }
   tbody.innerHTML = items.map(p => {
+    const isDeleted = !!p.deleted_at;
     const cats = (p.categories||[]).map(c =>
       `<span class="cat-pill" style="background:${escapeAttr(c.color||'#888')}">${escapeHtml(c.name||'')}</span>`
     ).join('');
     const updated = (p.modified_at||p.created_at||'').slice(0,16).replace('T',' ');
     const published = p.published_at ? p.published_at.slice(0,16).replace('T',' ') : '—';
     const pinned = p.is_pinned ? ' 📌' : '';
-    return `<tr>
-      <td><div style="font-weight:600">${escapeHtml(p.title||'(untitled)')}${pinned}</div>
+    const titleStyle = isDeleted ? 'font-weight:600;opacity:0.45;text-decoration:line-through' : 'font-weight:600';
+    const rowStyle = isDeleted ? 'opacity:0.6' : '';
+    const statusBadge = isDeleted
+      ? `<span class="badge" style="background:#888;color:#fff">deleted</span>`
+      : `<span class="badge ${p.status}">${escapeHtml(p.status)}</span>`;
+    const actions = isDeleted
+      ? `<button class="btn small secondary" onclick="restorePost(${p.id})">Restore</button>`
+      : `<button class="btn small secondary" onclick="openPostEditor(${p.id})">Edit</button>
+         <button class="btn small danger" onclick="deletePost(${p.id})">Delete</button>`;
+    return `<tr style="${rowStyle}">
+      <td><div style="${titleStyle}">${escapeHtml(p.title||'(untitled)')}${pinned}</div>
           <div class="dim" style="font-size:11px">id ${p.id}</div></td>
       <td>${cats || '<span class="dim">—</span>'}</td>
       <td>${(p.boost_types||[]).length ? (p.boost_types).map(b=>`<span class="badge format">${escapeHtml(b)}</span>`).join(' ') : '<span class="dim">—</span>'}</td>
-      <td><span class="badge ${p.status}">${escapeHtml(p.status)}</span></td>
+      <td>${statusBadge}</td>
       <td class="muted">${escapeHtml(published)}</td>
       <td class="muted">${escapeHtml(updated)}</td>
       <td class="row-actions">
-        <div class="row-actions-inner">
-          <button class="btn small secondary" onclick="openPostEditor(${p.id})">Edit</button>
-          <button class="btn small danger" onclick="deletePost(${p.id})">Delete</button>
-        </div>
+        <div class="row-actions-inner">${actions}</div>
       </td>
     </tr>`;
   }).join('');
 }
 
 async function deletePost(id) {
-  if (!confirm('Soft-delete this announcement? It will be hidden from the feed but can be recovered from the database.')) return;
+  if (!confirm('Soft-delete this announcement? It will be hidden from the feed but can be restored here.')) return;
   try {
     await apiJson('/api/admin/announcements/' + id, { method: 'DELETE' });
     toast('Deleted'); reloadPosts();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function restorePost(id) {
+  if (!confirm('Restore this announcement? It will become visible in the feed again.')) return;
+  try {
+    await apiJson('/api/admin/announcements/' + id + '/restore', { method: 'POST' });
+    toast('Restored'); reloadPosts();
   } catch(e) { toast(e.message,'error'); }
 }
 
