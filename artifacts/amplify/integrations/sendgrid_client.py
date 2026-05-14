@@ -2186,20 +2186,30 @@ def _list_contact_topic_subs(email: str) -> tuple:
         # rotation.
         return ([], "error")
     import resend
+    import time as _t
     resend.api_key = resend_api_key
-    try:
-        resp = resend.ContactsTopics.list(email=em)
-        if isinstance(resp, dict):
-            return (resp.get("data", []) or [], "ok")
-        if isinstance(resp, list):
-            return (resp, "ok")
-        return (list(getattr(resp, "data", []) or []), "ok")
-    except Exception as e:
-        err_str = str(e).lower()
-        if "not found" in err_str or "404" in err_str:
-            return ([], "not_found")
-        logger.warning(f"[resend] Failed to list contact topics for <{em[:3]}...>: {e}")
-        return ([], "error")
+    _max_attempts = 3
+    _backoff = 0.5  # seconds before first retry; doubles each attempt
+    for _attempt in range(_max_attempts):
+        try:
+            resp = resend.ContactsTopics.list(email=em)
+            if isinstance(resp, dict):
+                return (resp.get("data", []) or [], "ok")
+            if isinstance(resp, list):
+                return (resp, "ok")
+            return (list(getattr(resp, "data", []) or []), "ok")
+        except Exception as e:
+            err_str = str(e).lower()
+            if "not found" in err_str or "404" in err_str:
+                return ([], "not_found")
+            is_rate_limit = "too many requests" in err_str or "429" in err_str or "rate limit" in err_str
+            if is_rate_limit and _attempt < _max_attempts - 1:
+                wait = _backoff * (2 ** _attempt)
+                logger.info(f"[resend] Rate-limited fetching contact topics for <{em[:3]}...>; retrying in {wait:.1f}s (attempt {_attempt+1}/{_max_attempts})")
+                _t.sleep(wait)
+                continue
+            logger.warning(f"[resend] Failed to list contact topics for <{em[:3]}...>: {e}")
+            return ([], "error")
 
 
 def filter_emails_by_topic_subscription(emails: list, topic_id: str) -> dict:
@@ -2268,7 +2278,7 @@ def filter_emails_by_topic_subscription(emails: list, topic_id: str) -> dict:
     # mid-size audience doesn't get partially rate-limited and trip
     # the fail-safe abort on transient 429s.
     import time as _time_mod
-    _MIN_INTERVAL_S = 0.22
+    _MIN_INTERVAL_S = 0.25   # 4 req/sec — comfortable margin under the 5/sec limit
     _last_call_at = 0.0
     for em in emails:
         em_clean = (em or "").strip()
