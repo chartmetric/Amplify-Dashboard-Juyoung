@@ -4946,18 +4946,25 @@ def get_resend_contacts(audience_id):
         emails = [c.get("email", "") for c in subscribed]
         topic_filter = filter_emails_by_topic_subscription(emails, topic_id)
         if not topic_filter.get("ok"):
-            # Fail-safe: don't show a count we can't trust. The badge
-            # surfaces the error and the send button will block.
+            # Soft-fail for the preview count: Resend's ContactsTopics API
+            # occasionally returns rate-limit errors during N+1 look-ups.
+            # The send path enforces the topic filter with its own fail-safe,
+            # so returning a hard error here just blocks the UI unnecessarily.
+            # Log the warning and fall back to showing all subscribed contacts.
             logger.warning(
                 f"[contacts] Topic filter could not resolve all subscribers "
                 f"for audience=<{audience_id[:8]}...> topic=<{topic_id[:8]}...>: "
-                f"errors={topic_filter.get('errors')}"
+                f"errors={topic_filter.get('errors')} — falling back to unfiltered list"
             )
+            # Return success with all subscribed contacts; add a soft flag so
+            # the UI can optionally show a "(estimate)" label if desired.
+            out = [{"email": c.get("email", "")} for c in subscribed]
             return jsonify({
-                "success": False,
-                "error": topic_filter.get("error") or "Could not verify topic subscriptions.",
-                "topic_filter_error": True,
-            }), 502
+                "success": True,
+                "contacts": out,
+                "total": len(out),
+                "topic_filter_warning": True,
+            }), 200
         kept_set = set(topic_filter.get("kept") or [])
         subscribed = [c for c in subscribed if c.get("email", "") in kept_set]
     out = [{"email": c.get("email", "")} for c in subscribed]
