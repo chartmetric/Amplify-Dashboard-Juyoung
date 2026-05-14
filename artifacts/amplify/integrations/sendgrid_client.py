@@ -939,6 +939,33 @@ def _resolve_external_thumb_to_s3_url(key: str) -> str | None:
     return _public_s3_url_for(new_key)
 
 
+def _resolve_announcement_image_to_s3_url(stored_name: str) -> str | None:
+    """Return a direct S3 URL for an announcement-editor upload, or None.
+
+    Reads the ``.s3`` sidecar written by the upload endpoint and mints a
+    presigned / public URL via the attachment_store helper.  Works for both
+    public-bucket (URL) and private-bucket (presigned) S3 configurations.
+    Falls back to None so the original URL is left unchanged.
+    """
+    try:
+        import os as _os
+        upload_dir = _os.path.join(_os.path.dirname(__file__), "..", ".announcement_uploads")
+        safe = _os.path.basename(stored_name)
+        sidecar = _os.path.join(upload_dir, safe + ".s3")
+        if not _os.path.isfile(sidecar):
+            return None
+        with open(sidecar) as _f:
+            lines = [ln.strip() for ln in _f.readlines()]
+        s3_key = lines[0] if lines else ""
+        if not s3_key:
+            return None
+        from integrations import attachment_store as _astore
+        return _astore.s3_serve_url(s3_key) or None
+    except Exception as _e:
+        logger.debug(f"[rewrite-s3] announcement-img: sidecar lookup failed for {stored_name!r}: {_e}")
+        return None
+
+
 # Match an ``/api/...`` path inside a URL (with or without scheme/host),
 # stopping at the natural URL terminators. Anchored with a leading ``/``
 # so it picks up both bare paths and absolute URLs.
@@ -953,6 +980,12 @@ _RE_EXT_THUMB = _re_rewrite.compile(r'/api/videos/external-thumb/([a-fA-F0-9]+)'
 # whitespace, ``<``, ``?``, ``#`` or end-of-string.
 _RE_VIDEO_BODY = _re_rewrite.compile(
     r'/api/videos/([A-Za-z0-9\-]{8,})(?=$|[?#"\'\s<>])'
+)
+# Announcement-editor uploads: ``/api/admin/announcement-uploads/<stored_name>``
+# (may also appear as an absolute URL with a scheme+host prefix, so we match
+# only the path segment and let the regex engine ignore any leading host part).
+_RE_ANNOUNCEMENT_IMG = _re_rewrite.compile(
+    r'/api/admin/announcement-uploads/([^"\'>\s?#]+)'
 )
 
 # Match URLs that appear inside ``<img src="..."``, ``<source src="..."``,
@@ -999,6 +1032,10 @@ def _rewrite_one_url(url: str) -> str:
     if m:
         new = _resolve_video_body_to_s3_url(m.group(1))
         return new or url
+    m = _RE_ANNOUNCEMENT_IMG.search(url)
+    if m:
+        new = _resolve_announcement_image_to_s3_url(m.group(1))
+        return new or url
     return url
 
 
@@ -1031,7 +1068,7 @@ def rewrite_email_html_to_direct_s3(html: str) -> str:
             rewritten_count[0] += 1
         elif _RE_HOSTED_IMG.search(url) or _RE_FEATURE_IMG.search(url) \
                 or _RE_VIDEO_THUMB.search(url) or _RE_VIDEO_BODY.search(url) \
-                or _RE_EXT_THUMB.search(url):
+                or _RE_EXT_THUMB.search(url) or _RE_ANNOUNCEMENT_IMG.search(url):
             skipped_count[0] += 1
         return f"{prefix}{quote}{new_url}{quote}"
 

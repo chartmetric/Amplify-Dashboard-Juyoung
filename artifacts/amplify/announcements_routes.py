@@ -380,7 +380,16 @@ def upload_media_endpoint():
                 pass
     except Exception as e:
         logger.warning("[attachments] kind=announcements S3 upload skipped: %s", e)
-    url = f"/api/admin/announcement-uploads/{stored_name}"
+    # Return the S3 public URL directly when available — it's durable and
+    # works in email clients without requiring the Amplify server to be up.
+    # Fall back to an *absolute* Replit-hosted URL (never a relative path)
+    # so the stored image_url works in email previews, actual email delivery,
+    # and any other out-of-app context.
+    if s3_url:
+        url = s3_url
+    else:
+        base = request.url_root.rstrip("/")
+        url = f"{base}/api/admin/announcement-uploads/{stored_name}"
     return jsonify({"success": True, "url": url, "kind": kind,
                     "filename": name, "size": len(raw),
                     "stored_as": stored_name}), 201

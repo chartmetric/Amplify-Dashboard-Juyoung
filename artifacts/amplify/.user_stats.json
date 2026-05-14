@@ -1,7 +1,12 @@
 {
   "juyoung@chartmetric.com": {
-    "minutes_in_app": 66,
-    "drafts_saved": 1,
+    "minutes_in_app": 69,
+    "drafts_saved": 2,
+    "sends": []
+  },
+  "hanby@chartmetric.com": {
+    "minutes_in_app": 1,
+    "drafts_saved": 0,
     "sends": []
   }
 }
