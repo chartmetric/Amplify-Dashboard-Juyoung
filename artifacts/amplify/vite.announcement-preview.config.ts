@@ -1,8 +1,5 @@
-// Standalone Vite config that builds the announcement preview React widget as a
-// single ES module + CSS file under static/announcement-preview/. The Flask app
-// already serves everything under static/ (see Flask(__init__) in app.py), and the
-// templates/announcements.html template loads the output via <script type="module">
-// + <link rel="stylesheet">.
+// Builds the announcement preview widget as a single JS + CSS bundle under
+// static/announcement-preview/, which Flask serves directly.
 import path from "path";
 
 import tailwindcss from "@tailwindcss/vite";
@@ -18,8 +15,7 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
-  // Don't copy public/ into the widget output — those assets (favicon, opengraph)
-  // belong to the main React SPA, not the announcement preview bundle.
+  // public/ belongs to the main SPA, not this widget.
   publicDir: false,
   build: {
     outDir: path.resolve(
@@ -38,9 +34,7 @@ export default defineConfig({
         "main.tsx",
       ),
       output: {
-        // Predictable filenames so the Flask template can reference them directly
-        // without a manifest lookup. There is exactly one entry, one chunk, and one
-        // CSS file in this build.
+        // Stable filenames so the Flask template can reference them directly.
         entryFileNames: "main.js",
         chunkFileNames: "[name].js",
         assetFileNames: (info) => {

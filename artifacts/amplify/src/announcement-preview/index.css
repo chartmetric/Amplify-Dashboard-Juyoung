@@ -3,11 +3,7 @@
 
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
-/*
- * The widget renders inside the existing #preview-mock container in
- * templates/announcements.html. Force-position the host element so the absolutely
- * positioned overlay inside the widget has something to anchor against.
- */
+/* Anchor for the absolutely-positioned overlay; pointer-events let clicks through to the host mock. */
 #announcement-popup-preview-root {
   position: absolute;
   inset: 0;

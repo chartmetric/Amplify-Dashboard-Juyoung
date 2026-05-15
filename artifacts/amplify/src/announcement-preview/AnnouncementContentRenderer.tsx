@@ -1,9 +1,6 @@
-// Slimmed-down copy of
-// chartmetric-announcement/artifacts/web/src/components/announcement/components/AnnouncementContentRenderer.tsx.
-// Differences vs. the source:
-// - Accepts both "heading-1" / "heading-2" (chartmetric-announcement format) and
-//   "heading-one" / "heading-two" / "heading-three" (Amplify's form HTML->slate serializer).
-
+// Renders Slate-style content blocks. Accepts both heading-1/2 and
+// heading-one/two/three because the source content can come from either
+// chartmetric-announcement or Amplify's local HTML->slate serializer.
 import React from "react";
 
 import type {

@@ -1,7 +1,3 @@
-// Slimmed-down copy of chartmetric-announcement/artifacts/web/src/components/announcement/components/AnnouncementTag.tsx.
-// The translation lookup is dropped; the admin preview shows category names verbatim
-// from the form.
-
 import type { AnnouncementCategoryInfo } from "./types";
 import { DEFAULT_CATEGORY_COLOR, hexToRgba } from "./utils";
 

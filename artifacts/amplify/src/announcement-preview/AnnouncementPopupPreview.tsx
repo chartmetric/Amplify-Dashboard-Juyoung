@@ -1,8 +1,5 @@
-// Slimmed-down adaptation of
-// chartmetric-announcement/artifacts/web/src/components/announcement/components/AnnouncementModal.tsx.
-// Reactions and comments are intentionally omitted — the admin preview only needs to show
-// what the post body, title, categories, image, and date look like inside the popup chrome.
-
+// Content-only adaptation of the in-app announcement modal: no reactions, no
+// comments, no network calls — just the static popup chrome around the post body.
 import { faXmark } from "@fortawesome/pro-solid-svg-icons/faXmark";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
@@ -17,11 +14,6 @@ import type { AnnouncementPreviewData } from "./types";
 
 interface Props {
   announcement: AnnouncementPreviewData;
-  /**
-   * When true, the preview renders inside its host container with a darkened
-   * backdrop (so the admin form is still usable behind it). When false, the
-   * component renders nothing — the host element should hide the preview area.
-   */
   show: boolean;
 }
 

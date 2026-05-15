@@ -1,6 +1,3 @@
-// Slimmed-down copy of chartmetric-announcement/artifacts/web/src/components/announcement/utils.ts.
-// i18n is dropped; the admin preview always renders in English using the source content.
-
 export const DEFAULT_CATEGORY_COLOR = "#6B7280";
 
 export function formatPublishedDate(dateString: string | null): string {

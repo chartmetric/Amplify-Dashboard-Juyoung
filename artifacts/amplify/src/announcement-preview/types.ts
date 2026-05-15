@@ -1,7 +1,3 @@
-// Slimmed-down copy of chartmetric-announcement/artifacts/web/src/components/announcement/types.ts.
-// Reactions, comments, boost actions, and translation maps are dropped because the
-// admin preview only renders the static modal content (title + categories + body + image).
-
 export interface TextNode {
   text: string;
   bold?: boolean;
@@ -25,9 +21,6 @@ export interface ParagraphBlock {
 }
 
 export interface HeadingBlock {
-  // The chartmetric-announcement renderer uses "heading-1" / "heading-2".
-  // Amplify's existing form HTML->slate serializer emits "heading-one" / "heading-two" /
-  // "heading-three" — both shapes are accepted so the preview can render either.
   type:
     | "heading-1"
     | "heading-2"

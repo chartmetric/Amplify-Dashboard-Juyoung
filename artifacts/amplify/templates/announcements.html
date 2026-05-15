@@ -426,11 +426,7 @@ tr:hover td { background: rgba(255,255,255,0.02); }
         <img id="preview-image" class="mock-image" style="display:none" />
         <h4 class="mock-title" id="preview-title">(untitled)</h4>
         <div class="mock-body" id="preview-body"></div>
-        <!--
-          React widget mount. Renders an empty overlay until the "Popup" boost type
-          is selected; renders the real <AnnouncementPopupPreview /> from the
-          chartmetric-announcement components on top of the mock above when active.
-        -->
+        <!-- React popup-preview widget mount; only visible when "Popup" boost is selected. -->
         <div id="announcement-popup-preview-root"></div>
       </div>
     </div>
@@ -833,8 +829,7 @@ function renderPreview() {
       ? 'Boosted — ' + boostTypesChecked.join(', ')
       : 'In-drawer card (announcement feed)';
   }
-  // Drive the React popup-preview widget so the "Popup" boost mode shows the same
-  // AnnouncementPopupPreview chrome that production users see in the in-app modal.
+  // Drive the React popup-preview widget with the current form values.
   if (window.AnnouncementPreview) {
     try {
       window.AnnouncementPreview.update({
@@ -864,8 +859,6 @@ function bindPreviewListeners() {
   document.addEventListener('change', e => {
     if (e.target && e.target.matches('#f-cats input')) schedulePreview();
   });
-  // Re-render once the React popup-preview widget signals it has mounted, so
-  // posts loaded before the bundle finished downloading are reflected.
   document.addEventListener('announcement-preview:ready', schedulePreview);
 }
 

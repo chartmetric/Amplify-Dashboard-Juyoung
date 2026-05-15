@@ -1,15 +1,5 @@
-// Entry point for the announcement preview widget.
-//
-// The /announcements admin page in this repo is a Flask + Jinja template with vanilla JS
-// (templates/announcements.html). This bundle is a small React island that the template
-// mounts inside its "Live preview" pane. The host page drives it through a global API:
-//
-//   window.AnnouncementPreview.update({ data, show });
-//
-// `data` is the current form values converted into the chartmetric-announcement content
-// shape, and `show` toggles the modal-style overlay (true when the "Popup" boost type is
-// selected). The widget never makes network calls — it's purely presentational.
-
+// React island mounted by templates/announcements.html. Driven by the host
+// page via `window.AnnouncementPreview.update({ data, show })`.
 import { createRoot, type Root } from "react-dom/client";
 
 import AnnouncementPopupPreview from "./AnnouncementPopupPreview";
@@ -74,9 +64,6 @@ function init() {
       render();
     },
   };
-  // Let the host page know the widget is ready, so it can push the current form
-  // state (e.g. when an existing post was loaded before the bundle finished
-  // downloading).
   document.dispatchEvent(new CustomEvent("announcement-preview:ready"));
 }
 

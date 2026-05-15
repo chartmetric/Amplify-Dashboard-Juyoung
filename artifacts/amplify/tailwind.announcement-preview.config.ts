@@ -1,13 +1,5 @@
-// Tailwind config for the announcement preview widget.
-//
-// We can't reuse the design system's bundled style.css verbatim — it's 6.5 MB and
-// applies preflight resets / element selectors that leak into the rest of the
-// admin page (which is plain HTML, not a Tailwind app).
-//
-// Instead we extend the DS Tailwind config (so all cm-* colors, spacing tokens
-// and text sizes used by CMFlex/CMText resolve correctly) and point `content` at
-// both the widget source and the DS dist so any class string emitted by a CM*
-// component at runtime is picked up by Tailwind's JIT.
+// Extends the design system's Tailwind tokens but skips its bundled style.css
+// (6.5MB, applies global preflight resets that would leak into the host page).
 import designSystemConfig from "@chartmetric/chartmetric-design-system/tailwind";
 
 const dsExtend = designSystemConfig.theme?.extend ?? {};
@@ -20,9 +12,7 @@ export default {
   ],
   safelist: dsSafelist,
   corePlugins: {
-    // The host page (templates/announcements.html) already has its own resets
-    // and element styles. Disable Tailwind's preflight so we don't override
-    // them globally.
+    // Host page is plain HTML with its own resets; don't override them.
     preflight: false,
   },
   theme: {
