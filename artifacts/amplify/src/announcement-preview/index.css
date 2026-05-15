@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@config "../../tailwind.announcement-preview.config.ts";
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/*
+ * The widget renders inside the existing #preview-mock container in
+ * templates/announcements.html. Force-position the host element so the absolutely
+ * positioned overlay inside the widget has something to anchor against.
+ */
+#announcement-popup-preview-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#announcement-popup-preview-root > * {
+  pointer-events: auto;
+}

@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>In-App Announcements · Amplify Admin</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='announcement-preview/main.css') }}" />
+<script type="module" src="{{ url_for('static', filename='announcement-preview/main.js') }}"></script>
 <style>
 :root {
   --bg-page: #0f1923;
@@ -419,11 +421,17 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 
     <div>
       <div class="preview-frame-label" id="preview-frame-label">In-drawer card</div>
-      <div id="preview-mock" class="preview-mock">
+      <div id="preview-mock" class="preview-mock" style="position:relative">
         <div class="mock-cats" id="preview-cats"></div>
         <img id="preview-image" class="mock-image" style="display:none" />
         <h4 class="mock-title" id="preview-title">(untitled)</h4>
         <div class="mock-body" id="preview-body"></div>
+        <!--
+          React widget mount. Renders an empty overlay until the "Popup" boost type
+          is selected; renders the real <AnnouncementPopupPreview /> from the
+          chartmetric-announcement components on top of the mock above when active.
+        -->
+        <div id="announcement-popup-preview-root"></div>
       </div>
     </div>
 
@@ -815,7 +823,8 @@ function renderPreview() {
   // Boost render mode
   const mock = $('preview-mock');
   const label = $('preview-frame-label');
-  if (boostTypesChecked.includes('popup')) {
+  const isPopup = boostTypesChecked.includes('popup');
+  if (isPopup) {
     mock.classList.add('popup');
     label.textContent = 'Popup (modal on first sight)';
   } else {
@@ -823,6 +832,25 @@ function renderPreview() {
     label.textContent = isBoosted
       ? 'Boosted — ' + boostTypesChecked.join(', ')
       : 'In-drawer card (announcement feed)';
+  }
+  // Drive the React popup-preview widget so the "Popup" boost mode shows the same
+  // AnnouncementPopupPreview chrome that production users see in the in-app modal.
+  if (window.AnnouncementPreview) {
+    try {
+      window.AnnouncementPreview.update({
+        show: isPopup,
+        data: {
+          title: $('f-title').value.trim(),
+          content: htmlToSlate($('f-body').innerHTML || ''),
+          image_url: imageUrl || null,
+          is_pinned: isPinned,
+          published_at: null,
+          categories: cats.map(c => ({ name: c.name, color: c.color })),
+        },
+      });
+    } catch (err) {
+      console.warn('announcement preview widget update failed', err);
+    }
   }
 }
 
@@ -836,6 +864,9 @@ function bindPreviewListeners() {
   document.addEventListener('change', e => {
     if (e.target && e.target.matches('#f-cats input')) schedulePreview();
   });
+  // Re-render once the React popup-preview widget signals it has mounted, so
+  // posts loaded before the bundle finished downloading are reflected.
+  document.addEventListener('announcement-preview:ready', schedulePreview);
 }
 
 function onStatusChange() {
