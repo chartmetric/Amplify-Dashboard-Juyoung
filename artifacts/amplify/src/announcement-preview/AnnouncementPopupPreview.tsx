@@ -86,16 +86,6 @@ function AnnouncementPopupPreview({ announcement, show, onClose }: Props) {
             </span>
           )}
 
-          {heroImage && (
-            <figure className="m-0 w-full">
-              <img
-                src={heroImage}
-                alt=""
-                className="w-full h-auto rounded-lg block"
-              />
-            </figure>
-          )}
-
           <AnnouncementContentRenderer content={announcement.content} />
         </div>
       </div>
