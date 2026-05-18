@@ -3,10 +3,11 @@
 
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
-/* Anchor for the absolutely-positioned overlay; pointer-events let clicks through to the host mock. */
+/* Full-screen portal container — sits above everything on the page. */
 #announcement-popup-preview-root {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 9999;
   pointer-events: none;
 }
 

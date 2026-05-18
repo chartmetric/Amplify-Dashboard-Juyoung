@@ -14,18 +14,22 @@ import type { AnnouncementPreviewData } from "./types";
 interface Props {
   announcement: AnnouncementPreviewData;
   show: boolean;
+  onClose?: () => void;
 }
 
-function AnnouncementPopupPreview({ announcement, show }: Props) {
+function AnnouncementPopupPreview({ announcement, show, onClose }: Props) {
   if (!show) return null;
 
   const dateLabel = formatPublishedDate(announcement.published_at);
   const heroImage = announcement.image_url || null;
 
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center overflow-auto bg-black/60 rounded-[10px]">
+    <div
+      className="fixed inset-0 z-10 flex items-center justify-center overflow-auto bg-black/60"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
+    >
       <div
-        className="relative w-[90%] max-h-[90%] overflow-auto bg-white dark:bg-cm-gray-dark-2 rounded-lg shadow-2xl"
+        className="relative w-[90%] max-w-2xl max-h-[90vh] overflow-auto bg-white dark:bg-cm-gray-dark-2 rounded-lg shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label="Announcement preview"
@@ -36,9 +40,9 @@ function AnnouncementPopupPreview({ announcement, show }: Props) {
           </h4>
           <button
             type="button"
-            aria-label="Close preview (visual only)"
-            className="text-cm-gray-500 hover:text-cm-gray-700 dark:text-cm-gray-dark-5 cursor-default"
-            tabIndex={-1}
+            aria-label="Close preview"
+            className="text-cm-gray-500 hover:text-cm-gray-700 dark:text-cm-gray-dark-5 cursor-pointer"
+            onClick={onClose}
           >
             <FontAwesomeIcon icon={faXmark} size="lg" />
           </button>

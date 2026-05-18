@@ -426,9 +426,9 @@ tr:hover td { background: rgba(255,255,255,0.02); }
         <img id="preview-image" class="mock-image" style="display:none" />
         <h4 class="mock-title" id="preview-title">(untitled)</h4>
         <div class="mock-body" id="preview-body"></div>
-        <!-- React popup-preview widget mount; only visible when "Popup" boost is selected. -->
-        <!-- data-theme="dark" activates the Tailwind dark: variant (keyed to [data-theme=dark] in index.css) since this page is always dark-themed. -->
-        <div id="announcement-popup-preview-root" data-theme="dark"></div>
+      </div>
+      <div id="popup-preview-btn-row" style="margin-top:10px;display:none">
+        <button class="btn secondary" style="width:100%;font-size:12px" onclick="openPopupPreview()">Preview as popup ↗</button>
       </div>
     </div>
 
@@ -830,11 +830,14 @@ function renderPreview() {
       ? 'Boosted — ' + boostTypesChecked.join(', ')
       : 'In-drawer card (announcement feed)';
   }
-  // Drive the React popup-preview widget with the current form values.
+  // Show/hide the "Preview as popup" button when popup boost is selected.
+  const btnRow = $('popup-preview-btn-row');
+  if (btnRow) btnRow.style.display = isPopup ? '' : 'none';
+  // Keep the React widget data fresh (never auto-open; user clicks the button).
   if (window.AnnouncementPreview) {
     try {
       window.AnnouncementPreview.update({
-        show: isPopup,
+        show: false,
         data: {
           title: $('f-title').value.trim(),
           content: htmlToSlate($('f-body').innerHTML || ''),
@@ -848,6 +851,9 @@ function renderPreview() {
       console.warn('announcement preview widget update failed', err);
     }
   }
+}
+function openPopupPreview() {
+  if (window.AnnouncementPreview) window.AnnouncementPreview.open();
 }
 
 function bindPreviewListeners() {
@@ -1230,6 +1236,7 @@ async function slateToHtml(blocks) {
 }
 function renderBlock(b) {
   const t = b.type || 'paragraph';
+  if (t === 'announcement-title') return '';
   const inner = (b.children || []).map(renderInline).join('');
   if (t === 'paragraph') return `<p>${inner}</p>`;
   if (t === 'heading-one') return `<h1>${inner}</h1>`;
@@ -1269,5 +1276,8 @@ function escapeAttr(s) { return escapeHtml(s); }
   await reloadPosts();
 })();
 </script>
+<!-- React popup-preview portal — fixed full-screen overlay, outside all other containers.
+     data-theme="dark" activates Tailwind dark: variants (keyed to [data-theme=dark]). -->
+<div id="announcement-popup-preview-root" data-theme="dark"></div>
 </body>
 </html>

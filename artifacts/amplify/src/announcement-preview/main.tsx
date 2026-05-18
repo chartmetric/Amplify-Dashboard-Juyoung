@@ -16,6 +16,8 @@ interface UpdatePayload {
 
 interface PreviewApi {
   update: (payload: UpdatePayload) => void;
+  open: () => void;
+  close: () => void;
 }
 
 declare global {
@@ -36,12 +38,18 @@ const EMPTY_DATA: AnnouncementPreviewData = {
 let root: Root | null = null;
 let currentState: UpdatePayload = { data: EMPTY_DATA, show: false };
 
+function handleClose() {
+  currentState = { ...currentState, show: false };
+  render();
+}
+
 function render() {
   if (!root) return;
   root.render(
     <AnnouncementPopupPreview
       announcement={currentState.data}
       show={currentState.show}
+      onClose={handleClose}
     />,
   );
 }
@@ -62,6 +70,13 @@ function init() {
       ensureMounted();
       currentState = payload;
       render();
+    },
+    open() {
+      currentState = { ...currentState, show: true };
+      render();
+    },
+    close() {
+      handleClose();
     },
   };
   document.dispatchEvent(new CustomEvent("announcement-preview:ready"));
