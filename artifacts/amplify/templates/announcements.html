@@ -812,9 +812,10 @@ function renderPreview() {
   const cats = Array.from(document.querySelectorAll('#f-cats input:checked'))
     .map(i => _categoriesCache.find(c => String(c.id) === i.value))
     .filter(Boolean);
-  $('preview-cats').innerHTML = cats.map(c =>
-    `<span class="cat-pill" style="background:${escapeAttr(c.color)}">${escapeHtml(c.name)}</span>`
-  ).join('') || '<span class="dim" style="font-size:11px">No categories</span>';
+  $('preview-cats').innerHTML = cats.map(c => {
+    const col = c.color || '#6B7280';
+    return `<span style="display:inline-block;padding:2px 10px;border-radius:3px;border:1px solid ${escapeAttr(col)};background:${escapeAttr(hexToRgba(col,0.18))};color:${escapeAttr(col)};font-size:12px;font-weight:500;margin-right:4px;line-height:1.6;letter-spacing:0.02em">${escapeHtml(c.name)}</span>`;
+  }).join('') || '<span class="dim" style="font-size:11px">No categories</span>';
   // Boost render mode
   const mock = $('preview-mock');
   const label = $('preview-frame-label');
@@ -1263,6 +1264,12 @@ function renderInline(n) {
 
 function escapeHtml(s) { return (s||'').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[ch]); }
 function escapeAttr(s) { return escapeHtml(s); }
+function hexToRgba(hex, alpha) {
+  const v = (hex||'').replace('#','');
+  const n = v.length === 6 ? v : '6B7280';
+  const r = parseInt(n.slice(0,2),16), g = parseInt(n.slice(2,4),16), b = parseInt(n.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 // ----- Boot -----
 (async function init(){
