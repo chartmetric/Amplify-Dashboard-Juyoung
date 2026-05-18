@@ -3,14 +3,13 @@
 
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
-/* Full-screen portal container — sits above everything on the page. */
+/* Mount point — React component renders its own fixed overlay via inline styles. */
 #announcement-popup-preview-root {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
   z-index: 9999;
-  pointer-events: none;
-}
-
-#announcement-popup-preview-root > * {
-  pointer-events: auto;
+  overflow: visible;
 }
