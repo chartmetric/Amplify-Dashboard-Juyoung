@@ -427,7 +427,8 @@ tr:hover td { background: rgba(255,255,255,0.02); }
         <h4 class="mock-title" id="preview-title">(untitled)</h4>
         <div class="mock-body" id="preview-body"></div>
         <!-- React popup-preview widget mount; only visible when "Popup" boost is selected. -->
-        <div id="announcement-popup-preview-root"></div>
+        <!-- data-theme="dark" activates the Tailwind dark: variant (keyed to [data-theme=dark] in index.css) since this page is always dark-themed. -->
+        <div id="announcement-popup-preview-root" data-theme="dark"></div>
       </div>
     </div>
 

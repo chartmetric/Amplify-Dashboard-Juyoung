@@ -1,0 +1,160 @@
+//External Libraries
+import React from 'react';
+
+//Components
+import Image from '@sharedComponents/Image';
+
+//Types
+import type { ContentBlock, InlineNode, TextNode, LinkNode } from '@appTypes/announcement';
+
+function hash(str: string): number {
+  return str.split('').reduce((a, b) => (a << 5) - a + b.charCodeAt(0), 0);
+}
+
+function getBlockKey(block: ContentBlock, index: number): string {
+  if (block.type === 'image' && 'url' in block) return `img-${block.url}`;
+  if (block.type === 'video' && 'url' in block) return `vid-${block.url}`;
+  return `${block.type}-${hash(JSON.stringify(block))}-${index}`;
+}
+
+function isLinkNode(node: InlineNode): node is LinkNode {
+  return (node as LinkNode).type === 'link';
+}
+
+function renderTextNode(node: TextNode, index: number): React.ReactNode {
+  let element: React.ReactNode = node.text;
+
+  if (node.bold) element = <strong key={index}>{element}</strong>;
+  if (node.italic) element = <em key={index}>{element}</em>;
+  if (node.underline) element = <u key={index}>{element}</u>;
+  if (node.strikethrough) element = <s key={index}>{element}</s>;
+  if (node.code) element = <code key={index}>{element}</code>;
+
+  return <React.Fragment key={index}>{element}</React.Fragment>;
+}
+
+function renderInlineNode(node: InlineNode, index: number, onLinkClick?: (url: string) => void): React.ReactNode {
+  if (isLinkNode(node)) {
+    return (
+      <a
+        key={index}
+        href={node.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="tw-text-cm-blue-600 tw-underline hover:tw-text-cm-blue-700"
+        onClick={() => onLinkClick?.(node.url)}
+      >
+        {node.children.map((child, i) => renderTextNode(child, i))}
+      </a>
+    );
+  }
+  return renderTextNode(node as TextNode, index);
+}
+
+function ContentBlock({
+  block,
+  index,
+  onLinkClick,
+}: {
+  block: ContentBlock;
+  index: number;
+  onLinkClick?: (url: string) => void;
+}) {
+  switch (block.type) {
+    case 'paragraph':
+      return (
+        <p key={index} className="tw-mb-3">
+          {block.children.map((child, i) => renderInlineNode(child, i, onLinkClick))}
+        </p>
+      );
+
+    case 'heading-1':
+      return (
+        <h2 key={index} className="tw-text-xl tw-font-bold tw-mt-6 tw-mb-3 tw-text-cm-gray-900">
+          {block.children.map((child, i) => renderInlineNode(child, i, onLinkClick))}
+        </h2>
+      );
+
+    case 'heading-2':
+      return (
+        <h3 key={index} className="tw-text-lg tw-font-semibold tw-mt-5 tw-mb-2.5 tw-text-cm-gray-900">
+          {block.children.map((child, i) => renderInlineNode(child, i, onLinkClick))}
+        </h3>
+      );
+
+    case 'bulleted-list':
+      return (
+        <ul key={index} className="tw-list-disc tw-pl-6 tw-mb-3">
+          {block.children.map((item) => (
+            <li key={hash(JSON.stringify(item))} className="tw-mb-1">
+              {item.children.map((child, j) => renderInlineNode(child, j, onLinkClick))}
+            </li>
+          ))}
+        </ul>
+      );
+
+    case 'numbered-list':
+      return (
+        <ol key={index} className="tw-list-decimal tw-pl-6 tw-mb-3">
+          {block.children.map((item) => (
+            <li key={hash(JSON.stringify(item))} className="tw-mb-1">
+              {item.children.map((child, j) => renderInlineNode(child, j, onLinkClick))}
+            </li>
+          ))}
+        </ol>
+      );
+
+    case 'divider':
+      return <hr key={index} className="tw-border-t tw-border-cm-gray-300 tw-my-5" />;
+
+    case 'image':
+      return (
+        <figure key={index} className="tw-m-0 tw-w-full">
+          <Image
+            src={block.url}
+            alt={block.alt || ''}
+            loading="lazy"
+            className="tw-w-full tw-h-auto tw-rounded-lg tw-block"
+          />
+        </figure>
+      );
+
+    case 'video':
+      return (
+        <figure key={index} className="tw-my-4">
+          <iframe
+            src={block.url}
+            title="Video"
+            allowFullScreen
+            frameBorder="0"
+            className="tw-w-full tw-aspect-video tw-rounded-lg tw-border-0"
+          />
+        </figure>
+      );
+
+    case 'announcement-title':
+      return null;
+
+    default:
+      return null;
+  }
+}
+
+interface AnnouncementContentRendererProps {
+  content: ContentBlock[];
+  onLinkClick?: (url: string) => void;
+}
+
+function AnnouncementContentRenderer({ content, onLinkClick }: AnnouncementContentRendererProps) {
+  if (!content || !Array.isArray(content)) return null;
+
+  return (
+    <div className="tw-text-sm tw-leading-relaxed tw-text-cm-charcoal-2 dark:tw-text-cm-charcoal-dark-2">
+      {content.map((block, index) => (
+        <ContentBlock key={getBlockKey(block, index)} block={block} index={index} onLinkClick={onLinkClick} />
+      ))}
+    </div>
+  );
+}
+
+export default AnnouncementContentRenderer;
