@@ -1,10 +1,9 @@
 // Content-only adaptation of the in-app announcement modal: no reactions, no
 // comments, no network calls — just the static popup chrome around the post body.
+// CMFlex / CMText from the design system are replaced with plain Tailwind
+// equivalents to avoid the React-18-only dependency crashing the React 19 host.
 import { faXmark } from "@fortawesome/pro-solid-svg-icons/faXmark";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-
-import { CMFlex } from "@chartmetric/chartmetric-design-system/components/CMFlex";
-import { CMText } from "@chartmetric/chartmetric-design-system/components/CMText";
 
 import AnnouncementContentRenderer from "./AnnouncementContentRenderer";
 import AnnouncementTag from "./AnnouncementTag";
@@ -32,11 +31,9 @@ function AnnouncementPopupPreview({ announcement, show }: Props) {
         aria-label="Announcement preview"
       >
         <div className="flex items-start justify-between px-5 pt-5 pb-2 border-b border-cm-gray-200 dark:border-cm-gray-dark-3">
-          <CMText
-            value={announcement.title || "(untitled)"}
-            variant="h4"
-            _className="pr-6"
-          />
+          <h4 className="text-base font-semibold text-cm-gray-900 dark:text-white pr-6">
+            {announcement.title || "(untitled)"}
+          </h4>
           <button
             type="button"
             aria-label="Close preview (visual only)"
@@ -47,17 +44,19 @@ function AnnouncementPopupPreview({ announcement, show }: Props) {
           </button>
         </div>
 
-        <CMFlex vertical gap="md" p="lg">
+        <div className="flex flex-col gap-4 p-5">
           {announcement.categories && announcement.categories.length > 0 && (
-            <CMFlex align="center" gap="sm" wrap>
+            <div className="flex items-center gap-2 flex-wrap">
               {announcement.categories.map((cat) => (
                 <AnnouncementTag key={cat.name} category={cat} />
               ))}
-            </CMFlex>
+            </div>
           )}
 
           {dateLabel && (
-            <CMText value={dateLabel} variant="mini-1" color="tertiary" />
+            <span className="text-xs text-cm-gray-500 dark:text-cm-gray-dark-5">
+              {dateLabel}
+            </span>
           )}
 
           {heroImage && (
@@ -71,7 +70,7 @@ function AnnouncementPopupPreview({ announcement, show }: Props) {
           )}
 
           <AnnouncementContentRenderer content={announcement.content} />
-        </CMFlex>
+        </div>
       </div>
     </div>
   );
