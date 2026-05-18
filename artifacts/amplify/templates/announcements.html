@@ -4,8 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>In-App Announcements · Amplify Admin</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='announcement-preview/main.css') }}" />
-<script type="module" src="{{ url_for('static', filename='announcement-preview/main.js') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='announcement-preview/main.css') }}?v=3" />
+<script type="module" src="{{ url_for('static', filename='announcement-preview/main.js') }}?v=3"></script>
 <style>
 :root {
   --bg-page: #0f1923;
@@ -427,7 +427,7 @@ tr:hover td { background: rgba(255,255,255,0.02); }
         <h4 class="mock-title" id="preview-title">(untitled)</h4>
         <div class="mock-body" id="preview-body"></div>
       </div>
-      <div id="popup-preview-btn-row" style="margin-top:10px;display:none">
+      <div id="popup-preview-btn-row" style="margin-top:10px">
         <button class="btn secondary" style="width:100%;font-size:12px" onclick="openPopupPreview()">Preview as popup ↗</button>
       </div>
     </div>
@@ -787,6 +787,7 @@ async function loadPostIntoEditor(id) {
 function closePostEditor() {
   $('post-modal').classList.remove('show');
   if (_previewTimer) { clearTimeout(_previewTimer); _previewTimer = null; }
+  if (window.AnnouncementPreview) window.AnnouncementPreview.close();
 }
 
 // ----- Live preview pane + Boost toggle mirror -----
@@ -830,9 +831,6 @@ function renderPreview() {
       ? 'Boosted — ' + boostTypesChecked.join(', ')
       : 'In-drawer card (announcement feed)';
   }
-  // Show/hide the "Preview as popup" button when popup boost is selected.
-  const btnRow = $('popup-preview-btn-row');
-  if (btnRow) btnRow.style.display = isPopup ? '' : 'none';
   // Keep the React widget data fresh (never auto-open; user clicks the button).
   if (window.AnnouncementPreview) {
     try {
