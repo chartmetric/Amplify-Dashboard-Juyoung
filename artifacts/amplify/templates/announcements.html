@@ -805,12 +805,9 @@ function renderPreview() {
   const isBoosted = boostTypesChecked.length > 0;
   $('preview-title').textContent = title + (isPinned ? '  📌' : '');
   $('preview-body').innerHTML = bodyHtml || '<span class="dim">Body preview will appear here…</span>';
-  if (imageUrl) {
-    $('preview-image').src = imageUrl;
-    $('preview-image').style.display = '';
-  } else {
-    $('preview-image').style.display = 'none';
-  }
+  // Hero image is already rendered inside the body content blocks; keep the
+  // dedicated preview-image element hidden to avoid showing it twice.
+  $('preview-image').style.display = 'none';
   // Categories
   const cats = Array.from(document.querySelectorAll('#f-cats input:checked'))
     .map(i => _categoriesCache.find(c => String(c.id) === i.value))
@@ -824,7 +821,7 @@ function renderPreview() {
   const isPopup = boostTypesChecked.includes('popup');
   if (isPopup) {
     mock.classList.add('popup');
-    label.textContent = 'Popup (modal on first sight)';
+    label.textContent = 'Inline panel UI';
   } else {
     mock.classList.remove('popup');
     label.textContent = isBoosted
