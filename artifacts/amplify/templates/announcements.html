@@ -797,8 +797,17 @@ function schedulePreview() {
   _previewTimer = setTimeout(renderPreview, 120);
 }
 function renderPreview() {
-  const title = $('f-title').value.trim() || '(untitled)';
-  const bodyHtml = $('f-body').innerHTML || '';
+  // Use the active translation when a non-English tab is selected.
+  let title = $('f-title').value.trim() || '(untitled)';
+  let bodyHtml = $('f-body').innerHTML || '';
+  if (_activeLangTab !== 'en') {
+    collectTranslationsFromPanes();
+    const tr = _translationsState[_activeLangTab];
+    if (tr) {
+      if (tr.title) title = tr.title;
+      if (tr.content_html) bodyHtml = tr.content_html;
+    }
+  }
   const imageUrl = $('f-image-url').value.trim();
   const isPinned = $('f-pinned').checked;
   const boostTypesChecked = Array.from(document.querySelectorAll('.f-boost-type:checked')).map(i => i.value);
@@ -835,8 +844,8 @@ function renderPreview() {
       window.AnnouncementPreview.update({
         show: false,
         data: {
-          title: $('f-title').value.trim(),
-          content: htmlToSlate($('f-body').innerHTML || ''),
+          title: title,
+          content: htmlToSlate(bodyHtml),
           image_url: imageUrl || null,
           is_pinned: isPinned,
           published_at: null,
@@ -919,6 +928,8 @@ function setLangTab(l) {
     const pane = document.querySelector(`.translation-pane[data-lang="${l}"]`);
     if (pane) pane.classList.add('show');
   }
+  // Refresh preview to show the selected language's content.
+  schedulePreview();
 }
 
 function collectTranslationsFromPanes() {
