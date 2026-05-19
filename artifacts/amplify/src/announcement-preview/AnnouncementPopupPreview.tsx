@@ -56,7 +56,7 @@ function AnnouncementPopupPreview({ announcement, show, onClose }: Props) {
     >
       <div style={dialogStyle} role="dialog" aria-modal="true" aria-label="Announcement preview">
         {/* Header */}
-        <div className="flex items-start justify-between px-5 pt-5 pb-2 border-b border-cm-gray-200 dark:border-cm-gray-dark-3">
+        <div className="flex items-start justify-between px-5 pt-5 pb-2">
           <h4 className="text-base font-semibold text-cm-gray-900 dark:text-white pr-6">
             {announcement.title || "(untitled)"}
           </h4>
