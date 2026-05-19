@@ -56,14 +56,19 @@ function AnnouncementPopupPreview({ announcement, show, onClose }: Props) {
     >
       <div style={dialogStyle} role="dialog" aria-modal="true" aria-label="Announcement preview">
         {/* Header */}
-        <div className="flex items-start justify-between px-5 pt-5 pb-2">
-          <h4 className="text-base font-semibold text-cm-gray-900 dark:text-white pr-6">
+        <div className="relative px-10 pt-5 pb-2 text-center">
+          <h4 className="text-base font-semibold text-cm-gray-900 dark:text-white">
             {announcement.title || "(untitled)"}
           </h4>
+          {dateLabel && (
+            <p className="text-xs text-cm-gray-500 dark:text-cm-gray-dark-5 mt-1 mb-0">
+              {dateLabel}
+            </p>
+          )}
           <button
             type="button"
             aria-label="Close preview"
-            className="text-cm-gray-500 hover:text-cm-gray-700 dark:text-cm-gray-dark-5 cursor-pointer flex-shrink-0"
+            className="absolute top-0 right-4 pt-5 text-cm-gray-500 hover:text-cm-gray-700 dark:text-cm-gray-dark-5 cursor-pointer"
             onClick={onClose}
           >
             <FontAwesomeIcon icon={faXmark} size="lg" />
@@ -78,12 +83,6 @@ function AnnouncementPopupPreview({ announcement, show, onClose }: Props) {
                 <AnnouncementTag key={cat.name} category={cat} />
               ))}
             </div>
-          )}
-
-          {dateLabel && (
-            <span className="text-xs text-cm-gray-500 dark:text-cm-gray-dark-5">
-              {dateLabel}
-            </span>
           )}
 
           <AnnouncementContentRenderer content={announcement.content} />
