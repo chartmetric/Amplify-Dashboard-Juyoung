@@ -801,7 +801,6 @@ function renderPreview() {
   let title = $('f-title').value.trim() || '(untitled)';
   let bodyHtml = $('f-body').innerHTML || '';
   if (_activeLangTab !== 'en') {
-    collectTranslationsFromPanes();
     const tr = _translationsState[_activeLangTab];
     if (tr) {
       if (tr.title) title = tr.title;
@@ -928,8 +927,8 @@ function setLangTab(l) {
     const pane = document.querySelector(`.translation-pane[data-lang="${l}"]`);
     if (pane) pane.classList.add('show');
   }
-  // Refresh preview to show the selected language's content.
-  schedulePreview();
+  // Refresh preview immediately with the selected language's content.
+  renderPreview();
 }
 
 function collectTranslationsFromPanes() {
