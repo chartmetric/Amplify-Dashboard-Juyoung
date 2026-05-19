@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@config "../../tailwind.announcement-preview.config.ts";
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* Mount point — React component renders its own fixed overlay via inline styles. */
+#announcement-popup-preview-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 9999;
+  overflow: visible;
+}

@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>In-App Announcements · Amplify Admin</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='announcement-preview/main.css') }}?v=8" />
+<script type="module" src="{{ url_for('static', filename='announcement-preview/main.js') }}?v=8"></script>
 <style>
 :root {
   --bg-page: #0f1923;
@@ -419,11 +421,14 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 
     <div>
       <div class="preview-frame-label" id="preview-frame-label">In-drawer card</div>
-      <div id="preview-mock" class="preview-mock">
+      <div id="preview-mock" class="preview-mock" style="position:relative">
         <div class="mock-cats" id="preview-cats"></div>
         <img id="preview-image" class="mock-image" style="display:none" />
         <h4 class="mock-title" id="preview-title">(untitled)</h4>
         <div class="mock-body" id="preview-body"></div>
+      </div>
+      <div id="popup-preview-btn-row" style="margin-top:10px">
+        <button class="btn secondary" style="width:100%;font-size:12px" onclick="openPopupPreview()">Preview as popup ↗</button>
       </div>
     </div>
 
@@ -782,6 +787,7 @@ async function loadPostIntoEditor(id) {
 function closePostEditor() {
   $('post-modal').classList.remove('show');
   if (_previewTimer) { clearTimeout(_previewTimer); _previewTimer = null; }
+  if (window.AnnouncementPreview) window.AnnouncementPreview.close();
 }
 
 // ----- Live preview pane + Boost toggle mirror -----
@@ -791,39 +797,67 @@ function schedulePreview() {
   _previewTimer = setTimeout(renderPreview, 120);
 }
 function renderPreview() {
-  const title = $('f-title').value.trim() || '(untitled)';
-  const bodyHtml = $('f-body').innerHTML || '';
+  // Use the active translation when a non-English tab is selected.
+  let title = $('f-title').value.trim() || '(untitled)';
+  let bodyHtml = $('f-body').innerHTML || '';
+  if (_activeLangTab !== 'en') {
+    const tr = _translationsState[_activeLangTab];
+    if (tr) {
+      if (tr.title) title = tr.title;
+      if (tr.content_html) bodyHtml = tr.content_html;
+    }
+  }
   const imageUrl = $('f-image-url').value.trim();
   const isPinned = $('f-pinned').checked;
   const boostTypesChecked = Array.from(document.querySelectorAll('.f-boost-type:checked')).map(i => i.value);
   const isBoosted = boostTypesChecked.length > 0;
   $('preview-title').textContent = title + (isPinned ? '  📌' : '');
   $('preview-body').innerHTML = bodyHtml || '<span class="dim">Body preview will appear here…</span>';
-  if (imageUrl) {
-    $('preview-image').src = imageUrl;
-    $('preview-image').style.display = '';
-  } else {
-    $('preview-image').style.display = 'none';
-  }
+  // Hero image is already rendered inside the body content blocks; keep the
+  // dedicated preview-image element hidden to avoid showing it twice.
+  $('preview-image').style.display = 'none';
   // Categories
   const cats = Array.from(document.querySelectorAll('#f-cats input:checked'))
     .map(i => _categoriesCache.find(c => String(c.id) === i.value))
     .filter(Boolean);
-  $('preview-cats').innerHTML = cats.map(c =>
-    `<span class="cat-pill" style="background:${escapeAttr(c.color)}">${escapeHtml(c.name)}</span>`
-  ).join('') || '<span class="dim" style="font-size:11px">No categories</span>';
+  $('preview-cats').innerHTML = cats.map(c => {
+    const col = c.color || '#6B7280';
+    return `<span style="display:inline-block;padding:2px 10px;border-radius:3px;border:1px solid ${escapeAttr(col)};background:${escapeAttr(hexToRgba(col,0.18))};color:${escapeAttr(col)};font-size:12px;font-weight:500;margin-right:4px;line-height:1.6;letter-spacing:0.02em">${escapeHtml(c.name)}</span>`;
+  }).join('') || '<span class="dim" style="font-size:11px">No categories</span>';
   // Boost render mode
   const mock = $('preview-mock');
   const label = $('preview-frame-label');
-  if (boostTypesChecked.includes('popup')) {
+  const isPopup = boostTypesChecked.includes('popup');
+  if (isPopup) {
     mock.classList.add('popup');
-    label.textContent = 'Popup (modal on first sight)';
+    label.textContent = 'Inline panel UI';
   } else {
     mock.classList.remove('popup');
     label.textContent = isBoosted
       ? 'Boosted — ' + boostTypesChecked.join(', ')
       : 'In-drawer card (announcement feed)';
   }
+  // Keep the React widget data fresh (never auto-open; user clicks the button).
+  if (window.AnnouncementPreview) {
+    try {
+      window.AnnouncementPreview.update({
+        show: false,
+        data: {
+          title: title,
+          content: htmlToSlate(bodyHtml),
+          image_url: imageUrl || null,
+          is_pinned: isPinned,
+          published_at: null,
+          categories: cats.map(c => ({ name: c.name, color: c.color })),
+        },
+      });
+    } catch (err) {
+      console.warn('announcement preview widget update failed', err);
+    }
+  }
+}
+function openPopupPreview() {
+  if (window.AnnouncementPreview) window.AnnouncementPreview.open();
 }
 
 function bindPreviewListeners() {
@@ -836,6 +870,7 @@ function bindPreviewListeners() {
   document.addEventListener('change', e => {
     if (e.target && e.target.matches('#f-cats input')) schedulePreview();
   });
+  document.addEventListener('announcement-preview:ready', schedulePreview);
 }
 
 function onStatusChange() {
@@ -892,6 +927,8 @@ function setLangTab(l) {
     const pane = document.querySelector(`.translation-pane[data-lang="${l}"]`);
     if (pane) pane.classList.add('show');
   }
+  // Refresh preview immediately with the selected language's content.
+  renderPreview();
 }
 
 function collectTranslationsFromPanes() {
@@ -1205,6 +1242,7 @@ async function slateToHtml(blocks) {
 }
 function renderBlock(b) {
   const t = b.type || 'paragraph';
+  if (t === 'announcement-title') return '';
   const inner = (b.children || []).map(renderInline).join('');
   if (t === 'paragraph') return `<p>${inner}</p>`;
   if (t === 'heading-one') return `<h1>${inner}</h1>`;
@@ -1236,6 +1274,12 @@ function renderInline(n) {
 
 function escapeHtml(s) { return (s||'').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[ch]); }
 function escapeAttr(s) { return escapeHtml(s); }
+function hexToRgba(hex, alpha) {
+  const v = (hex||'').replace('#','');
+  const n = v.length === 6 ? v : '6B7280';
+  const r = parseInt(n.slice(0,2),16), g = parseInt(n.slice(2,4),16), b = parseInt(n.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 // ----- Boot -----
 (async function init(){
@@ -1244,5 +1288,8 @@ function escapeAttr(s) { return escapeHtml(s); }
   await reloadPosts();
 })();
 </script>
+<!-- React popup-preview portal — fixed full-screen overlay, outside all other containers.
+     data-theme="dark" activates Tailwind dark: variants (keyed to [data-theme=dark]). -->
+<div id="announcement-popup-preview-root" data-theme="dark"></div>
 </body>
 </html>
